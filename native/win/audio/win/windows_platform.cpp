@@ -9,11 +9,11 @@
 #include <windows.h>
 
 #include <audioclient.h>
-#include <functiondiscoverykeys_devpkey.h>
 #include <mmdeviceapi.h>
-#include <wrl/client.h>
-
+#include <propkeydef.h>  // DEFINE_PROPERTYKEY: tem de vir antes de functiondiscoverykeys_devpkey.h
 #include <propsys.h>
+#include <functiondiscoverykeys_devpkey.h>
+#include <wrl/client.h>
 
 #include <atomic>
 #include <condition_variable>
