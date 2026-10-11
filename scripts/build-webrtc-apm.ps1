@@ -16,19 +16,10 @@ Remove-Item -Recurse -Force $Work, $Prefix -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $Work, $Prefix | Out-Null
 Push-Location $Work
 try {
-  # freedesktop.org barra downloads de runners (desafio anti-bot devolve HTML): tenta o tarball oficial e, se o SHA-256 não
-  # bater, o archive da mesma tag no GitLab (hash próprio, também fixado).
-  $sources = @(
-    @{ Url = $Url; Sha = $Sha256; File = 'src.tar.xz' },
-    @{ Url = "https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing/-/archive/v$Version/webrtc-audio-processing-v$Version.tar.gz"; Sha = '2358883a8551711f3b6169f6799c003dc1a6efd37bdb24a135a015cc9e3d7713'; File = 'src.tar.gz' }
-  )
-  $archive = $null
-  foreach ($source in $sources) {
-    curl.exe -fsSL --retry 3 -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' -o $source.File $source.Url
-    if ($LASTEXITCODE -eq 0 -and (Test-Path $source.File) -and ((Get-FileHash $source.File -Algorithm SHA256).Hash.ToLower() -eq $source.Sha)) { $archive = $source.File; break }
-    Write-Host "download/SHA-256 falhou para $($source.Url)"
-  }
-  if (-not $archive) { throw 'não foi possível baixar o webrtc-audio-processing com o SHA-256 esperado' }
+  # Os servidores do freedesktop (e o GitLab) devolvem desafio anti-bot (HTTP 418) aos runners do GitHub; por isso o tarball
+  # oficial, com o SHA-256 fixado acima, vive em native/vendor/ (licença BSD-3 do WebRTC dentro dele).
+  $archive = Join-Path $Root 'native/vendor/webrtc-audio-processing-2.1.tar.xz'
+  if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne $Sha256) { throw 'native/vendor/webrtc-audio-processing-2.1.tar.xz não bate com o SHA-256 esperado' }
   New-Item -ItemType Directory src | Out-Null
   tar -xf $archive -C src --strip-components=1
   meson setup build src --prefix="$Prefix" --libdir=lib --buildtype=release -Ddefault_library=static --wrap-mode=forcefallback --vsenv

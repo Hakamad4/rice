@@ -4,3 +4,5 @@
 *.ico binary
 *.icns binary
 *.onnx binary
+tests/fixtures/protocol/* -text
+native/vendor/* binary

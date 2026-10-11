@@ -116,7 +116,7 @@ TEST(selftest_gap_e_identico_bit_a_bit_ao_do_swift) {
   CHECK(toBytes(sink) == readFixture("protocol/gap.bin"));
   CHECK_EQ(cap.lines.size(), static_cast<size_t>(1));
   std::string expected = readFixtureText("protocol/gap.stderr");
-  while (!expected.empty() && expected.back() == '\n') expected.pop_back();
+  while (!expected.empty() && (expected.back() == '\n' || expected.back() == '\r')) expected.pop_back();
   CHECK_EQ(cap.lines.empty() ? std::string() : cap.lines[0], expected);
 }
 
