@@ -18,7 +18,7 @@ export class AudioCapture extends EventEmitter {
   start(): void {
     if (this.child) throw new Error('AudioCapture já iniciado');
     // O tap do áudio do sistema ignora o próprio Rice (o rice-audio já se exclui).
-    const child = spawn(this.binary, ['--exclude-pid', String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(this.binary, ['--exclude-pid', String(process.pid)], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     this.child = child;
     const decoder = new FrameDecoder();
     child.stdout.on('data', (chunk: Buffer) => {

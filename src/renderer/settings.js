@@ -161,7 +161,7 @@
     const loadReminders = async () => {
       if (!rice.remindersStatus) return;
       const st = await rice.remindersStatus().catch(() => null);
-      if (!st || !remBox.isConnected) return;
+      if (!st || !remBox.isConnected || st.access === 'unsupported') return; // Windows: não há app de Lembretes
       const sw = toggle('show-reminders', st.enabled !== false, t('settings.reminders.label'));
       sw.onchange = async () => {
         await rice.remindersSetEnabled(sw.checked);

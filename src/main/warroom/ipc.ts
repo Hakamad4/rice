@@ -3,7 +3,9 @@ import { t, type UiLanguage } from '../i18n';
 import { checkWorkFolder } from './folder';
 import { DEFAULT_IDEA_TEMPLATE_ID, type IdeaTemplate } from './idea-templates';
 import { resolveSource } from './source';
-import { buildPrompt, buildScript, detectHarnesses, harnessArgs, writeHandoffScript, type HarnessId } from './handoff';
+import { isWindows } from '../platform';
+import { openInTerminal } from '../platform/terminal';
+import { buildPrompt, buildScript, buildWindowsScript, detectHarnesses, harnessArgs, windowsPromptArgs, writeHandoffScript, writePromptFile, type HarnessId } from './handoff';
 import { DEFAULT_MAX_CYCLES, WarRoomEngine, type Support } from './engine';
 import { addIdeaToAnnotations, INTERVALS, MORE_CYCLES, readConfig, readIdeas, writeConfig, writeIdeas, type WarRoomConfig } from './store';
 
@@ -26,6 +28,8 @@ export type WarRoomHost = {
   userData: string;
   /** Abre um arquivo com o app padrão (o .command abre no Terminal); devolve texto de erro ou ''. */
   openPath: (path: string) => Promise<string>;
+  /** Só para testes: troca o spawn do `wt.exe` (Windows). */
+  spawnTerminal?: (command: string, args: string[]) => void;
   /** Limite de ciclos configurado (0 = sem limite). */
   maxCycles?: () => Promise<number>;
   /** CLIs instalados (injetável nos testes). */
@@ -216,8 +220,12 @@ export function createWarRoom(host: WarRoomHost) {
     if (!checked.ok) return checked;
     const prompt = buildPrompt({ dir, folder: checked.folder, facts: cfg.facts, language: await host.language(dir) });
     if (!harness) return { ok: true as const, prompt };
-    const path = await writeHandoffScript(host.userData, buildScript({ folder: checked.folder, bin: harness.bin, args: harnessArgs(harness.id, prompt) }));
-    const error = await host.openPath(path);
+    let path: string;
+    if (isWindows()) {
+      const promptFile = await writePromptFile(host.userData, prompt);
+      path = await writeHandoffScript(host.userData, buildWindowsScript({ folder: checked.folder, bin: harness.bin, args: windowsPromptArgs(harness.id, promptFile, await host.language(dir)) }));
+    } else path = await writeHandoffScript(host.userData, buildScript({ folder: checked.folder, bin: harness.bin, args: harnessArgs(harness.id, prompt) }));
+    const error = await openInTerminal(path, host.openPath, host.spawnTerminal);
     if (error) return { ok: false as const, message: error };
     return { ok: true as const, label: harness.label };
   });

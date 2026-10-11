@@ -1,0 +1,86 @@
+name: windows
+
+on:
+  push:
+    branches: [feat/win-native, feat/integration, main]
+    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml']
+  workflow_dispatch:
+
+jobs:
+  helpers:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configurar (CMake + Ninja, sem AEC)
+        run: cmake -S native/win -B build/win -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compilar rice-audio.exe, rice-detector.exe e os testes
+        run: cmake --build build/win
+
+      - name: Testes portáveis (comparam com o Swift)
+        run: ctest --test-dir build/win --output-on-failure
+
+      - name: --selftest-tone contra o fixture do Swift
+        shell: bash
+        run: |
+          build/win/rice-audio.exe --selftest-tone > tone.bin
+          build/win/rice-audio.exe --selftest-gap > gap.bin 2> gap.stderr
+          cmp gap.bin tests/fixtures/protocol/gap.bin
+          diff gap.stderr tests/fixtures/protocol/gap.stderr || diff <(tr -d '\r' < gap.stderr) tests/fixtures/protocol/gap.stderr
+          ls -l tone.bin tests/fixtures/protocol/tone.bin
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Paridade do protocolo com o cliente TS real (modo simulado)
+        shell: bash
+        env:
+          RICE_WIN_BIN_DIR: ${{ github.workspace }}/build/win
+        run: npx vitest run tests/native/win-parity.test.ts
+
+      - name: Smoke do detector no registro real do runner (não deve falhar nem travar)
+        shell: bash
+        run: |
+          build/win/rice-detector.exe --print-mic-processes
+          build/win/rice-detector.exe --once
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rice-helpers-win-x64
+          path: |
+            build/win/rice-audio.exe
+            build/win/rice-detector.exe
+
+  # Experimental: descobre se o WebRTC AEC3 fecha no MSVC. Falhar aqui não derruba o resto.
+  aec:
+    runs-on: windows-latest
+    continue-on-error: true
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - run: pip install meson ninja
+      - name: Compilar o webrtc-audio-processing
+        run: pwsh scripts/build-webrtc-apm.ps1
+      - name: Compilar o rice-audio com AEC e rodar o selftest
+        shell: bash
+        run: |
+          cmake -S native/win -B build/aec -G Ninja -DCMAKE_BUILD_TYPE=Release -DRICE_WITH_AEC=ON -DRICE_WEBRTC_DIR="$PWD/native/third_party/webrtc-apm-win"
+          cmake --build build/aec --target rice-audio
+          build/aec/rice-audio.exe --selftest-aec | tee aec.json
+          node -e "const r=JSON.parse(require('fs').readFileSync('aec.json','utf8'));if(!(r.reductionDb>=15))process.exit(1)"

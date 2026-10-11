@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { resolveSpawn, spawnOptions } from '../platform/spawn';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { t } from '../i18n';
@@ -87,7 +88,8 @@ export function parseOpenCodeLine(line: string): CliLine | null {
 
 const run = (binary: string, args: string[], env: NodeJS.ProcessEnv, cwd: string, timeoutMs: number): Promise<{ ok: boolean; out: string }> =>
   new Promise((resolve) => {
-    execFile(binary, args, { env, cwd, timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => resolve({ ok: !err, out: String(stdout ?? '') }));
+    const spec = resolveSpawn(binary, args, env);
+    execFile(spec.command, spec.args, spawnOptions(spec, { env, cwd, timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }), (err, stdout) => resolve({ ok: !err, out: String(stdout ?? '') }));
   });
 
 /** Modelos dos provedores autenticados (`opencode models`), na ordem da CLI. Lista vazia = sem login. */

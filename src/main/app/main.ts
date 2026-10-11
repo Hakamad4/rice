@@ -1,7 +1,7 @@
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, session as electronSession, nativeImage, Notification, powerMonitor, safeStorage, screen, shell, systemPreferences, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, session as electronSession, nativeImage, nativeTheme, Notification, powerMonitor, safeStorage, screen, shell, systemPreferences, Tray } from 'electron';
 import { CalendarFeed } from '../calendar/calendar-feed';
 import { fromEventKit } from '../calendar/google-events';
 import { GoogleAuth } from '../calendar/google-auth';
@@ -42,7 +42,9 @@ import { recoverMeeting } from '../session/recover-meeting';
 import { alertPosition, AlertScheduler, ALERT_HEIGHT, ALERT_WIDTH, isHttpsUrl } from './meeting-alert';
 import { type AlertPlan } from '../calendar/google-events';
 import { LevelThrottle, NubController, NUB_BAR_WIDTH, NUB_HEIGHT, type Point } from './nub';
-import { findAppIcon, findTrayIcons } from './app-icon';
+import { findAppIcon, findTrayIcons, findWinIcon } from './app-icon';
+import { isMac, isWindows, remindersSupported, systemCalendarSupported } from '../platform';
+import { systemPanelUrl, titleBarOverlay } from '../platform/system';
 import { fromSystemLocale, locale, setLanguage, t, type UiLanguage } from '../i18n';
 import { copyNotes, draftEmail, exportInfo, exportPdf, openMail, type ShareDeps } from '../share/actions';
 import { uniquePath } from '../share/pdf';
@@ -166,8 +168,9 @@ on('i18n:language', (event) => {
 on('ui:titlebar-zoom', (event, raw: unknown) => {
   const zoom = typeof raw === 'number' && Number.isFinite(raw) && raw >= 0.25 && raw <= 5 ? raw : 1;
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || win !== window || process.platform !== 'darwin') return;
-  win.setWindowButtonPosition({ x: 16, y: Math.max(4, Math.round(24 * zoom - 6)) });
+  if (!win || win !== window) return;
+  if (isWindows()) win.setTitleBarOverlay(titleBarOverlay(nativeTheme.shouldUseDarkColors, zoom)); // botões do Windows na altura da faixa
+  else if (isMac()) win.setWindowButtonPosition({ x: 16, y: Math.max(4, Math.round(24 * zoom - 6)) });
 });
 
 async function currentUiLanguage(): Promise<UiLanguage> {
@@ -220,7 +223,13 @@ async function saveSettings(settings: Settings): Promise<void> {
 
 /** O rice-audio herda as permissões do app: o próprio Electron precisa pedir o microfone. */
 async function ensureMicAccess(): Promise<void> {
-  if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return;
+  const status = systemPreferences.getMediaAccessStatus('microphone');
+  if (status === 'granted') return;
+  // Windows: não há diálogo do app; o acesso é do usuário em Configurações > Privacidade > Microfone (só 'denied' bloqueia)
+  if (isWindows()) {
+    if (status === 'denied') throw new Error(t('err.mic-permission'));
+    return;
+  }
   const granted = await systemPreferences.askForMediaAccess('microphone');
   if (!granted) {
     throw new Error(t('err.mic-permission'));
@@ -343,9 +352,9 @@ function startFromPrompt(input: { title: string; trigger: 'mic' | 'calendar'; ap
 }
 
 /** Último acesso ao Calendário do macOS informado pelo detector: granted, denied, notDetermined (ou unknown antes da primeira resposta). */
-let calendarAccess = 'unknown';
+let calendarAccess = systemCalendarSupported() ? 'unknown' : 'unsupported'; // Windows: a agenda vem só do Google
 /** Idem para os Lembretes do macOS (permissão própria, pedida só quando o usuário clica em Permitir). */
-let remindersAccess = 'unknown';
+let remindersAccess = remindersSupported() ? 'unknown' : 'unsupported';
 
 /** Lista do Início (e avisos): Calendário do macOS dos próximos 7 dias, com os de dia inteiro. */
 async function refreshEventKit(): Promise<void> {
@@ -362,6 +371,7 @@ function setupDetector(): void {
   detector = d;
   d.on('error', () => {});
   d.on('calendar-access', (status: string) => {
+    if (!systemCalendarSupported()) return; // o detector do Windows responde "unsupported"; o estado já está fixo
     calendarAccess = status;
     if (status === 'granted') void refreshEventKit();
     if (window && !window.isDestroyed()) window.webContents.send('calendar:changed', null); // o passo "Agenda" do guia relê o status
@@ -369,6 +379,7 @@ function setupDetector(): void {
     void saveSettings({ ...cachedSettings, calendarAsked: true }).then(() => d.requestCalendarAccess());
   });
   d.on('reminders-access', (status: string) => {
+    if (!remindersSupported()) return;
     remindersAccess = status;
     send('reminders:changed', null);
   });
@@ -437,6 +448,8 @@ function setupDetector(): void {
 
 /** `RICE_BENCH=1`: instância de medição, sem janelas visíveis, nub, alertas, bandeja nem ícone no Dock. */
 const BENCH = process.env.RICE_BENCH === '1';
+/** Plataforma que o renderer mostra. Só as instâncias de teste (RICE_BENCH) aceitam RICE_FAKE_PLATFORM, para os prints do layout do Windows no Mac. */
+const PLATFORM_FOR_UI = BENCH && process.env.RICE_FAKE_PLATFORM === 'win32' ? 'win32' : process.platform;
 
 function createWindow(): void {
   if (window) {
@@ -448,10 +461,11 @@ function createWindow(): void {
     width: 1200,
     height: 780,
     title: 'Rice',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 18 },
+    ...(isWindows()
+      ? { titleBarStyle: 'hidden' as const, titleBarOverlay: titleBarOverlay(nativeTheme.shouldUseDarkColors) } // botões do Windows à direita, sobre a faixa de 48px
+      : { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 18 } }),
     ...(appIconPath ? { icon: appIconPath } : {}),
-    webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: DEV_TOOLS },
+    webPreferences: { preload: join(__dirname, 'preload.cjs'), additionalArguments: [`--rice-platform=${PLATFORM_FOR_UI}`], contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: DEV_TOOLS },
   });
   window.loadFile(join(__dirname, '..', 'src', 'renderer', 'index.html'));
   window.on('focus', updateNub);
@@ -530,9 +544,17 @@ function buildAppMenu(): void {
     showMainWindow();
     window?.webContents.send('app:open-settings', null);
   };
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
+  const appMenu: Electron.MenuItemConstructorOptions = isWindows()
+    ? {
+        // Windows: sem o menu do app do Mac (Sobre/Ocultar); Configurações e Sair ficam em "Rice", com atalhos Ctrl
+        label: 'Rice',
+        submenu: [
+          { label: t('menu.settings'), accelerator: 'Control+,', click: openSettings },
+          { type: 'separator' },
+          { label: t('menu.quit'), role: 'quit' },
+        ],
+      }
+    : {
         label: 'Rice',
         submenu: [
           { label: t('menu.about'), role: 'about' },
@@ -545,7 +567,10 @@ function buildAppMenu(): void {
           { type: 'separator' },
           { label: t('menu.quit'), role: 'quit' },
         ],
-      },
+      };
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      appMenu,
       {
         label: t('menu.edit'),
         submenu: [
@@ -572,7 +597,7 @@ function buildAppMenu(): void {
         label: t('menu.window'),
         submenu: [
           { label: t('menu.minimize'), role: 'minimize' },
-          { label: t('menu.zoom'), role: 'zoom' },
+          ...(isMac() ? [{ label: t('menu.zoom'), role: 'zoom' as const }] : []),
           { label: t('menu.close'), role: 'close' },
         ],
       },
@@ -592,7 +617,8 @@ function applyUiLanguage(language: UiLanguage): void {
 function updateTray(state: SessionState = session?.state ?? 'idle'): void {
   if (!tray) return;
   // o logo (imagem template) fica sempre; só o texto muda durante a gravação, sem emoji
-  tray.setTitle(state === 'recording' ? ' REC' : state === 'finishing' ? ' …' : '');
+  if (isMac()) tray.setTitle(state === 'recording' ? ' REC' : state === 'finishing' ? ' …' : '');
+  else tray.setToolTip(state === 'recording' ? t('tray.tooltip-recording') : 'Rice'); // Windows: sem texto ao lado do ícone; o estado vai na dica
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
@@ -613,6 +639,11 @@ function updateTray(state: SessionState = session?.state ?? 'idle'): void {
 
 /** Logo monocromático para a barra de menus: o macOS pinta imagens "template" de claro ou escuro conforme a barra. */
 function trayImage(): Electron.NativeImage {
+  if (isWindows()) {
+    // Windows: ícone colorido (a bandeja não pinta "template"), no tamanho de 16 DIP
+    const ico = findWinIcon(__dirname);
+    return ico ? nativeImage.createFromPath(ico) : nativeImage.createEmpty();
+  }
   const files = findTrayIcons(__dirname);
   if (!files) return nativeImage.createEmpty();
   const image = nativeImage.createFromPath(files.x1);
@@ -624,6 +655,7 @@ function trayImage(): Electron.NativeImage {
 function createTray(): void {
   tray = new Tray(trayImage());
   tray.setToolTip('Rice');
+  if (isWindows()) tray.on('click', createWindow); // no Windows o clique no ícone abre a janela (o menu fica no botão direito)
   updateTray('idle');
 }
 
@@ -631,21 +663,14 @@ function send(channel: string, payload: unknown): void {
   if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
 }
 
-/** Painéis do sistema que os avisos sabem abrir. */
-const SETTINGS_URLS = {
-  storage: 'x-apple.systempreferences:com.apple.settings.Storage',
-  microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
-  audioCapture: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture',
-} as const;
-
 async function runAlertAction(s: MeetingSession, kind: AlertActionKind, dir?: string, id?: string): Promise<void> {
   switch (kind) {
     case 'open-storage':
-      return void (await shell.openExternal(SETTINGS_URLS.storage));
+      return void (await shell.openExternal(systemPanelUrl('storage')));
     case 'open-mic-privacy':
-      return void (await shell.openExternal(SETTINGS_URLS.microphone));
+      return void (await shell.openExternal(systemPanelUrl('microphone')));
     case 'open-audio-privacy':
-      return void (await shell.openExternal(SETTINGS_URLS.audioCapture));
+      return void (await shell.openExternal(systemPanelUrl('audioCapture')));
     case 'stop-recording':
       return s.stop();
     case 'keep-recording':
@@ -1217,15 +1242,15 @@ function registerIpc(runner: AiRunner): void {
   }));
 
   // URL fixa: o renderer nunca escolhe o que abrir.
-  handle('app:open-privacy', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'));
+  handle('app:open-privacy', () => shell.openExternal(systemPanelUrl('microphone')));
 
   // URLs fixas: o renderer nunca escolhe o que abrir.
   handle('app:open-internet-accounts', () => shell.openExternal('x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension'));
   handle('app:open-calendar-privacy', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars'));
   handle('app:open-reminders-privacy', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders'));
   // Lembretes de hoje (EKReminder): lidos só no Mac, mostrados no Início e nunca enviados à IA
-  const remindersEnabled = async () => (await loadSettings()).showReminders !== false;
-  handle('reminders:status', async () => ({ access: remindersAccess, enabled: await remindersEnabled() }));
+  const remindersEnabled = async () => remindersSupported() && (await loadSettings()).showReminders !== false;
+  handle('reminders:status', async () => ({ access: remindersAccess, enabled: remindersSupported() && (await remindersEnabled()) }));
   handle('reminders:request', () => {
     if (remindersAccess === 'notDetermined') detector?.requestRemindersAccess(); // a resposta chega por 'reminders:changed'
     return { access: remindersAccess };
@@ -1621,6 +1646,12 @@ app.whenReady().then(async () => {
   ses.setPermissionCheckHandler(() => false);
   ses.setDevicePermissionHandler(() => false);
   ses.on('will-download', (event) => event.preventDefault());
+  if (isWindows()) {
+    app.setAppUserModelId('com.rice.app'); // avisos e agrupamento na barra de tarefas
+    nativeTheme.on('updated', () => {
+      if (window && !window.isDestroyed()) window.setTitleBarOverlay(titleBarOverlay(nativeTheme.shouldUseDarkColors, window.webContents.getZoomFactor()));
+    });
+  }
   if (BENCH) app.dock?.hide();
   if (appIconPath) {
     const image = nativeImage.createFromPath(appIconPath);

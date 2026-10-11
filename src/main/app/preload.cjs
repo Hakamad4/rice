@@ -25,7 +25,11 @@ const EVENTS = [
   'calendar:disconnected',
 ];
 
+const platformArg = process.argv.find((a) => a.startsWith('--rice-platform='));
+
 contextBridge.exposeInMainWorld('rice', {
+  /** 'darwin' | 'win32' (o main só aceita simular o Windows em instâncias de teste). */
+  platform: platformArg ? platformArg.slice('--rice-platform='.length) : process.platform,
   zoomFactor: () => webFrame.getZoomFactor(),
   setTitlebarZoom: (zoom) => ipcRenderer.send('ui:titlebar-zoom', zoom),
   uiLanguage: ipcRenderer.sendSync('i18n:language'),

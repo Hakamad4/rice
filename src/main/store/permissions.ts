@@ -1,5 +1,7 @@
-import { chmod, lstat, readdir } from 'node:fs/promises';
+import { lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { restrictMode } from '../platform/fs';
+import { isWindows } from '../platform';
 
 /**
  * Dados do Rice (áudio, transcrição, notas, chats, configurações) são só do usuário: pastas 0700 e arquivos 0600.
@@ -7,6 +9,7 @@ import { join } from 'node:path';
  * Não segue links simbólicos e nunca lança: é melhor-esforço.
  */
 export async function tightenTree(path: string, depth = 3): Promise<number> {
+  if (isWindows()) return 0; // ACLs do perfil do usuário no lugar de 0700/0600
   let changed = 0;
   let info;
   try {
@@ -18,7 +21,7 @@ export async function tightenTree(path: string, depth = 3): Promise<number> {
   const want = info.isDirectory() ? 0o700 : 0o600;
   if ((info.mode & 0o777) !== want && (info.mode & 0o077) !== 0) {
     try {
-      await chmod(path, want);
+      await restrictMode(path, want);
       changed++;
     } catch {
       // sem dono do arquivo ou volume sem permissões: segue

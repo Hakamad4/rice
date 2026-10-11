@@ -8,6 +8,7 @@ import { isFreeTierModel, listOpenCodeModels, openCodeLoggedIn } from './opencod
 import { listClaudeModels } from './claude-api';
 import { listGeminiModels } from './gemini-api';
 import { listOpenAiModels } from './openai-api';
+import { agySupported, findCli, isWindows } from '../platform';
 import { describeSecret } from './secrets';
 import { AI_PROVIDERS, AiError, hasKeyField, type AiProvider } from './types';
 
@@ -20,6 +21,8 @@ export type ProviderStatus = {
   verified?: boolean;
   /** Só CLIs: o executável foi encontrado. */
   installed?: boolean;
+  /** O provedor não existe nesta plataforma (Antigravity no Windows): a tela mostra só o motivo, sem passos nem botões. */
+  unavailable?: boolean;
   /** Só OpenCode: há pelo menos um provedor autenticado na CLI. */
   loggedIn?: boolean;
 };
@@ -28,6 +31,7 @@ export type AiStatus = { active: AiProvider; models: AiSettings['models']; provi
 
 const cliInstalled = (binary: string): boolean => {
   if (isAbsolute(binary)) return existsSync(binary);
+  if (isWindows()) return findCli(binary) !== null; // Path, PATHEXT (.exe/.cmd) e as pastas do npm
   return (process.env.PATH ?? '').split(delimiter).some((dir) => dir && existsSync(`${dir}/${binary}`));
 };
 
@@ -65,6 +69,8 @@ export async function aiStatus(settings: AiSettings, deps: RunnerDeps, now: numb
         connected: installed && verified === true,
         detail: !installed ? t('ai.status.cli-missing', { name }) : verified === true ? t('ai.status.connected') : verified === false ? t('ai.status.test-failed') : t('ai.status.cli-found', { name }),
       };
+    } else if (id === 'agy-sub' && !agySupported()) {
+      providers[id] = { ...base, installed: false, connected: false, unavailable: true, detail: t('ai.status.agy-mac-only') };
     } else if (id === 'agy-sub') {
       const installed = cliInstalled(deps.binaries.agy);
       providers[id] = {

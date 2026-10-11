@@ -68,7 +68,7 @@
     input.setAttribute('aria-label', t('gchat.field-aria'));
     input.id = 'home-ask-input';
     const hint = el('span', { className: 'ask-ph' }, [el('span', { className: 'ph-long', textContent: t('gchat.home-ph') }, []), el('span', { className: 'ph-mid', textContent: t('gchat.field-aria') }, []), el('span', { className: 'ph-short', textContent: t('gchat.home-ph-short') }, [])]);
-    const form = el('form', { className: 'home-ask' }, [el('span', { className: 'ico' }, [window.RiceIcons.icon('sparkles')]), el('div', { className: 'ask-field' }, [input, hint]), el('kbd', { className: 'kbd-hint', textContent: '⌘J' }, [])]);
+    const form = el('form', { className: 'home-ask' }, [el('span', { className: 'ico' }, [window.RiceIcons.icon('sparkles')]), el('div', { className: 'ask-field' }, [input, hint]), el('kbd', { className: 'kbd-hint', textContent: window.RiceKeys ? window.RiceKeys.label('J') : '⌘J' }, [])]);
     form.onsubmit = (e) => {
       e.preventDefault();
       const question = input.value.trim();
@@ -126,7 +126,7 @@
   function applyReminders(container, state, handlers) {
     const slot = container.querySelector('.reminders-slot');
     if (!slot) return;
-    if (!state || state.enabled === false) return slot.replaceChildren();
+    if (!state || state.enabled === false || state.access === 'unsupported') return slot.replaceChildren();
     if (state.access === 'notDetermined' || state.access === 'denied') {
       const denied = state.access === 'denied';
       const row = el('div', { className: 'rem-allow' }, [

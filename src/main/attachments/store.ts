@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
+import { restrictMode } from '../platform/fs';
 import { constants } from 'node:fs';
-import { chmod, copyFile, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { basename, extname, join } from 'node:path';
 import { t } from '../i18n';
 import { writeAtomic } from '../store/meeting-files';
@@ -157,7 +158,7 @@ export function addFromPath(meetingDir: string, srcPath: string, options: AddOpt
     const name = uniqueName(sanitizeName(basename(srcPath)), new Set(items.map((a) => a.file)));
     const dest = join(attachmentsDir(meetingDir), name);
     await copyFile(srcPath, dest, constants.COPYFILE_EXCL);
-    await chmod(dest, 0o600);
+    await restrictMode(dest, 0o600);
     return register(meetingDir, name, basename(srcPath), st.size, options);
   });
 }

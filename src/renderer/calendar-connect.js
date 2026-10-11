@@ -44,7 +44,8 @@
     const rice = window.rice;
     google = google || {};
     const access = (eventKit && eventKit.access) || 'unknown';
-    let openId = carry !== undefined ? carry : 'macos';
+    const noSystem = access === 'unsupported'; // Windows: sem Calendário do sistema, a agenda é só o Google
+    let openId = carry !== undefined ? carry : noSystem ? 'google' : 'macos';
     carry = undefined;
     const cards = [];
 
@@ -104,7 +105,7 @@
     } else if (access === 'denied') {
       macActions.push(button(t('guide.cal.mac.open-privacy'), () => rice.openCalendarPrivacy(), 'primary'));
     }
-    const mac = card('macos', t('guide.cal.mac.title'), access === 'granted' ? t('guide.cal.on') : '', access === 'granted', [
+    const mac = noSystem ? null : card('macos', t('guide.cal.mac.title'), access === 'granted' ? t('guide.cal.on') : '', access === 'granted', [
       el('p', { className: 'ai-lead', textContent: t('guide.cal.mac.text') }, []),
       el('div', { className: 'ai-foot' }, [status(macStatus[0], macStatus[1]), el('div', { className: 'ai-actions' }, macActions)]),
     ]);
@@ -155,7 +156,7 @@
     const direct = card('google', t('guide.cal.google.title'), google.connected ? t('guide.cal.on') : '', Boolean(google.connected), gBlocks);
 
     setOpen(openId);
-    return [el('div', { className: 'ai-cards' }, [mac, direct]), el('p', { className: 'hint ai-note', textContent: t('guide.cal.privacy') }, [])];
+    return [el('div', { className: 'ai-cards' }, noSystem ? [direct] : [mac, direct]), el('p', { className: 'hint ai-note', textContent: t('guide.cal.privacy') }, [])];
   }
 
   window.RiceCalendarConnect = { render, summary };

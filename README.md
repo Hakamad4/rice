@@ -72,6 +72,17 @@ Because it is not signed by Apple, macOS may ask for the permissions again (micr
 
 You still need `brew install whisper.cpp` for the transcription server; the transcription model itself is downloaded on first launch.
 
+### Windows (x64, Windows 10 22H2 or 11) — work in progress
+
+The Windows port is built and tested in CI, but has not been tried on a real PC yet. In PowerShell, from the repository folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -Check   # checks Windows, Node 22, CMake and the Visual Studio C++ tools
+powershell -ExecutionPolicy Bypass -File install.ps1           # builds the helpers and the installer (dist\Rice-Setup-*.exe) and opens it
+```
+
+The installer is per user (no administrator) and unsigned: SmartScreen may show "Windows protected your PC"; choose "More info" and "Run anyway". Differences from the Mac: no Antigravity, no Reminders, no system Calendar (the agenda comes from Google), the keys are protected by Windows (DPAPI) and shortcuts use Ctrl.
+
 ### Running from source (development)
 
 ```bash

@@ -799,6 +799,15 @@
   .cmd { margin:6px 0; } .row { display:flex; gap:var(--gap-3); flex-wrap:wrap; align-items:center; margin:10px 0; }
   .row input { flex:1; min-width:200px; }
   .feedback.ok { color:var(--muted); } .feedback.bad { color:var(--bad); } .howto { margin:8px 0; padding-left:20px; }
+
+  /* Windows (body.platform-win): sem semáforos nem o recuo à esquerda; os botões nativos (titleBarOverlay, ~140px) ficam no canto direito
+     e nada do que está no topo direito (barra de gravação sem chat, cabeçalho do chat com chat) passa por baixo deles */
+  :root { --overlay-r:0px; }
+  body.platform-win:not(.chat-open) #rec-bar { padding-right:calc(20px + var(--overlay-r)); }
+  body.platform-win.chat-open .chat-head { padding-right:calc(16px + var(--overlay-r)); min-height:var(--titlebar); box-sizing:border-box; }
+  /* chat estreito: o título não cabe ao lado dos botões nativos; o cabeçalho desce para baixo deles (nada de título quebrado) */
+  body.platform-win #chat { container:chat / inline-size; }
+  @container chat (max-width:400px) { body.platform-win.chat-open .chat-head { padding-right:16px; padding-top:calc(var(--titlebar) + 2px); } }
 </style>
 </head>
 <body>

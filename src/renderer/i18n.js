@@ -7,6 +7,13 @@
   const dictionaries = { 'pt-BR': {}, en: {} };
   let current = 'pt-BR';
 
+  /** Windows? No renderer vem do preload (`rice.platform`, que os testes e os prints podem trocar); no main, de `process.platform`. */
+  function isWindows() {
+    const rice = typeof window === 'object' && window ? window.rice : globalThis.rice;
+    if (rice && typeof rice === 'object' && rice.platform) return rice.platform === 'win32';
+    return typeof process === 'object' && process !== null && process.platform === 'win32';
+  }
+
   /** Registra (ou estende) o dicionário de um idioma. Os arquivos de `locales/` chamam isto. */
   function add(language, entries) {
     Object.assign(dictionaries[language], entries);
@@ -35,7 +42,8 @@
    */
   function t(key, vars, language) {
     const lang = LANGUAGES.includes(language) ? language : current;
-    let text = dictionaries[lang][key];
+    let text = isWindows() ? dictionaries[lang][`${key}@win`] ?? dictionaries['pt-BR'][`${key}@win`] : undefined; // variante do Windows (`chave@win`), se houver
+    if (text === undefined) text = dictionaries[lang][key];
     if (text === undefined) text = dictionaries['pt-BR'][key];
     if (text === undefined) return key;
     if (!vars) return text;
@@ -78,5 +86,5 @@
     return raw;
   }
 
-  return { LANGUAGES, dictionaries, add, setLanguage, getLanguage, locale, fromSystemLocale, t, tn, applyDom, isMine, speaker, personId };
+  return { isWindows, LANGUAGES, dictionaries, add, setLanguage, getLanguage, locale, fromSystemLocale, t, tn, applyDom, isMine, speaker, personId };
 });

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
+import { resolveSpawn, spawnOptions } from '../platform/spawn';
 import { buildChildEnv } from '../ai/env';
 import type { ToolsRequest } from '../ai/types';
 import { t } from '../i18n';
@@ -101,7 +102,8 @@ export async function probeClaudeMcpServers(options: { binary?: string; cwd: str
   const env = buildChildEnv(options.env ?? process.env, options.token ? { CLAUDE_CODE_OAUTH_TOKEN: options.token } : {}, options.binary);
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--tools', '', '--no-session-persistence', '--settings', '{"disableAllHooks":true}', '--setting-sources', '', '--disable-slash-commands'];
   const names = await new Promise<string[]>((resolve) => {
-    const child = spawn(key, args, { cwd: options.cwd, env, stdio: ['pipe', 'pipe', 'ignore'] });
+    const spec = resolveSpawn(key, args, env);
+    const child = spawn(spec.command, spec.args, spawnOptions(spec, { cwd: options.cwd, env, stdio: ['pipe', 'pipe', 'ignore'] as ['pipe', 'pipe', 'ignore'] }));
     let done = false;
     const finish = (list: string[]) => {
       if (done) return;
@@ -153,11 +155,13 @@ export class ClaudeRunner {
     const env = buildChildEnv(this.config.env ?? process.env, token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}, this.config.binary);
     // ferramentas só com o pedido explícito do chat; sem MCP conectado o modo com ferramentas não vale a pena e fica o modo seguro
     const servers = !tools || tools.mcp === false ? [] : this.config.testMcpConfig ? await testServerNames(this.config.testMcpConfig) : await probeClaudeMcpServers({ binary: this.config.binary, cwd: this.config.cwd, env: this.config.env, token });
-    const child = spawn(this.config.binary ?? 'claude', buildClaudeArgs(system, this.config.model, { mcpServers: servers, ...(tools?.web ? { web: true } : {}), ...(tools?.folder ? { folder: tools.folder } : {}) }, this.config.testMcpConfig), {
+    const claudeArgs = buildClaudeArgs(system, this.config.model, { mcpServers: servers, ...(tools?.web ? { web: true } : {}), ...(tools?.folder ? { folder: tools.folder } : {}) }, this.config.testMcpConfig);
+    const spec = resolveSpawn(this.config.binary ?? 'claude', claudeArgs, env);
+    const child = spawn(spec.command, spec.args, spawnOptions(spec, {
       cwd: tools?.folder ?? this.config.cwd,
       env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+      stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'],
+    }));
 
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
     let spawnError: NodeJS.ErrnoException | null = null;

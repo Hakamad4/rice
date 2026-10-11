@@ -1448,9 +1448,12 @@ $('chat-toggle').onclick = () => {
   if (chatIsOpen()) $('question').focus();
 };
 
+/** Tecla de atalho: ⌘ no Mac, Ctrl no Windows (titlebar.js define RiceKeys; sem ele, ⌘). */
+const modKey = (e) => (window.RiceKeys ? window.RiceKeys.mod(e) : e.metaKey);
+
 /** ⌘J: abre o chat de todas as reuniões, de qualquer tela. */
 const onGlobalChatShortcut = (e) => {
-  if (!(e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j')) return;
+  if (!(modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j')) return;
   e.preventDefault();
   setScope(isGlobalScope() ? chatScope : { kind: 'all' }, true);
 };
@@ -2061,6 +2064,8 @@ function syncSearchChrome() {
   $('search-hint').hidden = has;
 }
 
+if (window.RiceKeys) $('search-hint').textContent = window.RiceKeys.label('K'); // dica ⌘K (Mac) ou Ctrl K (Windows)
+
 function openResult(result) {
   const hit = window.RiceSearch.bestHit(result);
   openMeeting(result.dir, { reveal: { terms: searchWords, field: hit ? hit.field : 'title' } });
@@ -2125,7 +2130,7 @@ $('search').onkeydown = (e) => {
   }
 };
 const onSearchShortcut = (e) => {
-  if (!(e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k')) return;
+  if (!(modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k')) return;
   e.preventDefault();
   if (document.body.classList.contains('side-collapsed')) applySidebar(false);
   $('search').focus();
@@ -2194,7 +2199,7 @@ window.rice.on('ui:language', async (language) => {
 
 /** ⌘⌫ com uma reunião aberta abre o diálogo de apagar (fora de campos de texto). */
 const onDeleteShortcut = (e) => {
-  if (!(e.metaKey && e.key === 'Backspace') || current === null) return;
+  if (!(modKey(e) && e.key === 'Backspace') || current === null) return;
   const target = e.target;
   if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
   if (document.querySelector('.overlay')) return;

@@ -1,0 +1,306 @@
+{
+ "generatedBy": "rice-detector (Swift, macOS) — não editar à mão; regrave com scripts/record-protocol-fixtures.mjs",
+ "match": [
+  {
+   "input": "us.zoom.xos",
+   "output": {
+    "app": "Zoom"
+   }
+  },
+  {
+   "input": "com.microsoft.teams2",
+   "output": {
+    "app": "Microsoft Teams"
+   }
+  },
+  {
+   "input": "com.google.Chrome",
+   "output": {
+    "app": "Google Chrome"
+   }
+  },
+  {
+   "input": "com.google.Chrome.helper",
+   "output": {
+    "app": "Google Chrome"
+   }
+  },
+  {
+   "input": "company.thebrowser.Browser",
+   "output": {
+    "app": "Arc"
+   }
+  },
+  {
+   "input": "com.apple.WebKit.GPU",
+   "output": {
+    "app": "Safari"
+   }
+  },
+  {
+   "input": "org.mozilla.firefox",
+   "output": {
+    "app": "Firefox"
+   }
+  },
+  {
+   "input": "com.microsoft.edgemac.helper",
+   "output": {
+    "app": "Microsoft Edge"
+   }
+  },
+  {
+   "input": "com.tinyspeck.slackmacgap.helper",
+   "output": {
+    "app": "Slack"
+   }
+  },
+  {
+   "input": "com.apple.avconferenced",
+   "output": {
+    "app": "FaceTime"
+   }
+  },
+  {
+   "input": "com.hnc.Discord.helper",
+   "output": {
+    "app": "Discord"
+   }
+  },
+  {
+   "input": "Cisco-Systems.Spark",
+   "output": {
+    "app": "Webex"
+   }
+  },
+  {
+   "input": "com.rice.audio",
+   "output": {
+    "app": null
+   }
+  },
+  {
+   "input": "com.google.Chromecast",
+   "output": {
+    "app": null
+   }
+  },
+  {
+   "input": "",
+   "output": {
+    "app": null
+   }
+  }
+ ],
+ "simulateMic": [
+  {
+   "input": [
+    [
+     "com.google.Chrome.helper"
+    ],
+    [
+     "com.google.Chrome.helper",
+     "com.google.Chrome"
+    ],
+    [
+     "com.google.Chrome"
+    ],
+    []
+   ],
+   "output": [
+    {
+     "app": "Google Chrome",
+     "bundleId": "com.google.Chrome.helper",
+     "event": "mic-in-use"
+    },
+    {
+     "app": "Google Chrome",
+     "bundleId": "com.google.Chrome.helper",
+     "event": "mic-released"
+    }
+   ]
+  },
+  {
+   "input": [
+    [
+     "com.rice.audio",
+     "us.zoom.xos"
+    ],
+    [
+     "com.rice.audio",
+     "us.zoom.xos",
+     "com.tinyspeck.slackmacgap"
+    ],
+    [
+     "com.rice.audio",
+     "com.tinyspeck.slackmacgap"
+    ]
+   ],
+   "output": [
+    {
+     "app": "Zoom",
+     "bundleId": "us.zoom.xos",
+     "event": "mic-in-use"
+    },
+    {
+     "app": "Slack",
+     "bundleId": "com.tinyspeck.slackmacgap",
+     "event": "mic-in-use"
+    },
+    {
+     "app": "Zoom",
+     "bundleId": "us.zoom.xos",
+     "event": "mic-released"
+    }
+   ]
+  },
+  {
+   "input": [
+    [
+     "com.microsoft.teams2",
+     "com.google.Chrome"
+    ],
+    [
+     "com.google.Chrome"
+    ],
+    []
+   ],
+   "output": [
+    {
+     "app": "Google Chrome",
+     "bundleId": "com.google.Chrome",
+     "event": "mic-in-use"
+    },
+    {
+     "app": "Microsoft Teams",
+     "bundleId": "com.microsoft.teams2",
+     "event": "mic-in-use"
+    },
+    {
+     "app": "Microsoft Teams",
+     "bundleId": "com.microsoft.teams2",
+     "event": "mic-released"
+    },
+    {
+     "app": "Google Chrome",
+     "bundleId": "com.google.Chrome",
+     "event": "mic-released"
+    }
+   ]
+  }
+ ],
+ "simulateUpcoming": [
+  {
+   "input": {
+    "now": "2026-10-11T10:00:00Z",
+    "announced": [],
+    "events": [
+     {
+      "id": "a",
+      "title": "a",
+      "start": "2026-10-11T10:00:30Z",
+      "end": "2026-10-11T11:00:00Z"
+     },
+     {
+      "id": "b",
+      "title": "b",
+      "start": "2026-10-11T10:05:00Z",
+      "end": "2026-10-11T11:00:00Z"
+     },
+     {
+      "id": "c",
+      "title": "c",
+      "start": "2026-10-11T09:58:30Z",
+      "end": "2026-10-11T10:30:00Z"
+     },
+     {
+      "id": "d",
+      "title": "d",
+      "start": "2026-10-11T09:57:00Z",
+      "end": "2026-10-11T10:30:00Z"
+     }
+    ]
+   },
+   "output": [
+    "a",
+    "c"
+   ]
+  },
+  {
+   "input": {
+    "now": "2026-10-11T10:00:00Z",
+    "announced": [
+     "a"
+    ],
+    "events": [
+     {
+      "id": "a",
+      "title": "a",
+      "start": "2026-10-11T10:00:30Z",
+      "end": "2026-10-11T11:00:00Z"
+     }
+    ]
+   },
+   "output": []
+  }
+ ],
+ "simulateReminders": [
+  {
+   "input": {
+    "now": "2026-10-11T15:00:00Z",
+    "items": [
+     {
+      "id": "r1",
+      "title": "x",
+      "y": 2026,
+      "m": 10,
+      "d": 11,
+      "h": 15,
+      "min": 0
+     },
+     {
+      "id": "r2",
+      "title": "y",
+      "y": 2026,
+      "m": 10,
+      "d": 10
+     },
+     {
+      "id": "r3",
+      "title": "z",
+      "y": 2026,
+      "m": 10,
+      "d": 12,
+      "h": 9,
+      "min": 0
+     },
+     {
+      "id": "r4",
+      "title": "w",
+      "y": 2026,
+      "m": 10,
+      "d": 11
+     }
+    ]
+   },
+   "timezone": "local",
+   "output": [
+    {
+     "hasTime": false,
+     "id": "r2",
+     "overdue": true
+    },
+    {
+     "hasTime": false,
+     "id": "r4",
+     "overdue": false
+    },
+    {
+     "hasTime": true,
+     "id": "r1",
+     "overdue": false
+    }
+   ]
+  }
+ ]
+}

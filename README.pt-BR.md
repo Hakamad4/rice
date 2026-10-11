@@ -72,6 +72,17 @@ Como não é assinado pela Apple, o macOS pode pedir de novo as permissões (mic
 
 Você ainda precisa do `brew install whisper.cpp` para o servidor de transcrição; o modelo de transcrição em si é baixado na primeira abertura.
 
+### Windows (x64, Windows 10 22H2 ou 11) — em andamento
+
+O port para Windows é compilado e testado no CI, mas ainda não foi experimentado num PC de verdade. No PowerShell, na pasta do repositório:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -Check   # confere o Windows, o Node 22, o CMake e as ferramentas C++ do Visual Studio
+powershell -ExecutionPolicy Bypass -File install.ps1           # compila os helpers e o instalador (dist\Rice-Setup-*.exe) e o abre
+```
+
+O instalador é por usuário (sem administrador) e não é assinado: o SmartScreen pode avisar "O Windows protegeu o computador"; escolha "Mais informações" e "Executar assim mesmo". Diferenças do Mac: sem Antigravity, sem Lembretes, sem o Calendário do sistema (a agenda vem do Google), as chaves ficam protegidas pelo Windows (DPAPI) e os atalhos usam Ctrl.
+
 ### Rodar a partir do código (desenvolvimento)
 
 ```bash

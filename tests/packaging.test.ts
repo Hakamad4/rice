@@ -19,8 +19,10 @@ describe('empacotamento (dmg/zip arm64)', () => {
   test('inclui out, renderer, ícones, modelo do VAD, binários nativos e node_modules, sem as plataformas que não são do Mac arm64', () => {
     const files: string[] = pkg.build.files;
     for (const f of ['out/**', 'src/renderer/**', 'resources/models/**', 'native-bin/**', 'node_modules/**']) expect(files).toContain(f);
-    expect(files.some((f) => f.includes('onnxruntime-node/bin/napi-v6/linux'))).toBe(true); // excluído
-    expect(files.some((f) => f.startsWith('!node_modules/better-sqlite3/prebuilds'))).toBe(true);
+    const macFiles: string[] = pkg.build.mac.files; // as exclusões de plataforma ficam em mac.files / win.files (o Windows precisa dos binários win32)
+    expect(macFiles.some((f) => f.includes('onnxruntime-node/bin/napi-v6/linux'))).toBe(true); // excluído
+    expect(macFiles.some((f) => f.startsWith('!node_modules/better-sqlite3/prebuilds'))).toBe(true);
+    expect(files.some((f) => f.startsWith('!'))).toBe(false);
     expect(pkg.build.asar).toBe(false); // os binários nativos precisam existir como arquivos para serem executados
   });
   test('Info.plist: descrições de microfone, áudio do sistema, Calendário e Lembretes (pt/en)', () => {
@@ -55,7 +57,62 @@ describe('install.sh', () => {
   test('o app empacotado acha os nativos: paths.ts usa native/ no repositório e native-bin/ no app', () => {
     const paths = readFileSync('src/main/app/paths.ts', 'utf8');
     expect(paths).toContain("existsSync(join(dir, 'native-bin'))");
-    expect(paths).toContain("join(repoRoot(), 'native-bin', name)");
+    expect(paths).toContain("join(root, 'native-bin', name)");
     expect(existsSync('scripts/stage-native.sh')).toBe(true);
+  });
+});
+
+describe('empacotamento do Windows (nsis x64)', () => {
+  const win = pkg.build.win;
+  test('alvo nsis só x64, ícone .ico, por usuário (sem administrador), instalador sem assinatura', () => {
+    expect(win.target).toEqual([{ target: 'nsis', arch: ['x64'] }]);
+    expect(existsSync(win.icon)).toBe(true);
+    expect(pkg.build.nsis).toMatchObject({ oneClick: false, perMachine: false, deleteAppDataOnUninstall: false });
+    expect(pkg.build.nsis.artifactName).toBe('Rice-Setup-${version}-${arch}.${ext}');
+    expect(win.certificateFile).toBeUndefined();
+  });
+  test('leva o whisper-server e as DLLs; só os binários win32-x64 do onnx e do sqlite', () => {
+    const files: string[] = win.files;
+    expect(files).toContain('resources/win/**');
+    expect(files).toContain('!node_modules/better-sqlite3/prebuilds/!(win32-x64.node)');
+    expect(files.some((f) => f.includes('onnxruntime-node/bin/napi-v6/darwin'))).toBe(true);
+    expect(files.some((f) => f.includes('napi-v6/win32/x64'))).toBe(false); // win32/x64 fica; só o arm64 sai
+    expect(files.some((f) => f.includes('napi-v6/win32/arm64'))).toBe(true);
+    expect(pkg.build.mac.files).toContain('!native-bin/win/**'); // o app do Mac não leva os .exe
+  });
+  test('o build:app não usa cp (não existe no cmd.exe); dist:win prepara helpers e whisper antes', () => {
+    expect(pkg.scripts['build:app']).not.toMatch(/cp/);
+    expect(readFileSync('scripts/copy-app-files.mjs', 'utf8')).toContain('icon.ico');
+    expect(pkg.scripts['dist:win']).toMatch(/stage-native-win\.ps1.*fetch-whisper-win\.ps1.*build:app.*electron-builder --win --x64/);
+    expect(pkg.scripts.dist).toBe('scripts/build-native.sh && scripts/stage-native.sh && npm run build:app && electron-builder --mac --arm64'); // o do Mac não mudou
+  });
+  test('whisper-server: release oficial do ggml-org com SHA-256 fixado, conferido antes de extrair', () => {
+    const ps = readFileSync('scripts/fetch-whisper-win.ps1', 'utf8');
+    expect(ps).toContain('https://github.com/ggml-org/whisper.cpp/releases/download/');
+    expect(ps).toMatch(/\$Sha256 = '[0-9a-f]{64}'/);
+    expect(ps.indexOf('Get-FileHash')).toBeLessThan(ps.indexOf('Expand-Archive'));
+    expect(ps).toContain('SHA-256 diferente');
+  });
+  test('install.ps1: confere Windows x64 22H2, Node 22, CMake e C++; -Check não instala; erros em pt e en', () => {
+    const ps = readFileSync('install.ps1', 'utf8');
+    for (const k of ['19045', 'PROCESSOR_ARCHITECTURE', 'nodeMajor -lt 22', 'cmake', 'vswhere', 'param([switch]$Check)', 'dist:win', 'ERRO:', 'ERROR:']) expect(ps, k).toContain(k);
+    expect(ps).not.toMatch(/Start-Process[^\n]*RunAs/);
+    expect(ps.indexOf('if ($Check)')).toBeLessThan(ps.indexOf('npm ci'));
+  });
+});
+
+describe('CI', () => {
+  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
+  test('matriz macos-latest e windows-latest com typecheck, testes e build:app', () => {
+    expect(ci).toContain('macos-latest');
+    expect(ci).toContain('windows-latest');
+    for (const step of ['npm run typecheck', 'npx vitest run', 'npm run build:app']) expect(ci).toContain(step);
+  });
+  test('smoke no Windows com os helpers em modo simulado (binários de build/win) e esperando platform-win', () => {
+    expect(ci).toContain('RICE_AUDIO_BIN');
+    expect(ci).toContain('build/win/rice-audio.exe');
+    expect(ci).toContain('scripts/smoke.mjs --expect-platform win32');
+    const smoke = readFileSync('scripts/smoke.mjs', 'utf8');
+    for (const k of ['RICE_BENCH', '--user-data-dir', '--remote-debugging-port', '--use-mock-keychain', 'RICE_AUDIO_SIMULATE', 'RICE_DETECTOR_FAKE_MIC_STEPS']) expect(smoke, k).toContain(k);
   });
 });

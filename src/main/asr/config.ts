@@ -1,8 +1,10 @@
 import { homedir, availableParallelism } from 'node:os';
 import { join } from 'node:path';
 import { repoRoot } from '../app/paths';
+import { envGet, exeName, isWindows } from '../platform';
 
 export function riceDataDir(): string {
+  if (isWindows()) return join(envGet(process.env, 'APPDATA') ?? join(homedir(), 'AppData', 'Roaming'), 'Rice');
   return join(homedir(), 'Library', 'Application Support', 'Rice');
 }
 
@@ -11,7 +13,9 @@ export function modelsDir(): string {
 }
 
 export function whisperServerBinary(): string {
-  return process.env.RICE_WHISPER_SERVER ?? '/opt/homebrew/bin/whisper-server';
+  if (process.env.RICE_WHISPER_SERVER) return process.env.RICE_WHISPER_SERVER;
+  // Windows: o instalador leva o whisper-server.exe de whisper.cpp em resources\win (ver scripts/fetch-whisper-win.ps1)
+  return isWindows() ? join(repoRoot(), 'resources', 'win', exeName('whisper-server')) : '/opt/homebrew/bin/whisper-server';
 }
 
 export function sileroModelPath(): string {
