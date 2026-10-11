@@ -1,0 +1,10 @@
+node_modules
+out/
+dist/
+.build/
+*.log
+.DS_Store
+.superpowers/
+.DS_Store
+native/third_party/
+native-bin/

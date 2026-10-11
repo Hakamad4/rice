@@ -1,0 +1,108 @@
+{
+  "name": "rice",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Rice — reuniões transcritas localmente com notas pelo Claude",
+  "scripts": {
+    "test": "TZ=America/Sao_Paulo vitest run",
+    "test:watch": "TZ=America/Sao_Paulo vitest",
+    "typecheck": "tsc --noEmit",
+    "build:native": "scripts/build-native.sh",
+    "build:app": "esbuild src/main/app/main.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --external:onnxruntime-node --external:better-sqlite3 --outfile=out/main.cjs && cp src/main/app/preload.cjs out/preload.cjs && cp src/main/app/nub-preload.cjs out/nub-preload.cjs && cp src/main/app/alert-preload.cjs out/alert-preload.cjs && (cp assets/icon/icon.png assets/icon/trayTemplate.png assets/icon/trayTemplate@2x.png out/ 2>/dev/null || true)",
+    "app": "npm run build:app && electron .",
+    "dist": "scripts/build-native.sh && scripts/stage-native.sh && npm run build:app && electron-builder --mac --arm64"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "onnxruntime-node": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "happy-dom": "^20.14.6",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.2",
+    "vitest": "^5.0.3"
+  },
+  "main": "out/main.cjs",
+  "author": "Rice contributors",
+  "homepage": "https://github.com/",
+  "build": {
+    "appId": "com.rice.app",
+    "productName": "Rice",
+    "asar": false,
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "artifactName": "Rice-${version}-${arch}.${ext}",
+    "files": [
+      "package.json",
+      "out/**",
+      "src/renderer/**",
+      "assets/icon/**",
+      "resources/models/**",
+      "native-bin/**",
+      "node_modules/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/x64/**",
+      "!node_modules/better-sqlite3/prebuilds/!(darwin-arm64.node)",
+      "!node_modules/better-sqlite3/{src,deps,build}/**"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icon/Rice.icns",
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "minimumSystemVersion": "14.2",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "O Rice grava o seu microfone para transcrever as reuniões neste Mac. / Rice records your microphone to transcribe meetings on this Mac.",
+        "NSAudioCaptureUsageDescription": "O Rice captura o áudio do sistema para transcrever os outros participantes. / Rice captures system audio to transcribe the other participants.",
+        "NSCalendarsFullAccessUsageDescription": "O Rice lê o Calendário para mostrar suas reuniões e avisar antes de começarem. / Rice reads your Calendar to show your meetings and warn you before they start.",
+        "NSCalendarsUsageDescription": "O Rice lê o Calendário para mostrar suas reuniões. / Rice reads your Calendar to show your meetings.",
+        "NSRemindersFullAccessUsageDescription": "O Rice lê os Lembretes para mostrar o que vence hoje. / Rice reads your Reminders to show what is due today.",
+        "NSRemindersUsageDescription": "O Rice lê os Lembretes para mostrar o que vence hoje. / Rice reads your Reminders to show what is due today.",
+        "LSUIElement": false
+      }
+    },
+    "dmg": {
+      "title": "Rice ${version}",
+      "contents": [
+        {
+          "x": 140,
+          "y": 180
+        },
+        {
+          "x": 400,
+          "y": 180,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
+  }
+}

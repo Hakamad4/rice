@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Rice</title>
+<style>
+  * { box-sizing:border-box; }
+  html, body { margin:0; width:100%; height:100%; background:transparent; overflow:hidden; user-select:none; -webkit-user-select:none; }
+  /* a janelinha é sempre escura: barra de rolagem fina e discreta, igual à da janela principal */
+  :root { color-scheme:dark; }
+  ::-webkit-scrollbar { width:10px; } ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border-radius:6px; border:2px solid transparent; background-clip:padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color:rgba(255,255,255,.18); }
+  /* Medidas espelham as constantes NUB_* de src/main/app/nub.ts (um teste confere). */
+  :root { --pad:10px; --col:22px; --btn-w:104px; --btn-h:30px; --btn-gap:8px; --divider:1px;
+    --pill-w:calc(var(--col) + 2 * var(--pad)); --pill-h:calc(2 * var(--btn-h) + var(--btn-gap) + 2 * var(--pad));
+    --bar-w:calc(var(--pad) + var(--btn-w) + var(--pad) + var(--divider) + var(--pill-w)); }
+  /* A janela é sempre larga e transparente; só a pílula cresce no hover. Fora da pílula o main ignora cliques. */
+  .stage { width:100%; height:100%; display:flex; justify-content:flex-end; align-items:flex-start; }
+  body.side-left .stage { justify-content:flex-start; }
+  .pill { position:relative; flex:none; width:var(--pill-w); height:var(--pill-h); border-radius:21px; overflow:hidden; display:flex; justify-content:flex-end; background:rgba(28,28,28,.78); backdrop-filter:blur(18px) saturate(1.4); -webkit-backdrop-filter:blur(18px) saturate(1.4); transition:width 150ms ease, border-radius 150ms ease; }
+  .pill::after { content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:inset 0 0 0 1px rgba(255,255,255,.1); pointer-events:none; }
+  body.hover .pill { width:var(--bar-w); border-radius:20px; }
+  body.side-left .pill { flex-direction:row-reverse; }
+  /* coluna do logo + barras: mesma posição de tela em repouso e expandida */
+  .core { flex:none; width:var(--pill-w); height:100%; padding:var(--pad); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; -webkit-app-region:drag; }
+  .logo { width:20px; height:20px; color:rgba(255,255,255,.85); flex:none; }
+  .hit { -webkit-app-region:no-drag; flex:none; width:var(--col); height:20px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .btns { flex:none; width:calc(var(--pad) + var(--btn-w)); height:100%; padding:var(--pad) 0 var(--pad) var(--pad); display:flex; flex-direction:column; gap:var(--btn-gap); opacity:0; pointer-events:none; transition:opacity 120ms ease 40ms; -webkit-app-region:no-drag; cursor:pointer; }
+  body.side-left .btns { padding:var(--pad) var(--pad) var(--pad) 0; }
+  body.hover .btns, body.hover .divider { opacity:1; pointer-events:auto; }
+  .divider { flex:none; width:var(--divider); margin:var(--pad) 0 var(--pad) var(--pad); background:rgba(255,255,255,.1); opacity:0; transition:opacity 120ms ease 40ms; }
+  body.side-left .divider { margin:var(--pad) var(--pad) var(--pad) 0; }
+  .act { width:var(--btn-w); height:var(--btn-h); padding:0 12px; border:0; border-radius:9px; background:rgba(255,255,255,.08); color:rgba(255,255,255,.92); display:flex; align-items:center; justify-content:flex-start; gap:8px; font:500 12px/1 -apple-system, "SF Pro Text", system-ui, sans-serif; white-space:nowrap; cursor:pointer; -webkit-app-region:no-drag; }
+  .act:hover { background:rgba(255,255,255,.14); } .act:active { background:rgba(255,255,255,.18); }
+  .act svg, .act .ico { width:14px; height:14px; flex:none; }
+  .act .ico { display:flex; align-items:center; justify-content:center; }
+  .act .sq { width:9px; height:9px; border-radius:2.5px; background:rgba(255,105,97,.92); }
+  .bars { display:flex; align-items:center; justify-content:center; gap:3px; height:16px; }
+  .bar { width:3px; height:3px; border-radius:1.5px; background:#34c759; transition:height 90ms linear; }
+  /* painel de chat expandido */
+  .panel { display:none; width:100%; height:100%; flex-direction:column; border-radius:14px; background:rgba(28,28,28,.86); backdrop-filter:blur(18px) saturate(1.4); -webkit-backdrop-filter:blur(18px) saturate(1.4); border:1px solid rgba(255,255,255,.1); font:13px/1.45 -apple-system, "SF Pro Text", system-ui, sans-serif; color:rgba(255,255,255,.88); overflow:hidden; }
+  body.open .panel { display:flex; } body.open .stage { display:none; }
+  .panel-head { display:flex; align-items:center; gap:8px; padding:10px 12px; -webkit-app-region:drag; }
+  .panel-title { flex:1; min-width:0; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .panel-close { -webkit-app-region:no-drag; width:22px; height:22px; border:0; border-radius:6px; background:transparent; color:rgba(255,255,255,.6); font-size:16px; line-height:20px; padding:0; cursor:pointer; }
+  .panel-close:hover { background:rgba(255,255,255,.12); color:#fff; }
+  .lines { flex:1; min-height:0; overflow:auto; padding:0 12px 8px; user-select:text; -webkit-user-select:text; }
+  .line { margin:0 0 6px; font-size:12px; } .line b { font-weight:600; margin-right:6px; } .line.other b { color:rgba(255,255,255,.55); font-weight:500; } .line.partial { color:rgba(255,255,255,.45); }
+  .convo { max-height:42%; overflow:auto; padding:8px 12px; border-top:1px solid rgba(255,255,255,.08); user-select:text; -webkit-user-select:text; }
+  .convo:empty { display:none; }
+  .thinking { display:inline-flex; align-items:center; gap:8px; color:rgba(255,255,255,.6); font-size:13px; } .thinking .dots { display:inline-flex; gap:3px; } .thinking .dots i { width:5px; height:5px; border-radius:50%; background:currentColor; animation:thinking-dot 1.2s ease-in-out infinite; } .thinking .dots i:nth-child(2) { animation-delay:.18s; } .thinking .dots i:nth-child(3) { animation-delay:.36s; }
+  @keyframes thinking-dot { 0%, 80%, 100% { opacity:.25; } 40% { opacity:1; } }
+  @media (prefers-reduced-motion: reduce) { .thinking .dots i { animation:none; opacity:.6; } }
+  .q { color:rgba(255,255,255,.6); margin:0 0 4px; } .a { margin:0 0 10px; white-space:pre-wrap; }
+  .ask { padding:8px 12px 12px; }
+  .ask input { appearance:none; -webkit-appearance:none; width:100%; font:inherit; font-size:13px; line-height:1.4; padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.06); color:inherit; outline:none; }
+  .ask input::placeholder { color:rgba(255,255,255,.45); } .ask input:focus { border-color:#86a0f0; box-shadow:0 0 0 3px rgba(134,160,240,.3); }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="pill" id="pill">
+      <div class="btns" id="btns" data-i18n-title="nub.open" title="Abrir o Rice">
+        <button class="act" id="chat" data-i18n-title="nub.ask.title" data-i18n-aria="nub.ask.title" title="Perguntar sobre a reunião" aria-label="Perguntar sobre a reunião">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
+          <span data-i18n="nub.ask">Perguntar</span>
+        </button>
+        <button class="act" id="stop" data-i18n-title="nub.stop.title" data-i18n-aria="nub.stop.title" title="Parar a gravação" aria-label="Parar a gravação"><span class="ico"><span class="sq"></span></span><span data-i18n="nub.stop">Parar</span></button>
+      </div>
+      <div class="divider" aria-hidden="true"></div>
+      <div class="core">
+        <svg class="logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M267 462 C274 405 312 366 357 365 C371 326 408 299 451 315 C470 283 499 263 528 263 C558 263 587 283 606 315 C649 299 686 326 700 365 C745 366 783 405 790 462 Z" transform="translate(2 3.3) scale(.03273) translate(-223 -263)"/>
+          <path d="M223 490 H834 A305.5 305.5 0 0 1 223 490 Z" transform="translate(2 3.3) scale(.03273) translate(-223 -263)"/>
+        </svg>
+        <div class="hit" id="hit" data-i18n-title="nub.open" title="Abrir o Rice"><span class="bars" id="bars"></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel" id="panel" role="dialog" data-i18n-aria="nub.placeholder" aria-label="Pergunte sobre a reunião…">
+    <div class="panel-head"><span class="panel-title" id="panel-title" data-i18n="meeting.default-title">Reunião</span><button class="panel-close" id="close" data-i18n-title="nub.collapse" data-i18n-aria="nub.collapse" title="Recolher" aria-label="Recolher">×</button></div>
+    <div class="lines" id="lines"></div>
+    <div class="convo" id="convo"></div>
+    <form class="ask" id="ask"><input id="question" data-i18n-placeholder="nub.placeholder" data-i18n-aria="nub.placeholder" placeholder="Pergunte sobre a reunião…" autocomplete="off" aria-label="Pergunte sobre a reunião…"></form>
+  </div>
+  <script src="i18n.js"></script>
+  <script src="locales/pt-BR.js"></script>
+  <script src="locales/en.js"></script>
+  <script src="nub.js"></script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:net';
+import { buildChildEnv } from '../ai/env';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { defaultThreads } from './config';
+
+export interface Transcriber {
+  /** `language`: `pt`, `en` ou `auto` — vale só para esta chamada (o whisper-server aceita o campo por requisição). */
+  transcribe(wav: Buffer, opts?: { prompt?: string; language?: string }): Promise<string>;
+  restart(): Promise<void>;
+}
+
+export type WhisperServerOptions = {
+  binary: string;
+  modelPath: string;
+  language?: string;
+  threads?: number;
+  startupTimeoutMs?: number;
+  env?: NodeJS.ProcessEnv;
+};
+
+export function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      if (address === null || typeof address === 'string') {
+        server.close();
+        reject(new Error('não foi possível reservar uma porta'));
+        return;
+      }
+      server.close(() => resolve(address.port));
+    });
+  });
+}
+
+/**
+ * O whisper-server é um binário de terceiros que ignora stdin, então não percebe a morte do pai.
+ * Este wrapper (`sh`) vigia o PID do Rice e derruba o servidor se o Rice sumir (crash, SIGKILL);
+ * com SIGTERM/SIGINT/SIGHUP no wrapper, derruba o servidor e sai.
+ * Argumentos: `sh -c WATCHDOG_SCRIPT sh <binário> <args...>`.
+ */
+export const WATCHDOG_SCRIPT = `P=$PPID
+"$@" &
+C=$!
+trap 'kill $C 2>/dev/null; wait $C 2>/dev/null; exit 143' TERM INT HUP
+while kill -0 $P 2>/dev/null; do
+  kill -0 $C 2>/dev/null || { wait $C; exit $?; }
+  sleep 1 & wait $!
+done
+kill $C 2>/dev/null
+wait $C 2>/dev/null
+exit 0`;
+
+export class WhisperServer implements Transcriber {
+  private child: ChildProcess | null = null;
+  private port = 0;
+  private log = '';
+  private disposed = false;
+
+  constructor(private readonly options: WhisperServerOptions) {}
+
+  get running(): boolean {
+    return this.child !== null && this.child.exitCode === null && this.child.signalCode === null;
+  }
+
+  async start(): Promise<void> {
+    if (this.disposed) throw new Error('whisper-server descartado');
+    if (this.running) return;
+    this.port = await freePort();
+    this.log = '';
+    const args = [
+      '-m', this.options.modelPath,
+      '--host', '127.0.0.1',
+      '--port', String(this.port),
+      '-l', this.options.language ?? 'pt',
+      '-t', String(this.options.threads ?? defaultThreads()),
+    ];
+    // grupo próprio: o SIGKILL de último recurso derruba wrapper e servidor juntos
+    const child = spawn('/bin/sh', ['-c', WATCHDOG_SCRIPT, 'sh', this.options.binary, ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: buildChildEnv(this.options.env ?? process.env), // binário de terceiros: sem as credenciais do shell do usuário
+      detached: true,
+    });
+    this.child = child;
+    const append = (d: Buffer) => {
+      this.log = (this.log + d.toString('utf8')).slice(-4000);
+    };
+    child.stdout?.on('data', append);
+    child.stderr?.on('data', append);
+    let spawnError: Error | null = null;
+    child.once('error', (err) => (spawnError = err));
+
+    const deadline = Date.now() + (this.options.startupTimeoutMs ?? 180_000);
+    while (Date.now() < deadline) {
+      if (spawnError || child.exitCode !== null || child.signalCode !== null) {
+        this.child = null;
+        const reason = spawnError ? (spawnError as Error).message : `código ${child.exitCode ?? child.signalCode}`;
+        throw new Error(`whisper-server saiu (${reason}): ${this.log.trim()}`);
+      }
+      if (await this.healthy()) return;
+      await sleep(250);
+    }
+    await this.stop();
+    throw new Error(`whisper-server não ficou pronto a tempo: ${this.log.trim()}`);
+  }
+
+  private async healthy(): Promise<boolean> {
+    try {
+      const health = await fetch(`http://127.0.0.1:${this.port}/health`, { signal: AbortSignal.timeout(1000) });
+      if (health.status === 200) return true;
+      if (health.status !== 404) return false;
+      const root = await fetch(`http://127.0.0.1:${this.port}/`, { signal: AbortSignal.timeout(1000) });
+      return root.status === 200;
+    } catch {
+      return false;
+    }
+  }
+
+  async transcribe(wav: Buffer, opts?: { prompt?: string; language?: string }): Promise<string> {
+    if (!this.running) throw new Error('whisper-server não iniciado');
+    const form = new FormData();
+    form.append('file', new Blob([new Uint8Array(wav)], { type: 'audio/wav' }), 'chunk.wav');
+    form.append('response_format', 'json');
+    form.append('temperature', '0.0');
+    if (opts?.prompt) form.append('prompt', opts.prompt);
+    if (opts?.language && /^(pt|en|auto)$/.test(opts.language)) form.append('language', opts.language);
+    const response = await fetch(`http://127.0.0.1:${this.port}/inference`, {
+      method: 'POST',
+      body: form,
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!response.ok) throw new Error(`whisper-server inferência falhou: HTTP ${response.status}`);
+    const body = (await response.json()) as { text?: unknown };
+    if (typeof body.text !== 'string') throw new Error(`whisper-server resposta inválida: ${JSON.stringify(body).slice(0, 200)}`);
+    return body.text;
+  }
+
+  async restart(): Promise<void> {
+    await this.stop();
+    await this.start();
+  }
+
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    await this.stop();
+  }
+
+  async stop(): Promise<void> {
+    const child = this.child;
+    this.child = null;
+    if (!child || child.exitCode !== null || child.signalCode !== null) return;
+    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    child.kill('SIGTERM');
+    const timedOut = await Promise.race([exited.then(() => false), sleep(3000).then(() => true)]);
+    if (timedOut) {
+      try {
+        process.kill(-child.pid!, 'SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+      await exited;
+    }
+  }
+}

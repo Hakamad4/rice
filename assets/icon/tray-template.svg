@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="635" height="635" viewBox="211 212 635 635">
+  <title>Rice (barra de menus)</title>
+  <desc>Logo do Rice só em preto, fundo transparente: imagem "template" do macOS (ele pinta de claro ou escuro conforme a barra de menus).</desc>
+  <g fill="#000000">
+    <path d="M267 462 C274 405 312 366 357 365 C371 326 408 299 451 315 C470 283 499 263 528 263 C558 263 587 283 606 315 C649 299 686 326 700 365 C745 366 783 405 790 462 Z"/>
+    <path d="M223 490 H834 A305.5 305.5 0 0 1 223 490 Z"/>
+  </g>
+</svg>

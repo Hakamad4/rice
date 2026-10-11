@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Rice</title>
+<style>
+  * { box-sizing:border-box; }
+  html, body { margin:0; width:100%; height:100%; background:transparent; overflow:hidden; user-select:none; -webkit-user-select:none; }
+  body { padding:8px 10px 12px; font:13px/1.35 -apple-system, "SF Pro Text", system-ui, sans-serif; color:rgba(0,0,0,.86); }
+  @media (prefers-color-scheme: dark) { body { color:rgba(255,255,255,.9); } }
+  .card { position:relative; height:100%; border-radius:12px; padding:12px 34px 10px 18px; background:rgba(252,252,251,.96); border:1px solid rgba(0,0,0,.08); box-shadow:0 6px 24px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.1); cursor:pointer; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; }
+  @media (prefers-color-scheme: dark) { .card { background:rgba(36,36,36,.96); border-color:rgba(255,255,255,.1); } }
+  .bar { position:absolute; left:0; top:0; bottom:0; width:5px; background:#8a8a85; }
+  .title { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .time { color:rgba(128,128,128,1); font-size:12px; font-variant-numeric:tabular-nums; }
+  .actions { display:flex; gap:6px; }
+  button { font:inherit; font-size:12px; border:0; border-radius:7px; padding:4px 10px; cursor:pointer; background:rgba(128,128,128,.16); color:inherit; }
+  button.primary { background:#191919; color:#fff; } @media (prefers-color-scheme: dark) { button.primary { background:#f2f2f0; color:#191919; } }
+  .x { position:absolute; top:6px; right:6px; width:22px; height:22px; padding:0; background:transparent; color:rgba(128,128,128,1); font-size:15px; line-height:20px; }
+  .x:hover { background:rgba(128,128,128,.2); }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="bar" id="bar"></div>
+    <div><div class="title" id="title"></div><div class="time" id="time"></div></div>
+    <div class="actions"><button class="primary" id="join"></button><button id="record" data-i18n="alert.only-record">Só gravar</button></div>
+    <button class="x" id="close" data-i18n-title="alert.close" data-i18n-aria="alert.close" title="Fechar" aria-label="Fechar">×</button>
+  </div>
+  <script src="i18n.js"></script>
+  <script src="locales/pt-BR.js"></script>
+  <script src="locales/en.js"></script>
+  <script src="alert.js"></script>
+</body>
+</html>
