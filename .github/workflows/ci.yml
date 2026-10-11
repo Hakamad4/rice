@@ -5,7 +5,7 @@ name: ci
 # troque o passo "Helpers" por `uses: ./.github/workflows/windows.yml` e baixe o artefato `rice-helpers-win-x64`.
 on:
   push:
-    branches: [main, feat/integration]
+    branches: [main, feat/integration, windows]
   pull_request:
   workflow_dispatch:
 
