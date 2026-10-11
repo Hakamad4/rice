@@ -60,11 +60,13 @@ O `install.sh` confere macOS/arm64, as Ferramentas de Linha de Comando do Xcode,
 
 Baixe o `Rice-<versão>-arm64.dmg` na página de **Releases**, abra e arraste o **Rice** para **Aplicativos**.
 
-O Rice tem assinatura ad hoc e **não** é assinado nem notarizado pela Apple; por isso o Gatekeeper do macOS avisa na primeira abertura. Para abrir mesmo assim, clique com o botão direito em **Rice** na pasta Aplicativos e escolha **Abrir** (e **Abrir** de novo), ou rode:
+O Rice tem assinatura ad hoc e **não** é assinado nem notarizado pela Apple; por isso, na primeira abertura, o macOS mostra "O item Rice não foi aberto". Para liberar, rode no Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Rice.app
 ```
+
+Ou, sem Terminal: clique em **OK** no aviso, abra **Ajustes do Sistema › Privacidade e Segurança**, role até o fim e clique em **Abrir Mesmo Assim** ao lado de "Rice foi bloqueado". (No macOS 15 ou mais novo, o clique direito > Abrir não libera mais o app.)
 
 Como não é assinado pela Apple, o macOS pode pedir de novo as permissões (microfone, áudio do sistema, Calendário) depois de uma atualização.
 

@@ -60,11 +60,13 @@ cd rice
 
 Download `Rice-<version>-arm64.dmg` from the **Releases** page, open it and drag **Rice** to **Applications**.
 
-Rice is signed ad hoc and is **not** signed or notarized by Apple, so macOS Gatekeeper will warn on the first launch. To open it anyway, either right-click **Rice** in Applications and choose **Open** (then **Open** again), or run:
+Rice is signed ad hoc and is **not** signed or notarized by Apple, so on the first launch macOS shows "Rice Not Opened". To allow it, run in Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Rice.app
 ```
+
+Or, without Terminal: click **OK** on the warning, open **System Settings › Privacy & Security**, scroll to the bottom and click **Open Anyway** next to "Rice was blocked". (On macOS 15 and later, right-click > Open no longer lets the app through.)
 
 Because it is not signed by Apple, macOS may ask for the permissions again (microphone, system audio, Calendar) after you update.
 
