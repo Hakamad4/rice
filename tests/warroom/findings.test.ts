@@ -106,7 +106,7 @@ describe('fixar, descartar, desfazer e pausar (IPC)', () => {
     expect((await open('u')).ok).toBe(true);
     expect(h.calls.external).toEqual(['https://exemplo.com/a']);
     expect((await open('f')).ok).toBe(true);
-    expect(h.calls.reveal[0]).toMatch(/sub\/a\.ts$/);
+    expect(h.calls.reveal[0]).toMatch(/sub[\\/]a\.ts$/);
     for (const id of ['h', 'j', 'o', 'l', 'd', 't']) expect((await open(id)).ok, id).toBe(false);
     expect(h.calls.external).toHaveLength(1);
     expect(h.calls.reveal).toHaveLength(1);

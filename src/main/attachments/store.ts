@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { isAbsolutePath } from '../platform';
 import { restrictMode } from '../platform/fs';
 import { constants } from 'node:fs';
 import { copyFile, lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -149,7 +150,7 @@ function checkRoom(items: Attachment[], size: number): void {
 /** Copia um arquivo escolhido pelo usuário para `anexos/` (links simbólicos e pastas são recusados; nunca sobrescreve). */
 export function addFromPath(meetingDir: string, srcPath: string, options: AddOptions = {}): Promise<Attachment> {
   return serial(meetingDir, async () => {
-    if (typeof srcPath !== 'string' || !srcPath.startsWith('/')) throw new Error(t('attach.err.invalid'));
+    if (typeof srcPath !== 'string' || !isAbsolutePath(srcPath)) throw new Error(t('attach.err.invalid'));
     const st = await lstat(srcPath).catch(() => null);
     if (!st || st.isSymbolicLink() || !st.isFile()) throw new Error(t('attach.err.not-file'));
     const items = await listAttachments(meetingDir);

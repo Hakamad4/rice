@@ -3,6 +3,7 @@ import { appendFile, mkdir, readdir, readFile, rename, rm, stat, writeFile } fro
 import { basename, dirname, join } from 'node:path';
 import { formatClock, meetingFolderName, sanitizeTitle, toLocalIso } from '../../shared/naming';
 import { t, type UiLanguage } from '../i18n';
+import { renameRetry } from '../platform/fs';
 import type { ChatTurn, MeetingMeta, MeetingTrigger, Segment } from '../../shared/types';
 
 export const MEETING_FILES = {
@@ -98,7 +99,7 @@ export async function writeAtomic(path: string, data: string): Promise<void> {
   const tmp = join(dirname(path), `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`);
   try {
     await writeFile(tmp, data);
-    await rename(tmp, path);
+    await renameRetry(tmp, path);
   } catch (err) {
     await rm(tmp, { force: true });
     throw err;

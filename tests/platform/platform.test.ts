@@ -94,7 +94,7 @@ describe('camada de plataforma', () => {
     expect(mac).toMatchObject({ command: '/bin/sh', detached: true });
   });
 
-  test('Windows: 0700/0600 viram no-op (o arquivo fica como estava); no Mac continua apertando', async () => {
+  test.skipIf(process.platform === 'win32')('Windows: 0700/0600 viram no-op (o arquivo fica como estava); no Mac continua apertando', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'rice-plat-'));
     const file = join(dir, 'a.txt');
     writeFileSync(file, 'x', { mode: 0o644 });
@@ -130,7 +130,7 @@ describe('Windows: pasta de trabalho do War room', () => {
 describe('Windows: "Continuar no terminal"', () => {
   test('detecta os CLIs do Windows e esconde o agy', async () => {
     const exists = (p: string) => ['C:\\Users\\Ana\\.local\\bin\\claude.exe', 'C:\\Users\\Ana\\AppData\\Roaming\\npm\\codex.cmd', 'C:\\Users\\Ana\\.local\\bin\\agy.exe'].includes(p);
-    const found = await asPlatform('win32', () => detectHarnesses(exists, 'C:\\Users\\Ana'));
+    const found = await asPlatform('win32', () => detectHarnesses(exists, 'C:\\Users\\Ana', env));
     expect(found.map((h) => h.id)).toEqual(['claude', 'codex']);
   });
   test('script .cmd: UTF-8, cd /d, aspas em tudo e % dobrado; texto perigoso é recusado', () => {

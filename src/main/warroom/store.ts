@@ -1,3 +1,5 @@
+import { isAbsolutePath } from '../platform';
+import { renameRetry } from '../platform/fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -51,7 +53,7 @@ export function normalizeConfig(raw: unknown): WarRoomConfig {
     kind: r.kind === 'warroom' ? 'warroom' : 'meeting',
     ideas: { on: ideas.on === true, intervalMin: ideasMin, ...(typeof ideas.templateId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(ideas.templateId) ? { templateId: ideas.templateId } : {}) },
     investigation: { intervalMin: valid(invRaw) ? invRaw : ideasMin, paused: obj(r.investigation).paused === true }, // migração: sem o campo, herda o intervalo das ideias
-    sources: { web: sources.web === true, mcp: sources.mcp === true, folder: typeof sources.folder === 'string' && sources.folder.startsWith('/') ? sources.folder : null },
+    sources: { web: sources.web === true, mcp: sources.mcp === true, folder: typeof sources.folder === 'string' && isAbsolutePath(sources.folder) ? sources.folder : null },
     ideasCycles: count(r.ideasCycles),
     // migração: o contador único antigo (`cycles`) era da investigação
     investigationCycles: r.investigationCycles === undefined ? count(r.cycles) : count(r.investigationCycles),
@@ -67,7 +69,7 @@ async function atomicWrite(path: string, text: string): Promise<void> {
   await mkdir(join(path, '..'), { recursive: true });
   const tmp = `${path}.tmp`;
   await writeFile(tmp, text, { mode: 0o600 });
-  await rename(tmp, path);
+  await renameRetry(tmp, path);
 }
 
 export async function readConfig(dir: string): Promise<WarRoomConfig> {

@@ -1,8 +1,9 @@
+import { join, resolve } from 'node:path';
 import { expect, test, vi } from 'vitest';
 import { canDeleteMeeting, deleteMeetingDir } from '../../src/main/app/delete-meeting';
 
-const root = '/Users/x/Rice';
-const dir = `${root}/2026-10-09 0921 - Daily`;
+const root = resolve('/Users/x/Rice'); // no Windows ganha a unidade (D:\Users\x\Rice)
+const dir = join(root, '2026-10-09 0921 - Daily');
 
 test('move a pasta para a Lixeira (trashItem), nunca apaga direto', async () => {
   const trash = vi.fn(async () => {});
@@ -18,7 +19,7 @@ test('recusa a reunião que está gravando agora', async () => {
 
 test('outra reunião pode ser apagada durante uma gravação', async () => {
   const trash = vi.fn(async () => {});
-  await deleteMeetingDir({ dir, root, sessionState: 'recording', currentDir: `${root}/outra`, trash });
+  await deleteMeetingDir({ dir, root, sessionState: 'recording', currentDir: join(root, 'outra'), trash });
   expect(trash).toHaveBeenCalledOnce();
 });
 
@@ -34,7 +35,7 @@ test('canDeleteMeeting: idle libera; ativa recusa a própria e tudo se a pasta a
   expect(canDeleteMeeting({ sessionState: 'finishing', currentDir: null, dir })).toBe(false);
   expect(canDeleteMeeting({ sessionState: 'recording', currentDir: dir, dir })).toBe(false);
   expect(canDeleteMeeting({ sessionState: 'finishing', currentDir: `${dir}/`, dir })).toBe(false);
-  expect(canDeleteMeeting({ sessionState: 'recording', currentDir: `${root}/outra`, dir })).toBe(true);
+  expect(canDeleteMeeting({ sessionState: 'recording', currentDir: join(root, 'outra'), dir })).toBe(true);
 });
 
 test('deleteMeetingDir recusa no início da gravação (currentDir nulo)', async () => {

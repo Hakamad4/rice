@@ -38,7 +38,7 @@ describe('cópia, nomes e limites', () => {
     const a = await addFromPath(dir, await src('nota.txt', 'primeiro'), { atMs: 5000 });
     const b = await addFromPath(dir, await src('nota.txt', 'segundo'));
     expect([a.file, b.file]).toEqual(['nota.txt', 'nota (2).txt']);
-    expect((await stat(join(dir, 'anexos', 'nota.txt'))).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect((await stat(join(dir, 'anexos', 'nota.txt'))).mode & 0o777).toBe(0o600);
     expect(await readFile(join(dir, 'anexos', 'nota.txt'), 'utf8')).toBe('primeiro');
     const items = await listAttachments(dir);
     expect(items.map((i) => i.file)).toEqual(['nota.txt', 'nota (2).txt']);

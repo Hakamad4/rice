@@ -24,11 +24,11 @@ export function harnessArgs(id: HarnessId, prompt: string): string[] {
 }
 
 /** Só os CLIs encontrados neste computador (caminho absoluto existente). */
-export function detectHarnesses(exists: (path: string) => boolean = existsSync, home: string = homedir()): Harness[] {
+export function detectHarnesses(exists: (path: string) => boolean = existsSync, home: string = homedir(), env: NodeJS.ProcessEnv = process.env): Harness[] {
   const found: Harness[] = [];
   for (const id of Object.keys(LABEL) as HarnessId[]) {
     if (id === 'agy' && !agySupported()) continue; // o agy só roda no sandbox-exec do macOS
-    const bin = findCli(NAME[id], [], { home, exists });
+    const bin = findCli(NAME[id], [], { home, exists, env });
     if (bin) found.push({ id, label: LABEL[id], bin });
   }
   return found;

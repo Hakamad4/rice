@@ -96,7 +96,10 @@ async function setup(keepAudioOrOpts: boolean | SetupOpts = true) {
   return { session, captures, pipeline, generateNotes, root };
 }
 
-test('grava, transcreve em arquivo e para gerando áudio e notas', async () => {
+// o encode real usa o afconvert (só macOS): no Windows o áudio fica em audio.wav
+const macAudio = test.skipIf(process.platform !== 'darwin');
+
+macAudio('grava, transcreve em arquivo e para gerando áudio e notas', async () => {
   const { session, captures, pipeline, generateNotes } = await setup();
   const states: string[] = [];
   session.on('state', (s: string) => states.push(s));
@@ -234,7 +237,7 @@ test('pipeline tardio: frames ficam em buffer e entram em ordem', async () => {
   expect((await readMeta(dir)).state).toBe('done');
 });
 
-test('createPipeline rejeita: continua gravando, avisa failed e marca incompleta', async () => {
+macAudio('createPipeline rejeita: continua gravando, avisa failed e marca incompleta', async () => {
   const { session, captures } = await setup({ createPipeline: async () => { throw new Error('sem modelo'); } });
   const statuses: unknown[] = [];
   session.on('asr-status', (s) => statuses.push(s));
@@ -280,7 +283,7 @@ test('stop durante a espera do pipeline funciona', async () => {
   expect((await readMeta(dir)).state).toBe('done');
 });
 
-test('pipeline.finish lança: meta done, idle e m4a gerado', async () => {
+macAudio('pipeline.finish lança: meta done, idle e m4a gerado', async () => {
   const { session, captures, pipeline } = await setup();
   pipeline.finishError = new Error('boom');
   const warnings: unknown[] = [];
@@ -445,7 +448,7 @@ test('retomada sem segmentos não gera marcador nem regera notas', async () => {
   expect(generateNotes).not.toHaveBeenCalled();
 });
 
-test('rename do áudio junto falha: a parte nova não é apagada, vira audio-2.m4a e há aviso', async () => {
+macAudio('rename do áudio junto falha: a parte nova não é apagada, vira audio-2.m4a e há aviso', async () => {
   const { mkdir } = await import('node:fs/promises');
   const { session, root, captures } = await setup({ encode: fakeEncode, concat: async (_a, _b, out) => { await mkdir(out); } }); // rename de pasta sobre arquivo falha
   const dir = await finished(root, 'done');
@@ -664,7 +667,7 @@ test('pasta indisponível até o fim: a transcrição fica na cópia local e o a
   await vi.waitFor(() => expect(session.alerts.has('storage:transcript')).toBe(true));
   await session.stop();
   const alert = session.alerts.list().find((a) => a.id === 'storage:transcript')!;
-  expect(alert.message).toContain('/spool/');
+  expect(alert.message).toMatch(/[\\/]spool[\\/]/);
   expect(alert.dismissible).toBe(true);
 });
 

@@ -20,14 +20,13 @@ export function repoRoot(): string {
  * Binário nativo. Mac: o compilado no repositório (`native/<nome>/.build/release`) ou, no app empacotado, o de `native-bin/`.
  * Windows: o do build CMake (`native/win/build/Release`) ou, empacotado, `native-bin/win/<nome>.exe`.
  */
-function nativeBinary(name: string): string {
-  const root = repoRoot();
+export function nativeBinary(name: string, exists: (path: string) => boolean = existsSync, root: string = repoRoot()): string {
   if (isWindows()) {
-    const dev = [join(root, 'native', 'win', 'build', 'Release', exeName(name)), join(root, 'native', 'win', 'build', exeName(name))].find((p) => existsSync(p));
+    const dev = [join(root, 'native', 'win', 'build', 'Release', exeName(name)), join(root, 'native', 'win', 'build', exeName(name))].find((p) => exists(p));
     return dev ?? join(root, 'native-bin', 'win', exeName(name));
   }
   const built = join(root, 'native', name, '.build', 'release', name);
-  return existsSync(built) ? built : join(root, 'native-bin', name);
+  return exists(built) ? built : join(root, 'native-bin', name);
 }
 
 export function riceAudioBinary(): string {
@@ -39,8 +38,8 @@ export function riceDetectorBinary(): string {
 }
 
 /** Claude Code: `claude.exe` (instalador nativo) ou `claude.cmd` (npm) no Windows; `claude` no PATH se não achar. */
-export function claudeBinary(): string {
-  return findCli('claude') ?? 'claude';
+export function claudeBinary(exists?: (path: string) => boolean): string {
+  return findCli('claude', [], exists ? { exists } : {}) ?? 'claude';
 }
 
 /** CLI `name` nos lugares comuns e no PATH; o próprio nome se não achar (o spawn falha com ENOENT e a UI explica). */

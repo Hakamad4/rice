@@ -41,7 +41,7 @@ test('salva criptografado em secrets/<provedor>.bin (0600), carrega e limpa', as
   await saveSecret(dir, 'claude-api', ANT_API, fake);
   const file = join(dir, 'secrets', 'claude-api.bin');
   expect((await readFile(file)).toString()).not.toContain(ANT_API);
-  expect((await stat(file)).mode & 0o777).toBe(0o600);
+  if (process.platform !== 'win32') expect((await stat(file)).mode & 0o777).toBe(0o600); // no Windows valem as ACLs do perfil
   expect(await loadSecret(dir, 'claude-api', fake)).toBe(ANT_API);
   expect(await loadSecret(dir, 'openai-api', fake)).toBeNull(); // cada provedor tem o seu arquivo
   await clearSecret(dir, 'claude-api');

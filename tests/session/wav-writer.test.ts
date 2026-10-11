@@ -68,7 +68,10 @@ test('reunião longa só com mic grava em blocos sem acumular tudo', async () =>
   expect(new Set(R)).toEqual(new Set([0]));
 });
 
-test('encodeM4a gera AAC', async () => {
+// afconvert (AAC) só existe no macOS: no Windows o áudio fica em WAV
+const macOnly = test.skipIf(process.platform !== 'darwin');
+
+macOnly('encodeM4a gera AAC', async () => {
   const dir = await makeTmpDir();
   const w = await StereoWavWriter.open(join(dir, 'd.wav'));
   for (let i = 0; i < 20; i++) {
@@ -299,7 +302,7 @@ test('o cabeçalho é regravado a cada ~10 s: arquivo sem fechamento continua le
   expect(buf.readUInt32LE(4)).toBe(36 + declared);
 });
 
-test('concatM4a junta dois m4a num arquivo mais longo', async () => {
+macOnly('concatM4a junta dois m4a num arquivo mais longo', async () => {
   const dir = await makeTmpDir();
   for (const name of ['a', 'b']) {
     const w = await StereoWavWriter.open(join(dir, `${name}.wav`));

@@ -9,9 +9,8 @@
 
   /** Windows? No renderer vem do preload (`rice.platform`, que os testes e os prints podem trocar); no main, de `process.platform`. */
   function isWindows() {
-    const rice = typeof window === 'object' && window ? window.rice : globalThis.rice;
-    if (rice && typeof rice === 'object' && rice.platform) return rice.platform === 'win32';
-    return typeof process === 'object' && process !== null && process.platform === 'win32';
+    if (typeof window === 'object' && window) return Boolean(window.rice) && window.rice.platform === 'win32'; // renderer: só o que o preload informa
+    return typeof process === 'object' && process !== null && process.platform === 'win32'; // main (Node)
   }
 
   /** Registra (ou estende) o dicionário de um idioma. Os arquivos de `locales/` chamam isto. */

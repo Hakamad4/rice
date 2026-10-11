@@ -51,7 +51,7 @@ export function cliDirs({ home = homedir(), env = process.env }: DirEnv = {}): s
       win32.join(local, 'Microsoft', 'WinGet', 'Links'),
     ];
   }
-  return [join(home, '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', join(home, '.npm-global', 'bin'), join(home, '.opencode', 'bin'), join(home, '.claude', 'local')];
+  return [posix.join(home, '.local', 'bin'), '/opt/homebrew/bin', '/usr/local/bin', posix.join(home, '.npm-global', 'bin'), posix.join(home, '.opencode', 'bin'), posix.join(home, '.claude', 'local')];
 }
 
 /** Extensões que um CLI pode ter: nenhuma no Mac; `.exe` (instalador nativo) ou `.cmd` (shim do npm) no Windows. */
@@ -72,7 +72,7 @@ export function findCli(name: string, extra: string[] = [], opts: DirEnv & { exi
   const exists = opts.exists ?? existsSync;
   const env = opts.env ?? process.env;
   const dirs = [...extra, ...cliDirs(opts), ...(isWindows() ? pathDirs(env) : [])]; // no Mac o app aberto pelo Finder tem PATH mínimo: só os lugares comuns
-  const sep = isWindows() ? win32 : { join };
+  const sep = isWindows() ? win32 : posix;
   for (const dir of dirs) for (const ext of cliExtensions()) {
     const candidate = sep.join(dir, name + ext);
     if (exists(candidate)) return candidate;
@@ -82,6 +82,9 @@ export function findCli(name: string, extra: string[] = [], opts: DirEnv & { exi
 
 /** `.cmd`/`.bat` (shims do npm) não rodam direto: precisam de cmd.exe ou do `.js` do pacote (ver spawn.ts). */
 export const isCmdScript = (binary: string): boolean => isWindows() && /\.(cmd|bat)$/i.test(binary);
+
+/** Caminho absoluto na convenção da plataforma (`/x` no Mac, `C:\x` no Windows). */
+export const isAbsolutePath = (path: string): boolean => (isWindows() ? win32 : posix).isAbsolute(path);
 
 /** A pasta pessoal para os testes e para a lista de pastas bloqueadas. */
 export function userHome(): string {
