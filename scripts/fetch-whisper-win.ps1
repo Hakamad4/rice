@@ -12,10 +12,15 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) "rice-whisper-$([guid]::NewGuid().To
 New-Item -ItemType Directory -Force $tmp | Out-Null
 try {
   $zip = Join-Path $tmp $Asset
-  Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/ggml-org/whisper.cpp/releases/download/$Version/$Asset" -OutFile $zip
-  $got = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLowerInvariant()
+  # .NET direto (sem cmdlets de módulos): funciona também quando o PSModulePath vem de outro PowerShell, como no CI
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  (New-Object System.Net.WebClient).DownloadFile("https://github.com/ggml-org/whisper.cpp/releases/download/$Version/$Asset", $zip)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $stream = [IO.File]::OpenRead($zip)
+  try { $got = ([BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLowerInvariant() } finally { $stream.Dispose() }
   if ($got -ne $Sha256) { throw "SHA-256 diferente do esperado / SHA-256 mismatch: $got" }
-  Expand-Archive -Path $zip -DestinationPath $tmp -Force
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [IO.Compression.ZipFile]::ExtractToDirectory($zip, $tmp)
   if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
   New-Item -ItemType Directory -Force $dest | Out-Null
   # o servidor e as DLLs de que ele depende (whisper, ggml e as variantes de CPU escolhidas em tempo de execução)

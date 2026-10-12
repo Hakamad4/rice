@@ -90,7 +90,7 @@ describe('empacotamento do Windows (nsis x64)', () => {
     const ps = readFileSync('scripts/fetch-whisper-win.ps1', 'utf8');
     expect(ps).toContain('https://github.com/ggml-org/whisper.cpp/releases/download/');
     expect(ps).toMatch(/\$Sha256 = '[0-9a-f]{64}'/);
-    expect(ps.indexOf('Get-FileHash')).toBeLessThan(ps.indexOf('Expand-Archive'));
+    expect(ps.indexOf('SHA256]::Create')).toBeLessThan(ps.indexOf('ExtractToDirectory'));
     expect(ps).toContain('SHA-256 diferente');
   });
   test('install.ps1: confere Windows x64 22H2, Node 22, CMake e C++; -Check não instala; erros em pt e en', () => {
