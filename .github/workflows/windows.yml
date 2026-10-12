@@ -3,9 +3,9 @@ name: windows
 on:
   push:
     branches: [feat/win-native, feat/integration, main, windows]
-    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml']
+    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml', 'scripts/build-webrtc-apm.ps1', 'vitest.config.ts', 'tests/native/**']
   pull_request:
-    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml']
+    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml', 'scripts/build-webrtc-apm.ps1', 'vitest.config.ts', 'tests/native/**']
   workflow_dispatch:
 
 jobs:

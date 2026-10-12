@@ -247,7 +247,13 @@ TEST(recorder_simulado_grava_as_duas_fontes_e_emite_os_eventos) {
   {
     Recorder rec(platform, sink, cap.emitter, opt);
     rec.start();
-    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+    // Espera por conteúdo, não por tempo fixo: runner carregado entrega menos blocos por segundo.
+    for (int i = 0; i < 200; i++) {
+      size_t mic = 0, sys = 0;
+      for (const auto& e : sink.entries()) (e.source == Source::Mic ? mic : sys)++;
+      if (mic >= 10 && sys >= 10) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
     rec.stop();
     rec.stop();  // idempotente
   }
@@ -261,7 +267,7 @@ TEST(recorder_simulado_grava_as_duas_fontes_e_emite_os_eventos) {
   auto frames = decode(toBytes(sink));
   for (Source s : {Source::Mic, Source::Sys}) {
     auto f = ofSource(frames, s);
-    CHECK(f.size() >= 9 && f.size() <= 13);
+    CHECK(f.size() >= 10);
     for (size_t i = 1; i < f.size(); i++) CHECK_EQ(f[i].timestampMs - f[i - 1].timestampMs, static_cast<uint64_t>(100));
   }
 }
