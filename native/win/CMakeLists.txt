@@ -58,7 +58,7 @@ target_link_libraries(rice-audio PRIVATE rice_audio_core)
 add_executable(rice-detector ${DETECTOR_SOURCES})
 target_link_libraries(rice-detector PRIVATE rice_detector_core)
 if(WIN32)
-  target_link_libraries(rice-audio PRIVATE ole32 uuid propsys)
+  target_link_libraries(rice-audio PRIVATE ole32 uuid propsys winmm)  # winmm: timeGetTime do WebRTC
   target_link_libraries(rice-detector PRIVATE advapi32)
 endif()
 
