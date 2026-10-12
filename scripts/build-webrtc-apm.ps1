@@ -22,7 +22,7 @@ try {
   if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLower() -ne $Sha256) { throw 'native/vendor/webrtc-audio-processing-2.1.tar.xz não bate com o SHA-256 esperado' }
   New-Item -ItemType Directory src | Out-Null
   tar -xf $archive -C src --strip-components=1
-  meson setup build src --prefix="$Prefix" --libdir=lib --buildtype=release -Ddefault_library=static --wrap-mode=forcefallback --vsenv
+  meson setup build src --prefix="$Prefix" --libdir=lib --buildtype=release -Ddefault_library=static --wrap-mode=forcefallback -Dcpp_std=c++20 -Dabseil-cpp:cpp_std=c++20 --vsenv
   ninja -C build
   ninja -C build install
   Write-Host "ok: $Prefix"
