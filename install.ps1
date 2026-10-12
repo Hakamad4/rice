@@ -1,4 +1,4 @@
-# Instala o Rice no Windows a partir do código: confere o ambiente, compila os helpers nativos, gera o instalador e o abre.
+﻿# Instala o Rice no Windows a partir do código: confere o ambiente, compila os helpers nativos, gera o instalador e o abre.
 # Installs Rice on Windows from source: checks the environment, builds the native helpers, creates the installer and opens it.
 # Idempotente. / Idempotent.   Uso/Usage:  powershell -ExecutionPolicy Bypass -File install.ps1 [-Check]   (-Check só confere / only checks)
 param([switch]$Check)

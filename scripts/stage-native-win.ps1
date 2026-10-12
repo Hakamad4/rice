@@ -1,4 +1,4 @@
-# Copia os helpers do Windows (rice-audio.exe, rice-detector.exe) para native-bin\win, que o empacotador inclui no app.
+﻿# Copia os helpers do Windows (rice-audio.exe, rice-detector.exe) para native-bin\win, que o empacotador inclui no app.
 # Compile antes: cmake -S native/win -B build/win -G Ninja -DCMAKE_BUILD_TYPE=Release ; cmake --build build/win
 # Copies the Windows helpers to native-bin\win, which the packager includes in the app. Build them first (see above).
 param([string]$BuildDir = 'build\win')
