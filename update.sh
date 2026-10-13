@@ -60,7 +60,7 @@ main() {
   # 5) o que mudou e pull só em fast-forward
   if [ "$BEHIND" != 0 ]; then
     say "o que mudou ($BEHIND commit(s)):" "what changed ($BEHIND commit(s)):"
-    git log --oneline 'HEAD..@{u}' | head -20
+    git log --oneline -n 20 'HEAD..@{u}' # -n em vez de | head: com pipefail o SIGPIPE do head derrubaria o script
     [ "$BEHIND" -le 20 ] || say "… e mais $((BEHIND - 20))." "… and $((BEHIND - 20)) more."
     git pull --ff-only --quiet || die "não foi possível atualizar só avançando (git pull --ff-only): seu clone tem commits que o remote não tem. Resolva à mão (git status, git log) e rode ./update.sh de novo. Nada foi descartado." "could not fast-forward (git pull --ff-only): your clone has commits the remote does not have. Resolve it by hand (git status, git log) and run ./update.sh again. Nothing was discarded."
   fi
