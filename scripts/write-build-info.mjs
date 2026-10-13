@@ -24,14 +24,14 @@ const git = (cwd, ...args) => {
   }
 };
 
-export function buildInfo(root, now = new Date()) {
+export function buildInfo(root, now = new Date(), release = process.env.RICE_RELEASE === '1') {
   const sha = git(root, 'rev-parse', '--short=7', 'HEAD');
   return {
     commit: sha || null,
     commitDate: git(root, 'log', '-1', '--format=%cI') || null,
     date: now.toISOString(),
     remote: publicRemote(git(root, 'remote', 'get-url', 'origin')),
-    clonePath: sha ? git(root, 'rev-parse', '--show-toplevel') || null : null,
+    clonePath: sha && !release ? git(root, 'rev-parse', '--show-toplevel') || null : null, // release (.dmg): o caminho da máquina que gerou não vai junto
   };
 }
 

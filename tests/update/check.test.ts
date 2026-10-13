@@ -172,3 +172,13 @@ describe('comando do Terminal', () => {
     expect(open).toHaveBeenCalledTimes(1);
   });
 });
+
+test('build de release (RICE_RELEASE=1) não grava o caminho da máquina que gerou o .dmg', async () => {
+  const dir = await makeTmpDir();
+  execFileSync('git', ['init', '-q', dir]);
+  execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x']);
+  expect(makeBuildInfo(dir, new Date(), false).clonePath).toBeTruthy();
+  const release = makeBuildInfo(dir, new Date(), true);
+  expect(release.clonePath).toBeNull();
+  expect(release.commit).toMatch(/^[0-9a-f]{7}$/);
+});
