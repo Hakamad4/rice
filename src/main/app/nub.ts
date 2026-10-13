@@ -12,8 +12,9 @@ export const NUB_BTN_GAP = 8;
 export const NUB_DIVIDER = 1;
 /** Pílula em repouso: a coluna do logo com respiro dos dois lados. */
 export const NUB_WIDTH = NUB_COL_WIDTH + 2 * NUB_PAD;
-/** Dois botões empilhados com o mesmo respiro em volta. */
-export const NUB_HEIGHT = 2 * NUB_BTN_HEIGHT + NUB_BTN_GAP + 2 * NUB_PAD;
+/** Três botões (Perguntar, Pausar, Parar) empilhados com o mesmo respiro em volta. */
+export const NUB_BTN_COUNT = 3;
+export const NUB_HEIGHT = NUB_BTN_COUNT * NUB_BTN_HEIGHT + (NUB_BTN_COUNT - 1) * NUB_BTN_GAP + 2 * NUB_PAD;
 /** Largura da janela em repouso e em hover: ela é sempre larga e transparente; só a pílula cresce (CSS). */
 export const NUB_BAR_WIDTH = NUB_PAD + NUB_BTN_WIDTH + NUB_PAD + NUB_DIVIDER + NUB_WIDTH;
 export const NUB_PANEL_WIDTH = 340;
@@ -146,6 +147,7 @@ export class NubController {
   private win: NubWindow | null = null;
   private recording = false;
   private startedAt = 0;
+  private paused = false;
   /** Posição e tamanho da pílula enquanto o painel está expandido. */
   private pillBounds: Rect | null = null;
   /** Lado para onde a barra de hover cresce; define onde a pílula fica dentro da janela larga. */
@@ -158,9 +160,14 @@ export class NubController {
   constructor(private readonly deps: NubDeps) {}
 
   /** Chamar a cada mudança de gravação ou de foco/visibilidade da janela principal. */
-  update(input: { recording: boolean; mainFocused: boolean; mainVisible: boolean }): void {
+  update(input: { recording: boolean; mainFocused: boolean; mainVisible: boolean; paused?: boolean }): void {
     if (input.recording && !this.recording) this.startedAt = (this.deps.now ?? Date.now)();
     this.recording = input.recording;
+    const paused = input.recording && input.paused === true;
+    if (paused !== this.paused) {
+      this.paused = paused;
+      if (this.win && !this.win.isDestroyed() && this.recording) this.win.send('nub:state', { recording: true, startedAt: this.startedAt, paused });
+    }
     if (shouldShowNub(input)) this.show();
     else {
       this.collapse();
@@ -262,7 +269,7 @@ export class NubController {
   /** Chamar em `did-finish-load`: o estado enviado antes do load da página se perde. */
   resendState(): void {
     if (this.win && !this.win.isDestroyed() && this.recording) {
-      this.win.send('nub:state', { recording: true, startedAt: this.startedAt });
+      this.win.send('nub:state', { recording: true, startedAt: this.startedAt, paused: this.paused });
       this.win.send('nub:side', this.side);
     }
   }
@@ -295,7 +302,7 @@ export class NubController {
   private show(): void {
     if (!this.win || this.win.isDestroyed()) this.win = this.deps.createWindow();
     const win = this.win;
-    win.send('nub:state', { recording: true, startedAt: this.startedAt });
+    win.send('nub:state', { recording: true, startedAt: this.startedAt, paused: this.paused });
     if (win.isVisible()) return; // já aparece: não mexe na posição que o usuário arrastou
     const bounds = this.place();
     this.stopPolling();

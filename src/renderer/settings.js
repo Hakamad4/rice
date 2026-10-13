@@ -50,7 +50,7 @@
 
   /** Lista de seções do menu lateral (Ajustes do macOS): grupo, ícone de linha e chave i18n do nome. */
   const NAV = [
-    { group: 'settings.group.general', items: [['language', 'globe', 'settings.language'], ['audio', 'mic', 'settings.audio'], ['folder', 'folder', 'settings.folder'], ['updates', 'download', 'settings.updates']] },
+    { group: 'settings.group.general', items: [['language', 'globe', 'settings.language'], ['audio', 'mic', 'settings.audio'], ['folder', 'folder', 'settings.folder'], ['updates', 'download', 'settings.updates'], ['shortcuts', 'keyboard', 'settings.shortcuts']] },
     { group: 'settings.group.ai', items: [['ai', 'sparkles', 'settings.ai'], ['tools', 'plug', 'settings.nav.tools']] },
     { group: 'settings.group.meetings', items: [['calendar', 'calendar', 'settings.calendar'], ['vocabulary', 'file-text', 'settings.vocabulary'], ['speakers', 'users', 'settings.speakers'], ['screenshots', 'image', 'settings.screenshots']] },
     { group: null, items: [['privacy', 'shield', 'settings.nav.privacy']] },
@@ -83,6 +83,14 @@
     keep.onchange = () => rice.setKeepAudio(keep.checked);
     const identify = toggle('identify-speakers', settings.identifySpeakers === true, t('settings.speakers.label'));
     identify.onchange = () => rice.setIdentifySpeakers(identify.checked);
+    // atalho global de gravar e parar: o estado (registrado, sem atalho ou em conflito com outro app) vem do main
+    const shortcutBox = el('div', { className: 'shortcut-box' }, []);
+    if (rice.shortcutStatus) {
+      rice.shortcutStatus().then((initial) => {
+        const field = window.RiceShortcut.create({ rice, initial });
+        shortcutBox.replaceChildren(row(t('settings.shortcut.label'), t('settings.shortcut.help'), field.root));
+      }).catch(() => {});
+    }
     // atualização: opção "Procurar atualizações" (ligada por padrão) e, com versão nova, o aviso com o botão
     const checkUpdates = toggle('check-updates', settings.checkUpdates !== false, t('settings.updates.label'));
     const updateBox = window.RiceUpdate.box(null, () => rice.updateRun());
@@ -126,7 +134,8 @@
     const loadLight = async (ai) => {
       if (!rice.setAiLight) return;
       const cat = await rice.aiModelCatalog(ai.active).then((r) => (r && r.ok ? r.models : [])).catch(() => []);
-      const auto = ai.lightModel ? t('settings.light.auto-model', { model: ai.lightModel }) : t('settings.light.auto'); // curto: o rótulo não quebra em duas linhas
+      const lightName = ai.lightModel && ((cat.find((m) => m.id === ai.lightModel) || {}).label || ai.lightModel); // nome amigável do catálogo ("Haiku 5.5"), como nas outras opções
+      const auto = lightName ? t('settings.light.auto-model', { model: lightName }) : t('settings.light.auto'); // curto: o rótulo não quebra em duas linhas
       const items = [{ value: 'auto', label: auto }, { value: 'same', label: t('settings.light.same') }, ...cat.filter((m) => m.id).map((m) => ({ value: m.id, label: m.label || m.id }))];
       const picker = window.RiceMenuSelect.create({
         items,
@@ -263,6 +272,7 @@
       section(t('chat-tools.title'), null, [row(t('chat-tools.label'), t('chat-tools.help'), tools), toolsHint], 'tools'),
       section(t('settings.audio'), null, [row(t('settings.audio.keep'), t('settings.audio.help'), keep)], 'audio'),
       section(t('settings.privacy'), t('settings.privacy.text'), [privBox], 'privacy'),
+      section(t('settings.shortcuts'), null, [shortcutBox], 'shortcuts'),
       section(t('settings.updates'), null, [updateBox, row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates)], 'updates'),
     ];
     const initial = [ctx && ctx.section, ctx && ctx.focus, remembered()].find((id) => IDS.includes(id)) || 'language';

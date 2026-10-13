@@ -34,7 +34,7 @@
    * `items`: { label, sub?, icon?, onSelect(), danger?, disabled?, checked?, title?, submenu?: items } ou { separator: true }.
    * Posição `fixed`: não é cortado pela barra lateral. Submenu: clique, passar o mouse ou → abrem; ← e Esc voltam.
    */
-  function open({ anchor, at, items }) {
+  function open({ anchor, at, items, placement }) {
     close(false);
     openMenu = { panels: [], anchor, off: () => {} };
 
@@ -166,7 +166,8 @@
     const width = popover.offsetWidth || 230;
     const left = Math.max(8, Math.min(anchor ? rect.right - width : rect.left, window.innerWidth - width - 8));
     popover.style.left = `${left}px`;
-    popover.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 8 - (popover.offsetHeight || 0))}px`;
+    // `placement: 'above'` (botão dentro do campo do chat): o menu abre acima do âncora, sem cobrir o campo
+    popover.style.top = `${placement === 'above' ? Math.max(8, rect.top - 6 - (popover.offsetHeight || 0)) : Math.min(rect.bottom + 6, window.innerHeight - 8 - (popover.offsetHeight || 0))}px`;
     if (anchor) anchor.setAttribute('aria-expanded', 'true');
     paint(root);
     const outside = (e) => {

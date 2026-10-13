@@ -105,7 +105,7 @@ describe('NubController', () => {
     ctl.update({ recording: true, mainFocused: false, mainVisible: true });
     expect(created).toHaveBeenCalledTimes(1);
     expect(win.showInactive).toHaveBeenCalledTimes(1);
-    expect(win.send).toHaveBeenCalledWith('nub:state', { recording: true, startedAt: 5000 });
+    expect(win.send).toHaveBeenCalledWith('nub:state', { recording: true, startedAt: 5000, paused: false });
     ctl.update({ recording: true, mainFocused: false, mainVisible: true });
     expect(win.showInactive).toHaveBeenCalledTimes(1);
     ctl.update({ recording: true, mainFocused: true, mainVisible: true });
@@ -115,13 +115,23 @@ describe('NubController', () => {
     expect(win.showInactive).toHaveBeenCalledTimes(2);
   });
 
+  it('pausar e continuar avisam a janelinha (o botão vira "Continuar")', () => {
+    const { win, ctl } = fakeEnv();
+    ctl.update({ recording: true, paused: false, mainFocused: false, mainVisible: true });
+    win.send.mockClear();
+    ctl.update({ recording: true, paused: true, mainFocused: false, mainVisible: true });
+    expect(win.send).toHaveBeenCalledWith('nub:state', { recording: true, startedAt: 5000, paused: true });
+    ctl.update({ recording: true, paused: false, mainFocused: false, mainVisible: true });
+    expect(win.send).toHaveBeenCalledWith('nub:state', { recording: true, startedAt: 5000, paused: false });
+  });
+
   it('resendState reenvia o estado depois do load da página (envio inicial pode se perder)', () => {
     const { win, ctl } = fakeEnv();
     ctl.resendState(); // sem janela: nada
     ctl.update({ recording: true, mainFocused: false, mainVisible: true });
     win.send.mockClear();
     ctl.resendState();
-    expect(win.send).toHaveBeenCalledWith('nub:state', { recording: true, startedAt: 5000 });
+    expect(win.send).toHaveBeenCalledWith('nub:state', { recording: true, startedAt: 5000, paused: false });
     ctl.update({ recording: false, mainFocused: false, mainVisible: true });
     win.send.mockClear();
     ctl.resendState(); // gravação parou: não reenvia
@@ -397,7 +407,7 @@ describe('medidas do nub: CSS e constantes concordam', () => {
   it('larguras derivadas: pílula = coluna + respiro; barra = conteúdo real; altura >= 76', () => {
     expect(NUB_WIDTH).toBe(NUB_COL_WIDTH + 2 * NUB_PAD);
     expect(NUB_BAR_WIDTH).toBe(NUB_PAD + NUB_BTN_WIDTH + NUB_PAD + NUB_DIVIDER + NUB_WIDTH);
-    expect(NUB_HEIGHT).toBe(2 * NUB_BTN_HEIGHT + NUB_BTN_GAP + 2 * NUB_PAD);
+    expect(NUB_HEIGHT).toBe(3 * NUB_BTN_HEIGHT + 2 * NUB_BTN_GAP + 2 * NUB_PAD); // Perguntar, Pausar e Parar
     expect(NUB_HEIGHT).toBeGreaterThanOrEqual(76);
   });
 });

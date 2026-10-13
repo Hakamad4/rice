@@ -59,7 +59,9 @@ export type MeetingMeta = {
 /** Pasta de agrupamento de reuniões. `parentId` ausente = pasta da raiz; `order` vale entre irmãs. */
 export type Folder = { id: string; name: string; createdAt: string; order: number; parentId?: string };
 
-export type ChatTurn = { question: string; answer: string };
+/** Fonte da busca na web que a resposta usou (https). */
+export type ChatSource = { url: string; title: string };
+export type ChatTurn = { question: string; answer: string; /** Só nas respostas com "Buscar na web" ligado. */ sources?: ChatSource[] };
 
 export type NoteTemplateSection = { heading: string; description: string };
 

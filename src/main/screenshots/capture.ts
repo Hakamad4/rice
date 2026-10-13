@@ -24,7 +24,7 @@ export type Decision = { capture: boolean; reason: string };
 
 export type CaptureDeps = {
   /** Tira o quadro da tela. null = sem permissão, sem tela ou erro. */
-  grab: () => Promise<Frame | null>;
+  grab: (hint: { preferWindow: boolean }) => Promise<Frame | null>;
   /** Decide, SÓ POR TEXTO, se a fala pede um print. Funciona com qualquer provedor (inclusive os CLIs). Lançar = não captura. */
   decide: (context: SpokenSegment[], candidates: SpokenSegment[], dir: string) => Promise<Decision>;
   /** Relógio EXATO da linha que a transcrição gravou para essa fala (o calculado pode diferir 1 s); null = não achou. */
@@ -148,7 +148,8 @@ export class ScreenshotCapture {
     const startedAt = this.startedAt;
     if (!dir || !startedAt || session !== this.session) return null;
     try {
-      const frame = await this.deps.grab();
+      // fala de outra pessoa (áudio do sistema): o que ela mostra está dentro da janela da chamada
+      const frame = await this.deps.grab({ preferWindow: trigger.who !== 'Eu' });
       if (!frame || session !== this.session) return null;
       if (isNearDuplicate(this.lastHash, frame.hash)) {
         if (!retry) this.scheduleCapture(trigger, reason, session, true);
@@ -168,7 +169,7 @@ export class ScreenshotCapture {
     if (!dir || !startedAt) return null;
     const session = this.session;
     try {
-      const frame = await this.deps.grab();
+      const frame = await this.deps.grab({ preferWindow: false }); // manual: a tela inteira onde está a chamada
       if (!frame || session !== this.session) return null;
       return await this.save(dir, startedAt, frame, '', { manual: true });
     } catch (err) {

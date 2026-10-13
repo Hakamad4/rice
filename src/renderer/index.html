@@ -59,7 +59,7 @@
   .icon-btn svg { width:16px; height:16px; }
   /* campo de busca da sidebar: ícone à esquerda, ⌘K à direita (vazio) ou × (com texto) */
   .search-box { display:flex; align-items:center; gap:8px; height:30px; margin:0 0 var(--gap-4); padding:0 8px 0 10px; border:1px solid var(--line); border-radius:8px; background:var(--field-bg); color:var(--muted); }
-  .search-box:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); color:var(--ink); }
+  .search-box:focus-within { border-color:var(--muted); color:var(--ink); } /* neutro como os outros campos: a busca abre focada e o anel azul destoava */
   .search-box input#search { flex:1; min-width:0; height:100%; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; font-size:13px; }
   .search-box input#search:focus { border:0; box-shadow:none; }
   .kbd-hint { font:11px/1 -apple-system, "SF Pro Text", system-ui, sans-serif; color:var(--faint); padding:2px 5px; border-radius:4px; box-shadow:inset 0 0 0 1px var(--line); }
@@ -113,9 +113,9 @@
   #chat-toggle { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; } #chat-toggle .ico { display:none; } #chat-toggle .ico .icon { width:16px; height:16px; }
   #rec .rec-short { display:none; }
   @container recbar (max-width: 600px) { #chat-toggle { width:32px; padding:0; } #chat-toggle .lbl { display:none; } #chat-toggle .ico { display:inline-flex; } }
-  @container recbar (max-width: 500px) { .lang-chip { width:32px; padding:0; justify-content:center; } .lang-chip .lang-short, .lang-chip .icon.caret { display:none; } }
+  @container recbar (max-width: 500px) { .lang-chip { width:32px; padding:0; justify-content:center; } .lang-chip .lang-short, .lang-chip .icon.caret { display:none; } .pause-btn .pause-label { display:none; } .pause-btn { width:32px; padding:0; justify-content:center; } }
   @container recbar (max-width: 420px) { #rec .rec-long { display:none; } #rec .rec-short { display:inline; } }
-  @container recbar (max-width: 330px) { #rec { width:32px; height:32px; min-width:32px; padding:0; justify-content:center; align-items:center; gap:0; aspect-ratio:1; } #rec .rec-short, #rec .rec-long { display:none; } }
+  @container recbar (max-width: 330px) { #rec { width:32px; height:32px; min-width:32px; padding:0; justify-content:center; align-items:center; gap:0; aspect-ratio:1; } #rec .rec-short, #rec .rec-long { display:none; } #lang-slot { display:none; } } /* faixa mínima: cabem Pausar, Parar e o chat; o idioma da reunião continua nas Configurações */
   /* janela estreita com o chat aberto: a sidebar recolhe sozinha (e volta quando o chat fecha ou a janela cresce); a coluna central nunca fica < ~420px.
      `side-open` = o usuário reabriu a sidebar à mão. */
   @media (max-width: 1000px) {
@@ -341,6 +341,9 @@
   .note-shot { margin:var(--space-2) 0 var(--space-3); } .note-shot .shot-img { height:96px; max-width:min(240px, 60vw); }
   .shots-chip { flex:none; display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 8px; border-radius:999px; font-size:11px; color:var(--muted); white-space:nowrap; } .shots-chip:hover { color:var(--ink); background:var(--hover); } .shots-chip[hidden] { display:none; } .shots-chip .icon { width:12px; height:12px; } .shots-chip.warn { color:var(--warn); }
   .shots-capture { flex:none; width:24px; height:24px; } .shots-capture[hidden] { display:none; } .shots-capture .icon { width:14px; height:14px; } .shots-capture:disabled { opacity:.4; }
+  .live-dot.paused { background:var(--warn); animation:none; } /* pausado: âmbar e parado (não pulsa) */
+  #rec.recording.paused .rec-dot { background:var(--warn); animation:none; }
+  .pause-btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:999px; box-shadow:inset 0 0 0 1px var(--line); color:var(--muted); font-size:13px; } .pause-btn:hover { color:var(--ink); } .pause-btn[hidden] { display:none; } .pause-btn .icon { width:14px; height:14px; } .pause-btn.paused { color:var(--warn); } .pause-btn .pause-label { font-variant-numeric:tabular-nums; }
   .shots-confirm-list { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:var(--space-2); font-size:14px; line-height:1.5; }
   .shot-viewer { background:rgba(0,0,0,.72); z-index:60; }
   .shot-viewer-box { display:flex; flex-direction:column; gap:var(--space-2); max-width:min(1280px, 94vw); max-height:92vh; }
@@ -442,6 +445,8 @@
   .tpl-chip { display:inline-flex; align-items:center; gap:var(--gap-2); padding:4px 10px; border-radius:999px; background:var(--hover); color:var(--ink); font-size:12px; }
   .tpl-chip:hover:not(:disabled) { background:var(--active); }
   .tpl-picker { display:flex; flex-wrap:wrap; align-items:center; gap:var(--gap-3); min-height:32px; } .tpl-picker .tpl-banner-host { flex-basis:100%; order:3; } .tpl-picker .ver-host { margin-left:auto; display:inline-flex; }
+  .tpl-picker .tpl-right { margin-left:auto; display:inline-flex; align-items:center; gap:var(--gap-3); } .tpl-picker .tpl-right .ver-host { margin-left:0; }
+  .gen-chip { color:var(--muted); } .gen-chip .icon { width:14px; height:14px; flex:none; } .gen-chip:disabled { opacity:.6; cursor:default; }
   .tpl-chip, .ver-chip { height:32px; box-sizing:border-box; padding:0 12px; font-size:13px; }
   .tpl-empty { display:flex; flex-direction:column; align-items:flex-start; gap:var(--space-2); } .tpl-empty-line { margin:0; font-size:13px; line-height:1.5; color:var(--muted); } .tpl-chips { display:flex; flex-wrap:wrap; gap:6px; }
   .tpl-sec-chip { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:var(--hover); color:var(--ink); font-size:12px; line-height:1.3; max-width:100%; overflow-wrap:anywhere; } .tpl-empty .link-button { margin:0; padding:var(--space-1) 0; }
@@ -455,6 +460,7 @@
   .menu-item:last-child { margin-bottom:0; }
   .menu-item.active, .menu-item:hover { background:var(--hover); }
   .menu-item .check { margin-left:auto; flex:none; color:var(--accent); }
+  .menu-item.has-submenu > .check { color:var(--muted); } /* seta de submenu em cinza; só o ✓ de item marcado usa o destaque */
   .tpl-popover { left:0; width:320px; padding:var(--gap-3); } .tpl-popover .tpl-opt { min-height:44px; }
   .tpl-search { display:block; width:100%; margin:0 0 var(--gap-3); }
   .tpl-list { max-height:320px; overflow:auto; } .tpl-popover.compact-list .tpl-list { max-height:200px; } .tpl-popover.compact-list.preview-below .tpl-popover-preview { max-height:180px; } /* seletor do rodapé: lista e prévia cabem sem sair da janela */
@@ -664,6 +670,16 @@
   .ai-chip .tools-on { color:var(--accent, currentColor); }
   .ai-chip .ai-chip-text { min-width:0; line-height:1.4; padding:1px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .ai-chip .icon { width:12px; height:12px; flex:none; }
   .ai-chip .provider-logo.small { width:14px; height:14px; flex:none; }
+  /* atalho global: botão com o atalho (captura ao clicar), "Nenhum" e "Padrão"; o aviso de conflito fica embaixo */
+  .shortcut-field { display:flex; flex-direction:column; align-items:flex-start; gap:6px; min-width:0; max-width:100%; } .shortcut-buttons { display:flex; flex-wrap:wrap; gap:6px; }
+  .shortcut-key { min-width:92px; font-variant-numeric:tabular-nums; } .shortcut-key.listening { box-shadow:0 0 0 3px var(--ring); border-color:var(--accent); }
+  .shortcut-note { margin:0; max-width:420px; } .shortcut-note.warn { color:var(--rec, #c0392b); } .shortcut-note[hidden], .shortcut-buttons [hidden] { display:none; }
+  /* perguntas prontas: botão de ícone no campo, à esquerda do enviar; o menu abre acima do campo */
+  .prompts-btn { flex:none; align-self:flex-end; width:28px; height:28px; margin:5px 0 5px 4px; } .prompts-btn svg { width:16px; height:16px; } .prompts-btn[aria-expanded="true"] { color:var(--ink); background:var(--active); }
+  .msg.user { position:relative; }
+  .msg-more { position:absolute; left:-28px; top:50%; transform:translateY(-50%); width:24px; height:24px; padding:0; border-radius:12px; display:inline-flex; align-items:center; justify-content:center; background:none; color:var(--muted); opacity:0; }
+  .msg.user:hover .msg-more, .msg-more:focus-visible, .msg-more[aria-expanded="true"] { opacity:1; } .msg-more:hover { background:var(--hover); color:var(--ink); } .msg-more .icon { width:14px; height:14px; }
+  @media (hover: none) { .msg-more { opacity:1; } }
   /* aviso de versão nova: ponto discreto no item Configurações e a linha com o botão em Configurações › Atualizações */
   .nav-item.has-update::after { content:''; flex:none; width:7px; height:7px; margin-left:auto; border-radius:50%; background:var(--accent, currentColor); }
   .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
@@ -888,6 +904,7 @@
       <span id="wr-indicator" class="wr-indicator" hidden></span>
       <span id="lang-slot" class="lang-slot"></span>
       <span id="more-slot" class="more-slot"></span>
+      <button id="pause" type="button" class="pause-btn" hidden></button>
       <button id="rec"><span class="rec-dot"></span><span id="rec-label" class="rec-long">Gravar</span><span id="rec-short" class="rec-short">Gravar</span></button>
       <button id="chat-toggle" aria-expanded="false" aria-controls="chat" data-i18n-title="chat.toggle" data-i18n-aria="chat.toggle" title="Pergunte ao Rice" aria-label="Pergunte ao Rice" disabled><span class="ico" data-icon="message-circle"></span><span class="lbl" data-i18n="chat.toggle">Pergunte ao Rice</span></button>
     </div>
@@ -913,6 +930,7 @@
     <form id="ask">
       <div class="ask-box">
         <textarea id="question" rows="1" data-i18n-placeholder="chat.placeholder" placeholder="Pergunte sobre a reunião…" data-i18n-aria="chat.placeholder" aria-label="Pergunte sobre a reunião…" autocomplete="off" spellcheck="true" disabled></textarea>
+        <button class="icon-btn prompts-btn" id="prompts-btn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-title="chat.prompts.label" data-i18n-aria="chat.prompts.label" title="Perguntas prontas" aria-label="Perguntas prontas"><span class="ico" data-icon="lightbulb"></span></button>
         <button class="send-btn" id="send" type="submit" data-i18n-title="chat.send" data-i18n-aria="chat.send" title="Enviar" aria-label="Enviar" disabled><span class="ico" data-icon="arrow-up"></span></button>
       </div>
     </form>
@@ -932,6 +950,8 @@
   <script src="ai-chip.js"></script>
   <script src="web-search.js"></script>
   <script src="update-notice.js"></script>
+  <script src="shortcut-field.js"></script>
+  <script src="prompts-menu.js"></script>
   <script src="privacy.js"></script>
   <script src="grouping.js"></script>
   <script src="search.js"></script>

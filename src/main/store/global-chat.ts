@@ -1,13 +1,15 @@
 import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { toLocalIso } from '../../shared/naming';
+import { storedSources } from '../ai/web-search';
+import type { ChatSource } from '../../shared/types';
 
 /** Reunião citada numa resposta (n é o número que a IA usa em [n]). */
 export type Citation = { n: number; dir: string; title: string; date: string };
 
 export type GlobalScope = { kind: 'all' } | { kind: 'folder'; folderId: string };
 
-export type GlobalTurn = { at: string; question: string; answer: string; scope: GlobalScope; citations: Citation[]; terms: string[] };
+export type GlobalTurn = { at: string; question: string; answer: string; scope: GlobalScope; citations: Citation[]; terms: string[]; /** Fontes da busca na web (só quando ela estava ligada). */ sources?: ChatSource[] };
 
 export const globalChatFile = (root: string): string => join(root, '.rice', 'chat-global.jsonl');
 
@@ -26,6 +28,7 @@ function parseTurn(o: Record<string, unknown>): GlobalTurn | null {
     scope: scope?.kind === 'folder' && typeof scope.folderId === 'string' ? { kind: 'folder', folderId: scope.folderId } : { kind: 'all' },
     citations: Array.isArray(o.citations) ? o.citations.filter(isCitation) : [],
     terms: Array.isArray(o.terms) ? o.terms.filter((x): x is string => typeof x === 'string') : [],
+    ...(storedSources(o.sources).length > 0 ? { sources: storedSources(o.sources) } : {}),
   };
 }
 

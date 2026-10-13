@@ -193,6 +193,10 @@ Clique em **Nova reunião** e depois em **Gravar**. Ao parar, o Rice escreve as 
 
 O Rice também percebe reuniões (Zoom, Meet, Teams) e eventos da agenda e sugere gravar.
 
+### Pausar a gravação
+
+Para uma conversa paralela que não deve ser gravada, use **Pausar** (ao lado de **Parar**, no item **Pausar** da bandeja ou no botão do Mini Rice). Pausado, o Rice solta o microfone: o áudio não é gravado nem transcrito, o relógio para, o botão vira **Continuar · 00:42** (o tempo parado, em âmbar discreto) e o ponto de gravação da barra lateral, do item da reunião e da bandeja fica âmbar e parado. As ideias ao vivo, a War room e as capturas de tela também param. **Continuar** retoma na mesma reunião, e a transcrição ganha um marcador discreto, por exemplo “gravação pausada de 14:03 a 14:07”; os horários depois da pausa continuam certos. Pausado, o Rice não pergunta “ainda gravando?” nem para sozinho; depois de 30 minutos ele só pergunta se você quer parar. Se o app cair durante a pausa, “Recuperar reunião” funciona como sempre.
+
 ### Versões das notas
 
 Gerar as notas de novo (outro template ou transcrição nova) não perde mais as anteriores: as notas antigas ficam em `notas-versoes/` (até 20; as mais antigas saem primeiro). Um chip discreto **Versões (3)** ao lado do chip do template lista todas ("Brainstorm · hoje 16:40 · atual"); escolher uma mostra a versão em leitura, com uma faixa fina (**Voltar para a atual** / **Restaurar esta**). Busca, chat, copiar e PDF usam sempre a atual.
@@ -245,7 +249,7 @@ Em **Configurações › Participantes**, o Rice separa as vozes do áudio do co
 
 Desligadas por padrão. Em **Configurações › Capturas de tela** você liga, depois de um aviso. Enquanto grava, o Rice acompanha a conversa e, quando percebe que alguém vai mostrar algo (“vou compartilhar minha tela”, “olha esse gráfico”, “here’s the dashboard”), tira um print da tela uns 2 segundos depois, para dar tempo de a tela trocar. O print fica na pasta da reunião (`capturas/`), ligado à frase que o motivou: a miniatura aparece logo depois dela na transcrição, com uma legenda curta, e a IA pode citá-la nas notas. Clique na miniatura para ampliar; ⋯ remove. Quando a IA não perceber o momento, use o botão da câmera na barra (ou **⌘⇧S**).
 
-Como funciona: um filtro local, em português e inglês, escolhe as falas que valem uma pergunta; só então o Rice envia à IA que você configurou os últimos ~60 s da transcrição (texto) para confirmar. Isso funciona com qualquer provedor, inclusive as assinaturas por CLI. Com uma chave de API (Claude, OpenAI ou Gemini) a imagem também vai para a IA, só para refinar a legenda; nas assinaturas por CLI as imagens ficam só no seu computador. No máximo uma pergunta a cada ~15 s e um print a cada ~10 s; prints iguais ao anterior são descartados. Exige a permissão de Gravação de Tela do macOS. Dá para desligar a qualquer momento, até gravando.
+Como funciona: um filtro local, em português e inglês, escolhe as falas que valem uma pergunta; só então o Rice envia à IA que você configurou os últimos ~60 s da transcrição (texto) para confirmar. Isso funciona com qualquer provedor, inclusive as assinaturas por CLI. Com uma chave de API (Claude, OpenAI ou Gemini) a imagem também vai para a IA, só para refinar a legenda; nas assinaturas por CLI as imagens ficam só no seu computador. No máximo uma pergunta a cada ~15 s e um print a cada ~10 s; prints iguais ao anterior são descartados. Qual tela: o Rice usa o app que o detector viu usando o microfone (Zoom, Teams, Meet no navegador…) e captura a tela onde está a janela dele; quando é outra pessoa falando (áudio do computador), captura só a janela da chamada. Sem encontrar o app, usa a tela do cursor (no Windows, sempre a do cursor). Exige a permissão de Gravação de Tela do macOS. Dá para desligar a qualquer momento, até gravando.
 
 ### Editar e criar templates
 
@@ -256,7 +260,7 @@ Abra **Templates** na barra lateral. Os templates embutidos podem ser editados (
 
 ### Perguntar à IA
 
-Clique em **Pergunte ao Rice** (canto superior direito) e pergunte qualquer coisa sobre a reunião aberta: decisões, quem faz o quê, o que se falou sobre um assunto. Perguntas e respostas ficam salvas na reunião. **Buscar na web** (botão do globo ao lado dos chips, desligado por padrão e por conversa) deixa o Rice pesquisar na internet nas perguntas feitas enquanto está ligado; vale no chat da reunião e no chat de todas as reuniões, e as fontes aparecem como links embaixo da resposta (título e domínio, abertos no navegador). A pergunta vai para a busca do próprio provedor de IA; as notas da reunião continuam indo só para a IA. O Claude CLI usa apenas WebSearch e WebFetch (nunca Bash, Edit nem leitura de arquivos), o Codex usa a busca ao vivo com o sandbox somente leitura e sem shell, e as APIs da Anthropic, da OpenAI e do Gemini usam as ferramentas de busca delas. Indisponível no OpenCode e no Antigravity (não dá para restringir a busca sem dar shell), onde o botão fica desabilitado com o motivo.
+Clique em **Pergunte ao Rice** (canto superior direito) e pergunte qualquer coisa sobre a reunião aberta: decisões, quem faz o quê, o que se falou sobre um assunto. Perguntas e respostas ficam salvas na reunião. **Perguntas prontas:** o botão de lâmpada dentro do campo de pergunta (à esquerda do enviar, sempre visível) abre um menu acima do campo com perguntas prontas ("Resumo para quem faltou", "Próximos passos por pessoa", "Riscos e pendências"; no chat de todas as reuniões, "O que ficou pendente esta semana?" e outras) e as suas: um clique envia a pergunta. No mesmo menu, **Salvar a última pergunta** e **Adicionar pergunta pronta…** guardam as suas (até 8) e **Remover pergunta salva** apaga uma; **⋯ > Salvar como pergunta pronta** numa pergunta já enviada faz o mesmo. As respostas que usaram *Buscar na web* guardam as fontes, e elas aparecem de novo quando você reabre a reunião. **Buscar na web** (botão do globo ao lado dos chips, desligado por padrão e por conversa) deixa o Rice pesquisar na internet nas perguntas feitas enquanto está ligado; vale no chat da reunião e no chat de todas as reuniões, e as fontes aparecem como links embaixo da resposta (título e domínio, abertos no navegador). A pergunta vai para a busca do próprio provedor de IA; as notas da reunião continuam indo só para a IA. O Claude CLI usa apenas WebSearch e WebFetch (nunca Bash, Edit nem leitura de arquivos), o Codex usa a busca ao vivo com o sandbox somente leitura e sem shell, e as APIs da Anthropic, da OpenAI e do Gemini usam as ferramentas de busca delas. Indisponível no OpenCode e no Antigravity (não dá para restringir a busca sem dar shell), onde o botão fica desabilitado com o motivo.
 
 
 **Trocar a IA e o modelo no chat.** No cabeçalho do chat, o chip com o nome da IA (por exemplo "Claude · Sonnet") abre um menu com os provedores que você já configurou e os modelos de cada um; o atual aparece com ✓. A escolha vale para o app inteiro (é a mesma de Configurações > IA): a próxima pergunta e as próximas notas já usam o modelo escolhido. Provedores ainda não configurados aparecem no fim, com "Configurar…". Durante uma resposta o chip fica desabilitado. No OpenCode, o modelo gratuito é uma opção explícita e avisa que pode usar suas transcrições para melhorar modelos.
@@ -268,6 +272,10 @@ Abra o **Início** (primeiro item da barra lateral): o campo **Pergunte sobre su
 O chip no topo do painel troca entre **Esta reunião**, **Todas as reuniões** e uma pasta (com as subpastas). A conversa fica salva em `.rice/chat-global.jsonl`; **Nova conversa** recomeça.
 
 ![Chat entre todas as reuniões, com fontes](docs/images/pt-BR/17-global-chat.png)
+
+### Gravar e parar de qualquer lugar
+
+Aperte **⌥⌘R** (Ctrl+Alt+R no Windows) em qualquer app, com o Rice em segundo plano: ele começa uma reunião, usando a nota da reunião da agenda que está acontecendo ou começa em até 10 minutos (como o **Gravar agora** do Início), e para quando você aperta de novo. Uma notificação discreta diz "Gravando" ou "Gravação parada". Troque as teclas ou escolha **Nenhum** em **Configurações > Atalhos**; se outro app já usa essas teclas, as Configurações mostram um aviso para você escolher outro atalho.
 
 ### Mini Rice
 
@@ -368,6 +376,7 @@ As configurações do app, os segredos e o modelo de transcrição ficam em `~/L
 | **Esc** | Limpa a busca / fecha um menu ou diálogo |
 | **⌘⌫** | Apaga a reunião aberta (pergunta antes) |
 | **⌘,** | Abre as Configurações |
+| **⌥⌘R** (global, funciona com o Rice em segundo plano; **Ctrl+Alt+R** no Windows) | Começa a gravar ou, se já estiver gravando, para. Troque ou escolha *Nenhum* em Configurações > Atalhos |
 | **⌘⇧S** | Captura a tela agora (só gravando, com as capturas ligadas) |
 | **↑ ↓ → ← Enter** | Navega por menus e submenus |
 

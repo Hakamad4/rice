@@ -68,7 +68,7 @@ export async function askAcrossMeetings(deps: GlobalChatDeps, rawQuestion: unkno
       const context = buildContext(found.meetings, found.terms, globalContextLabels(lang), formatDate);
       answer = await runChat(deps.runner, { system: globalChatSystemPrompt(lang), prompt: buildGlobalPrompt(context, history, question, lang), signal }, { useTools: (await deps.useTools?.()) === true, language: lang === 'en' ? 'en' : 'pt-BR', onDelta, prefix: notice, ...(web ? { web: true, onSources: (list: WebSource[]) => (sources = list) } : {}) });
     }
-    await appendGlobalTurn(root, { question, answer, scope, citations, terms: found.terms }, deps.now?.());
+    await appendGlobalTurn(root, { question, answer, scope, citations, terms: found.terms, ...(sources.length > 0 ? { sources } : {}) }, deps.now?.());
     return { ok: true, answer, citations, terms: found.terms, sources };
   } catch (err) {
     return { ok: false, kind: err instanceof AiError ? err.kind : 'other', message: (err as Error).message };

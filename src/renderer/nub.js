@@ -175,6 +175,31 @@
     event.stopPropagation();
     window.nub.stop();
   };
+  $('pause').onclick = (event) => {
+    event.stopPropagation();
+    window.nub.pause();
+  };
+  // pausado: o botão vira "Continuar" (triângulo) em âmbar discreto; as barras de nível ficam paradas
+  window.nub.on('nub:state', (state) => {
+    const paused = Boolean(state && state.paused);
+    document.body.classList.toggle('paused', paused);
+    const label = t(paused ? 'rec.resume' : 'rec.pause');
+    $('pause-label').textContent = label;
+    $('pause').title = t(paused ? 'rec.resume.title' : 'rec.pause.title');
+    $('pause').setAttribute('aria-label', $('pause').title);
+    $('pause').querySelector('.ico').innerHTML = '';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'currentColor');
+    svg.setAttribute('aria-hidden', 'true');
+    const shapes = paused ? [['path', { d: 'M8 5.5v13a1 1 0 0 0 1.5.9l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5z' }]] : [['rect', { x: 6, y: 5, width: 4, height: 14, rx: 1.2 }], ['rect', { x: 14, y: 5, width: 4, height: 14, rx: 1.2 }]];
+    for (const [tag, attrs] of shapes) {
+      const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+      svg.append(node);
+    }
+    $('pause').querySelector('.ico').append(svg);
+  });
   $('close').onclick = collapse;
   $('ask').onsubmit = (event) => {
     event.preventDefault();

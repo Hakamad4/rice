@@ -41,7 +41,7 @@ it('renderer: lista agrupada por dia, abre reunião e renomeia pelo título', as
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
 
   await vi.waitFor(() => expect(g.document.querySelectorAll('.group-label').length).toBe(2));
   expect([...g.document.querySelectorAll('.group-label')].map((n: any) => n.textContent)).toEqual(['Hoje', 'Ontem']);
@@ -80,7 +80,7 @@ it('renderer: painel "Pergunte ao Rice" recolhido sem reunião, lembra a escolha
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   const body = g.document.body;
   const toggle = g.document.getElementById('chat-toggle');
 
@@ -128,7 +128,7 @@ it('renderer: sem localStorage o painel ainda funciona', async () => {
     g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
       .replace(/<script[^>]*><\/script>/g, '')
       .replace(/^[\s\S]*?<html[^>]*>/, '');
-    for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+    for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
     await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
     g.document.querySelector('.meeting').click();
     await vi.waitFor(() => expect(g.document.body.classList.contains('chat-open')).toBe(true));
@@ -159,7 +159,7 @@ function bootDraft(state: string, startRecording: (input: unknown) => Promise<un
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
 }
 
 it('renderer: Gravar numa reunião draft aberta passa o dir dela (sem criar outra)', async () => {
@@ -217,7 +217,7 @@ async function boot(extra: Record<string, unknown> = {}, meetings = [{ dir: '/R/
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelectorAll('.meeting').length).toBe(meetings.length));
   return { rice, handlers };
 }
@@ -392,7 +392,7 @@ it('renderer: seletor de template na reunião; trocar numa reunião resumida ofe
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.querySelector('.tpl-picker .tpl-chip')).not.toBeNull());
@@ -424,7 +424,7 @@ it('renderer: tela Templates abre pela barra lateral', async () => {
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   g.document.getElementById('templates-link').click();
   await vi.waitFor(() => expect(g.document.querySelector('.tpl-block')).not.toBeNull());
   expect(g.document.querySelector('h1').textContent).toBe('Templates');
@@ -455,7 +455,7 @@ async function bootMeeting(notes: string, extra: Record<string, any> = {}) {
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.getElementById('page-title')).not.toBeNull());
@@ -531,7 +531,7 @@ it('renderer: após gravar a partir de um draft, o rótulo fica "Continuar grava
     on: (c: string, fn: any) => (handlers[c] = fn),
   };
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.getElementById('page-title')).not.toBeNull());
@@ -685,7 +685,7 @@ async function bootLang(uiLanguage: string, extra: Record<string, any> = {}, met
   g.window.rice = rice;
   g.localStorage.clear();
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'ai-providers', 'chat-tools', 'calendar-connect', 'menu-select', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'ai-providers', 'chat-tools', 'calendar-connect', 'menu-select', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   return { rice, handlers };
 }

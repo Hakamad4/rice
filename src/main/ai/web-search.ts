@@ -81,3 +81,9 @@ export function cleanSources(raw: readonly WebSource[], answer = ''): WebSource[
   }
   return [...out.filter((s) => s.cited), ...out.filter((s) => !s.cited)].slice(0, MAX_SOURCES).map(({ url, title }) => ({ url, title }));
 }
+
+/** Fontes lidas do histórico em disco: formato antigo (sem o campo) ou lixo viram lista vazia; o resto passa pelo mesmo filtro https. */
+export function storedSources(raw: unknown): WebSource[] {
+  if (!Array.isArray(raw)) return [];
+  return cleanSources(raw.filter((s): s is WebSource => typeof s === 'object' && s !== null && typeof (s as WebSource).url === 'string'));
+}

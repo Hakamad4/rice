@@ -104,6 +104,12 @@ export class AsrPipeline extends EventEmitter {
     await this.drained();
   }
 
+  /** Fecha agora a fala em andamento de cada canal (pausa da gravação): o fim da frase não espera pelo áudio seguinte. */
+  async flush(): Promise<void> {
+    await Promise.all([...this.channels.values()].map((c) => c.chain));
+    for (const channel of this.channels.values()) this.enqueueAll(channel, channel.segmenter.flush());
+  }
+
   retry(): void {
     if (!this.failed) return;
     this.failed = false;

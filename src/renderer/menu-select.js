@@ -85,6 +85,11 @@
       };
       paint();
       root.append(popover);
+      // perto da borda direita (ex. o seletor alinhado à direita nas Configurações): abre para a esquerda, sem rolagem horizontal
+      if (popover.getBoundingClientRect().right > document.documentElement.clientWidth - 8) {
+        popover.style.left = 'auto';
+        popover.style.right = '0';
+      }
       button.setAttribute('aria-expanded', 'true');
       const outside = (e) => {
         if (!root.contains(e.target)) close(false);

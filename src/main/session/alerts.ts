@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 
 /** O que o botão do aviso faz; quem executa é o main (abre um painel do sistema ou age na sessão). */
-export type AlertActionKind = 'open-storage' | 'open-mic-privacy' | 'open-audio-privacy' | 'keep-recording' | 'stop-recording' | 'resume-recording' | 'generate-notes' | 'recover-meeting';
+export type AlertActionKind = 'open-storage' | 'open-mic-privacy' | 'open-audio-privacy' | 'keep-recording' | 'stop-recording' | 'resume-recording' | 'generate-notes' | 'recover-meeting' | 'unpause-recording';
 
 export type Alert = {
   /** Estável por causa (ex.: `storage`, `source:sys`): atualizar o mesmo id troca o aviso, `clear` o remove. */

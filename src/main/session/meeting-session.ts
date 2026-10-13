@@ -63,6 +63,8 @@ export type SessionDeps = {
   forgottenEveryMs?: number;
   /** Prazo para esvaziar a fila de transcrição ao parar (padrão 30 s). */
   finishDeadlineMs?: number;
+  /** Pausado por este tempo: pergunta se quer parar (padrão 30 min). */
+  pauseAlertMs?: number;
 };
 
 /** Abaixo disto, avisa antes de gravar (uma reunião longa em AAC precisa de bem menos, mas o WAV temporário é ~230 MB/h). */
@@ -94,6 +96,11 @@ type Active = {
   audioGapFrom: number | null;
   /** Instante (ms desde o início) em que o Mac começou a dormir; `null` = acordado. */
   suspendedAtMs: number | null;
+  /** Instante (ms desde o início) em que o usuário pausou; `null` = gravando. A captura fica parada: nada é gravado nem transcrito. */
+  pausedAtMs: number | null;
+  /** Relógio de parede do início da pausa (para o aviso de pausa longa) e se o aviso já saiu. */
+  pausedAtWall: number;
+  pauseAlerted: boolean;
   watchdog: SourceWatchdog;
   /** Última fala transcrita (ms de relógio de parede) e quando o "ainda gravando?" foi mostrado. */
   lastSpeechAt: number;
@@ -130,6 +137,7 @@ const FORGOTTEN_AFTER_MS = 3 * 3_600_000;
 const FORGOTTEN_EVERY_MS = 3_600_000;
 /** Repouso menor que isto não vira lacuna (só reconstrói as fontes). */
 const MIN_SLEEP_GAP_MS = 2000;
+const PAUSE_ALERT_MS = 30 * 60_000;
 
 export class MeetingSession extends EventEmitter {
   state: SessionState = 'idle';
@@ -149,6 +157,11 @@ export class MeetingSession extends EventEmitter {
   get recording(): { recordedMs: number; othersSpoke: boolean } | null {
     const a = this.active;
     return a && this.state === 'recording' ? { recordedMs: this.now().getTime() - a.startedAt.getTime(), othersSpoke: a.othersSpoke } : null;
+  }
+
+  /** Gravação pausada pelo usuário (a sessão segue `recording`; nada é gravado nem transcrito). */
+  get paused(): boolean {
+    return this.active?.pausedAtMs != null && this.state === 'recording';
   }
 
   get currentDir(): string | null {
@@ -244,7 +257,7 @@ export class MeetingSession extends EventEmitter {
         onFailure: (kind) => this.onTranscriptFailure(kind),
         onRecovered: () => this.alerts.clear('storage:transcript'),
       }),
-      audioGapFrom: null, suspendedAtMs: null, watchdog: new SourceWatchdog(), lastSpeechAt: startedAt.getTime(), idlePromptAt: null, nextReminderAt: null, watchTimer: null, sourceGapFrom: {}, micRevoked: false, spaceTimer: null,
+      audioGapFrom: null, suspendedAtMs: null, pausedAtMs: null, pausedAtWall: 0, pauseAlerted: false, watchdog: new SourceWatchdog(), lastSpeechAt: startedAt.getTime(), idlePromptAt: null, nextReminderAt: null, watchTimer: null, sourceGapFrom: {}, micRevoked: false, spaceTimer: null,
       offsetMs: 0, lastMs: 0, lastStatus: 'idle', restartsWithoutFrames: 0,
       hasSegments: false, othersSpoke: false, incomplete: false, retrying: false, closing: false, sealed: false, restartTimer: null, writes: Promise.resolve(),
     };
@@ -422,6 +435,7 @@ export class MeetingSession extends EventEmitter {
     const offset = active.offsetMs;
     active.watchdog.captureStarted(this.now().getTime());
     capture.on('frame', (frame: AudioFrame) => {
+      if (active.pausedAtMs !== null) return; // pausado: nada é gravado nem transcrito (nem um quadro atrasado da captura que acabou de parar)
       active.restartsWithoutFrames = 0;
       this.watchEvents(active, active.watchdog.onFrame(frame.source, frame.pcm, this.now().getTime()));
       this.emit('frame', frame);
@@ -485,7 +499,7 @@ export class MeetingSession extends EventEmitter {
    */
   suspend(): void {
     const active = this.active;
-    if (!active || this.state !== 'recording' || active.closing || active.suspendedAtMs !== null) return;
+    if (!active || this.state !== 'recording' || active.closing || active.suspendedAtMs !== null || active.pausedAtMs !== null) return; // pausado: a captura já está parada
     active.suspendedAtMs = Math.max(this.now().getTime() - active.startedAt.getTime(), active.lastMs);
     if (active.restartTimer) clearTimeout(active.restartTimer);
     active.restartTimer = null;
@@ -524,8 +538,76 @@ export class MeetingSession extends EventEmitter {
   private watchTick(active: Active): void {
     if (active.closing || this.active !== active || active.suspendedAtMs !== null) return;
     const now = this.now().getTime();
+    if (active.pausedAtMs !== null) return this.pauseTick(active, now); // pausado: sem vigia das fontes, sem inatividade, sem parada automática
     this.watchEvents(active, active.watchdog.tick(now));
     this.policyTick(active, now);
+  }
+
+  /** Depois de ~30 min pausado, pergunta se quer parar (nunca para sozinho). */
+  private pauseTick(active: Active, now: number): void {
+    if (active.pauseAlerted || now - active.pausedAtWall < (this.deps.pauseAlertMs ?? PAUSE_ALERT_MS)) return;
+    active.pauseAlerted = true;
+    const message = t('alert.paused-long', { minutes: Math.round((now - active.pausedAtWall) / 60_000) });
+    this.alerts.set({ id: 'paused-long', level: 'warn', message, action: { kind: 'stop-recording', label: t('alert.action.stop') }, secondary: { kind: 'unpause-recording', label: t('rec.resume') } });
+    this.emit('attention', { kind: 'paused', message });
+  }
+
+  /**
+   * Pausa (sem parar): a captura é encerrada, então o microfone é liberado e nenhum quadro chega. A linha do tempo segue o
+   * relógio de parede (como no repouso do Mac): os offsets e horários depois da pausa continuam certos e o trecho fica
+   * registrado como lacuna `paused`. A fala em andamento é fechada na hora.
+   */
+  pause(): void {
+    const active = this.active;
+    if (!active || this.state !== 'recording' || active.closing || active.suspendedAtMs !== null || active.pausedAtMs !== null) return;
+    const now = this.now().getTime();
+    active.pausedAtMs = Math.max(now - active.startedAt.getTime(), active.lastMs);
+    active.pausedAtWall = now;
+    active.pauseAlerted = false;
+    if (active.restartTimer) clearTimeout(active.restartTimer);
+    active.restartTimer = null;
+    const old = active.capture;
+    this.lost.add(old);
+    void old.stop().catch(() => {});
+    void active.pipeline?.flush?.().catch(() => {});
+    for (const source of ['mic', 'sys'] as const) {
+      delete active.sourceGapFrom[source]; // a pausa não é falha de fonte
+      this.alerts.clear(`source:${source}`);
+    }
+    this.emit('pause', { dir: active.dir, paused: true });
+  }
+
+  /** Continua depois de uma pausa: marcador "pausado 14:03–14:07" na transcrição e a captura volta. */
+  unpause(): void {
+    const active = this.active;
+    if (!active || this.state !== 'recording' || active.closing || active.pausedAtMs === null) return;
+    this.closePause(active);
+    active.restartsWithoutFrames = 0;
+    active.lastSpeechAt = this.now().getTime(); // o silêncio da pausa não conta como inatividade
+    active.idlePromptAt = null;
+    this.alerts.clear('idle');
+    active.offsetMs = Math.max(this.now().getTime() - active.startedAt.getTime(), active.lastMs);
+    try {
+      this.attachCapture(active);
+    } catch (err) {
+      this.warn((err as Error).message);
+    }
+  }
+
+  /** Fecha o registro da pausa (marcador, lacuna no meta e avisos); a captura é com quem chama. */
+  private closePause(active: Active): void {
+    const fromMs = active.pausedAtMs;
+    if (fromMs === null) return;
+    active.pausedAtMs = null;
+    active.pauseAlerted = false;
+    this.alerts.clear('paused-long');
+    const toMs = Math.max(this.now().getTime() - active.startedAt.getTime(), fromMs);
+    this.enqueue(active, async () => {
+      await this.writeResumeMark(active);
+      await updateMeta(active.dir, (meta) => ({ ...meta, gaps: [...meta.gaps, { fromMs, toMs, reason: 'paused' }] }));
+      await active.sink.append(gapMarkerLine(active.startedAt, fromMs, toMs, active.markerLanguage, 'marker.paused'));
+    });
+    this.emit('pause', { dir: active.dir, paused: false, line: gapMarkerLine(active.startedAt, fromMs, toMs, active.markerLanguage, 'marker.paused').trim() }); // `line`: o marcador, para a transcrição ao vivo
   }
 
   private noteSpeech(active: Active): void {
@@ -618,7 +700,7 @@ export class MeetingSession extends EventEmitter {
 
   /** Reinicia a captura inteira (as duas fontes) pela via do vigia; a linha do tempo segue o relógio de parede. */
   private forceRestart(active: Active): void {
-    if (active.closing || active.restartTimer) return;
+    if (active.closing || active.restartTimer || active.pausedAtMs !== null) return;
     const old = active.capture;
     this.lost.add(old);
     void old.stop().catch(() => {});
@@ -637,7 +719,7 @@ export class MeetingSession extends EventEmitter {
   /** R-07: permissão do microfone revogada durante a gravação: aviso com atalho, sem laço de reinícios; quando volta, retoma. */
   private checkMicPermission(active: Active): void {
     const status = this.deps.micPermission?.();
-    if (!status || active.closing || this.active !== active) return;
+    if (!status || active.closing || this.active !== active || active.pausedAtMs !== null) return;
     const revoked = status === 'denied' || status === 'restricted';
     if (revoked && !active.micRevoked) {
       active.micRevoked = true;
@@ -721,6 +803,7 @@ export class MeetingSession extends EventEmitter {
     const endedAt = toLocalIso(this.now());
     this.setState('finishing');
     active.closing = true;
+    this.closePause(active); // parou pausado: a pausa vai até o fim e fica registrada
     if (active.restartTimer) clearTimeout(active.restartTimer);
     if (active.spaceTimer) clearInterval(active.spaceTimer);
     if (active.watchTimer) clearInterval(active.watchTimer);
@@ -737,7 +820,7 @@ export class MeetingSession extends EventEmitter {
     await step(() => updateMeta(active.dir, (meta) => ({ ...meta, state: 'finishing' })));
     // a captura parou: daqui para a frente nada mais depende da gravação ativa
     this.active = null;
-    for (const id of ['storage:low', 'storage:audio', 'idle', 'long']) this.alerts.clear(id);
+    for (const id of ['storage:low', 'storage:audio', 'idle', 'long', 'paused-long']) this.alerts.clear(id);
     this.alerts.clearPrefix('source:');
     const dir = active.dir;
     const fin: Promise<void> = this.finalize(active, step, endedAt, options).finally(() => {

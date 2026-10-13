@@ -140,3 +140,29 @@ it('chat global: leva o interruptor, mostra as fontes e "Nova conversa" volta a 
   await vi.waitFor(() => expect(rice.newGlobalChat).toHaveBeenCalled());
   await vi.waitFor(() => expect(toggle().getAttribute('aria-pressed')).toBe('false'));
 });
+
+it('ao reabrir a reunião as fontes salvas voltam junto da resposta (e histórico antigo, sem fontes, segue igual)', async () => {
+  const chat = [
+    { question: 'antiga', answer: 'sem fontes' },
+    { question: 'com busca', answer: 'Resposta', sources: [{ url: 'https://nodejs.org/en', title: 'Node.js' }, { url: 'javascript:alert(1)', title: 'x' }] },
+  ];
+  const { rice } = boot({ readMeeting: async () => ({ meta: { notesStatus: 'done', title: 'Kickoff', startedAt: new Date().toISOString(), state: 'done' }, transcript: '', annotations: '', notes: '', chat }) });
+  await ready();
+  await open('/R/a');
+  await vi.waitFor(() => expect(g.document.querySelectorAll('#messages .msg.rice').length).toBe(2));
+  const answers = [...g.document.querySelectorAll('#messages .msg.rice')] as any[];
+  expect(answers[0].querySelector('.web-sources')).toBeNull();
+  const links = answers[1].querySelectorAll('.web-source');
+  expect(links).toHaveLength(1);
+  links[0].click();
+  expect(rice.openLink).toHaveBeenCalledWith('https://nodejs.org/en');
+});
+
+it('chat global: o histórico mostra as fontes salvas de cada turno', async () => {
+  boot({ globalHistory: vi.fn(async () => [{ question: 'q', answer: 'a', citations: [], terms: [], scope: { kind: 'all' }, sources: [{ url: 'https://endoflife.date/nodejs', title: 'endoflife.date' }] }, { question: 'q2', answer: 'b', citations: [], terms: [], scope: { kind: 'all' } }]) });
+  await ready();
+  g.document.getElementById('scope-chip').click();
+  [...g.document.querySelectorAll('.action-item')].find((i: any) => /todas/i.test(i.textContent)).click();
+  await vi.waitFor(() => expect(g.document.querySelectorAll('#messages-global .msg.rice').length).toBe(2));
+  expect(g.document.querySelectorAll('#messages-global .web-sources')).toHaveLength(1);
+});

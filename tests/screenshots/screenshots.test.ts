@@ -232,8 +232,12 @@ describe('captura disparada pela fala', () => {
     const dir = await makeTmpDir();
     const frames: Array<Frame | null> = [];
     const asked: Array<{ context: string[]; candidates: string[] }> = [];
+    const hints: boolean[] = [];
     const deps: CaptureDeps = {
-      grab: async () => frames.shift() ?? null,
+      grab: async (hint) => {
+        hints.push(hint.preferWindow);
+        return frames.shift() ?? null;
+      },
       decide: async (context, candidates) => {
         asked.push({ context: context.map((c) => c.text), candidates: candidates.map((c) => c.text) });
         if (answer instanceof Error) throw answer;
@@ -248,7 +252,7 @@ describe('captura disparada pela fala', () => {
     // `startMs` = segundos desde o início da reunião
     const say = (sec: number, text: string, who = 'Outros') => cap.onSegment({ dir, who, text, startMs: sec * 1000 });
     const run = (ms: number) => vi.advanceTimersByTimeAsync(ms);
-    return { dir, cap, frames, asked, say, run };
+    return { dir, cap, frames, asked, say, run, hints };
   }
   const files = async (dir: string) => (await listShots(dir));
   // o disco é de verdade (só os timers são falsos): espera a gravação terminar
@@ -429,4 +433,36 @@ test('acha na transcrição o relógio gravado para a fala-gatilho (o mais recen
   const md = '# T\n\n**[10:00:05] Eu:** Vou compartilhar a tela.\n**[10:00:40] Outros:** certo\n**[10:01:10] Eu:** Vou compartilhar a tela.\n';
   expect(clockOfSegmentText(md, 'Vou compartilhar a tela.')).toBe('10:01:10');
   expect(clockOfSegmentText(md, 'outra coisa')).toBeNull();
+});
+
+describe('alvo da captura segue quem falou', () => {
+  test('fala de outra pessoa pede só a janela da chamada; a minha, a tela; a manual, a tela', async () => {
+    const a = await (async () => {
+      vi.useFakeTimers({ now: new Date(2026, 0, 1, 10, 0, 0), toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const dir = await makeTmpDir();
+      const hints: boolean[] = [];
+      const cap = new ScreenshotCapture({ grab: async (h) => (hints.push(h.preferWindow), { jpeg: Buffer.from('a'), hash: String(hints.length).padStart(16, '0').replace(/0/g, 'f').slice(0, 16) }), decide: async () => ({ capture: true, reason: 'x' }), nearestSegment: async () => null });
+      cap.start(dir, new Date(2026, 0, 1, 10, 0, 0));
+      return { dir, cap, hints };
+    })();
+    a.cap.onSegment({ dir: a.dir, who: 'Outros', text: 'Vou compartilhar a tela.', startMs: 1000 });
+    await vi.advanceTimersByTimeAsync(COLLECT_MS + CAPTURE_DELAY_MS + 100);
+    expect(a.hints).toEqual([true]);
+    await a.cap.captureNow();
+    expect(a.hints).toEqual([true, false]);
+    await vi.waitFor(async () => expect(await listShots(a.dir)).toHaveLength(2), { interval: 10 });
+    vi.useRealTimers();
+  });
+  test('fala minha (microfone): a tela inteira', async () => {
+    vi.useFakeTimers({ now: new Date(2026, 0, 1, 10, 0, 0), toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const dir = await makeTmpDir();
+    const hints: boolean[] = [];
+    const cap = new ScreenshotCapture({ grab: async (h) => (hints.push(h.preferWindow), { jpeg: Buffer.from('a'), hash: '0000000000000000' }), decide: async () => ({ capture: true, reason: 'x' }), nearestSegment: async () => null });
+    cap.start(dir, new Date(2026, 0, 1, 10, 0, 0));
+    cap.onSegment({ dir, who: 'Eu', text: 'Vou compartilhar a tela.', startMs: 1000 });
+    await vi.advanceTimersByTimeAsync(COLLECT_MS + CAPTURE_DELAY_MS + 100);
+    expect(hints).toEqual([false]);
+    await vi.waitFor(async () => expect(await listShots(dir)).toHaveLength(1), { interval: 10 }); // o arquivo termina de ser gravado antes de limpar a pasta
+    vi.useRealTimers();
+  });
 });

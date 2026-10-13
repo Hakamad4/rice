@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('nub', {
   uiLanguage: ipcRenderer.sendSync('i18n:language'),
   openMain: () => ipcRenderer.invoke('nub:open-main'),
   stop: () => ipcRenderer.invoke('nub:stop'),
+  pause: () => ipcRenderer.invoke('nub:pause'),
   expand: () => ipcRenderer.invoke('nub:expand'),
   collapse: () => ipcRenderer.invoke('nub:collapse'),
   ask: (question) => ipcRenderer.invoke('nub:ask', question),

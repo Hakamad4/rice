@@ -4,7 +4,8 @@ import { basename, dirname, join } from 'node:path';
 import { formatClock, meetingFolderName, sanitizeTitle, toLocalIso } from '../../shared/naming';
 import { t, type UiLanguage } from '../i18n';
 import { renameRetry } from '../platform/fs';
-import type { ChatTurn, MeetingMeta, MeetingTrigger, Segment } from '../../shared/types';
+import { storedSources } from '../ai/web-search';
+import type { ChatSource, ChatTurn, MeetingMeta, MeetingTrigger, Segment } from '../../shared/types';
 
 export const MEETING_FILES = {
   meta: 'meta.json',
@@ -155,10 +156,11 @@ export async function writeNotes(dir: string, markdown: string): Promise<void> {
   await writeAtomic(join(dir, MEETING_FILES.notes), markdown);
 }
 
-export async function appendChat(dir: string, at: Date, question: string, answer: string): Promise<void> {
+export async function appendChat(dir: string, at: Date, question: string, answer: string, sources: readonly ChatSource[] = []): Promise<void> {
   const block = `### [${formatClock(at)}] ${t('file.you')}\n${question.trim()}\n\n### Rice\n${answer.trim()}\n\n`;
   await appendFile(join(dir, MEETING_FILES.chat), block);
-  const line = JSON.stringify({ at: toLocalIso(at), question, answer });
+  // as fontes da web só vão no .jsonl (o chat.md fica como sempre); linhas antigas não têm o campo
+  const line = JSON.stringify({ at: toLocalIso(at), question, answer, ...(sources.length > 0 ? { sources } : {}) });
   await appendFile(join(dir, MEETING_FILES.chatLog), `${line}\n`);
 }
 
@@ -175,7 +177,10 @@ export async function readChat(dir: string): Promise<ChatTurn[]> {
     if (!line.trim()) continue;
     try {
       const o = JSON.parse(line) as Record<string, unknown>;
-      if (typeof o.question === 'string' && typeof o.answer === 'string') turns.push({ question: o.question, answer: o.answer });
+      if (typeof o.question === 'string' && typeof o.answer === 'string') {
+        const sources = storedSources(o.sources);
+        turns.push({ question: o.question, answer: o.answer, ...(sources.length > 0 ? { sources } : {}) });
+      }
     } catch {
       // linha malformada: ignora
     }

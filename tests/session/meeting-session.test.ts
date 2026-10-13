@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { expect, test, vi } from 'vitest';
 import { MeetingSession } from '../../src/main/session/meeting-session';
-import { createMeeting, readMeetingText, readMeta, writeMeta } from '../../src/main/store/meeting-files';
+import { createMeeting, readMeetingText, readMeta, updateMeta, writeMeta } from '../../src/main/store/meeting-files';
+import { recoverMeeting } from '../../src/main/session/recover-meeting';
 import type { AudioFrame } from '../../src/shared/frames';
 import { makeTmpDir } from '../helpers/tmp';
 
@@ -45,6 +46,8 @@ class FakePipeline extends EventEmitter {
     this.finished = true;
   }
   retry() { this.retried++; }
+  flushes = 0;
+  async flush() { this.flushes++; }
 }
 
 type SetupOpts = {
@@ -1009,4 +1012,156 @@ test('microfone que para de entregar blocos com o sistema saudável: a lacuna é
   await vi.waitFor(() => expect(session.alerts.has('source:mic')).toBe(false));
   await session.stop();
   expect((await readMeta(dir)).gaps.map((g) => g.reason)).toEqual(['source-mic']);
+});
+
+// ---- Pausa (sem parar) ----
+const at = (h: number, m: number, sec = 0) => new Date(2026, 9, 8, h, m, sec).getTime();
+
+test('pausa: a captura para (nada gravado nem transcrito), o marcador sai com o horário e depois da pausa os offsets seguem o relógio', async () => {
+  let clock = at(14, 3, 0);
+  const { session, captures, pipeline } = await setup({ now: () => new Date(clock), deps: { freeBytes: async () => null } });
+  const dir = await session.start({ title: 'Daily', trigger: 'manual' });
+  const events: boolean[] = [];
+  session.on('pause', (e: { paused: boolean }) => events.push(e.paused));
+  captures[0]!.emitFrames(20, 0); // 2 s
+  clock += 2000;
+  session.pause();
+  expect(session.paused).toBe(true);
+  expect(session.state).toBe('recording'); // pausar não é parar
+  expect(captures[0]!.stopped).toBe(1);
+  expect(pipeline.flushes).toBe(1); // a fala em andamento fecha na hora
+  const before = pipeline.frames.length;
+  captures[0]!.emitFrames(30, 2000); // quadro atrasado da captura que parou: descartado
+  clock += 4 * 60_000 - 2000; // 14:03 → 14:07
+  expect(pipeline.frames.length).toBe(before);
+  session.unpause();
+  expect(session.paused).toBe(false);
+  expect(captures).toHaveLength(2);
+  expect(captures[1]!.started).toBe(1);
+  captures[1]!.emitFrames(2, 0);
+  expect(pipeline.frames.at(-1)!.timestampMs).toBeGreaterThanOrEqual(4 * 60_000); // horário real: 4 min depois do começo
+  await vi.waitFor(async () => expect((await readMeta(dir)).gaps).toHaveLength(1));
+  const gap = (await readMeta(dir)).gaps[0]!;
+  expect(gap).toMatchObject({ reason: 'paused', fromMs: 2000, toMs: 4 * 60_000 });
+  expect(events).toEqual([true, false]);
+  await session.stop();
+  const text = await readMeetingText(dir, 'transcript');
+  expect(text).toContain('*[gravação pausada de 14:03 a 14:07]*');
+  expect((await readMeta(dir)).state).toBe('done');
+});
+
+test('pausar e continuar sem gravar, duas vezes seguidas ou durante o repouso do Mac não faz nada de estranho', async () => {
+  let clock = at(14, 0);
+  const { session, captures } = await setup({ now: () => new Date(clock), deps: { freeBytes: async () => null } });
+  session.pause();
+  session.unpause();
+  await session.start({ title: 'Daily', trigger: 'manual' });
+  session.unpause(); // sem pausa
+  expect(captures).toHaveLength(1);
+  session.pause();
+  session.pause();
+  expect(captures[0]!.stopped).toBe(1);
+  session.suspend(); // o Mac dorme pausado: nada a fazer
+  clock += 60_000;
+  session.resume();
+  expect(captures).toHaveLength(1); // acordar não religa a captura de uma gravação pausada
+  session.unpause();
+  expect(captures).toHaveLength(2);
+  await session.stop();
+});
+
+test('pausado: sem aviso de inatividade nem parada automática; ao continuar, o silêncio da pausa não conta', async () => {
+  let clock = at(14, 0);
+  const { session, captures } = await setup({ now: () => new Date(clock), deps: { freeBytes: async () => null, inactivityMs: () => 60_000, inactivityGraceMs: 1000, watchdogMs: 5 } });
+  await session.start({ title: 'Daily', trigger: 'manual' });
+  captures[0]!.emitFrames(10, 0);
+  session.pause();
+  clock += 20 * 60_000; // 20 min pausado, bem além do limite de inatividade
+  await new Promise((r) => setTimeout(r, 60));
+  expect(session.alerts.has('idle')).toBe(false);
+  expect(session.state).toBe('recording');
+  expect(session.paused).toBe(true);
+  session.unpause();
+  await new Promise((r) => setTimeout(r, 60));
+  expect(session.alerts.has('idle')).toBe(false); // lastSpeechAt foi renovado
+  expect(session.state).toBe('recording');
+  await session.stop();
+});
+
+test('depois de 30 min pausado, pergunta se quer parar (nunca para sozinho); continuar tira o aviso', async () => {
+  let clock = at(14, 0);
+  const { session } = await setup({ now: () => new Date(clock), deps: { freeBytes: async () => null, watchdogMs: 5 } });
+  const attention: Array<{ kind: string }> = [];
+  session.on('attention', (e: { kind: string }) => attention.push(e));
+  await session.start({ title: 'Daily', trigger: 'manual' });
+  session.pause();
+  clock += 29 * 60_000;
+  await new Promise((r) => setTimeout(r, 40));
+  expect(session.alerts.has('paused-long')).toBe(false);
+  clock += 2 * 60_000; // 31 min
+  await vi.waitFor(() => expect(session.alerts.has('paused-long')).toBe(true));
+  const alert = session.alerts.list().find((a) => a.id === 'paused-long')!;
+  expect(alert.message).toContain('31 min');
+  expect([alert.action?.kind, alert.secondary?.kind]).toEqual(['stop-recording', 'unpause-recording']);
+  expect(attention.map((a) => a.kind)).toEqual(['paused']);
+  await new Promise((r) => setTimeout(r, 40));
+  expect(attention).toHaveLength(1); // um aviso só
+  expect(session.state).toBe('recording');
+  session.unpause();
+  expect(session.alerts.has('paused-long')).toBe(false);
+  await session.stop();
+});
+
+test('parar pausado fecha a pausa (marcador até o fim) e finaliza a reunião normalmente', async () => {
+  let clock = at(14, 0);
+  const { session, captures } = await setup({ now: () => new Date(clock), deps: { freeBytes: async () => null } });
+  const dir = await session.start({ title: 'Daily', trigger: 'manual' });
+  captures[0]!.emitFrames(30, 0);
+  clock += 3000;
+  session.pause();
+  clock += 5 * 60_000;
+  await session.stop();
+  expect(session.state).toBe('idle');
+  expect(session.paused).toBe(false);
+  expect(await readMeetingText(dir, 'transcript')).toContain('*[gravação pausada de 14:00 a 14:05]*');
+  const meta = await readMeta(dir);
+  expect(meta.state).toBe('done');
+  expect(meta.gaps[0]).toMatchObject({ reason: 'paused', fromMs: 3000 });
+});
+
+test('queda durante a pausa: "Recuperar reunião" continua funcionando (o áudio fica alinhado com a linha do tempo)', async () => {
+  let clock = at(14, 0);
+  const { session, captures } = await setup({ now: () => new Date(clock), deps: { freeBytes: async () => null } });
+  const dir = await session.start({ title: 'Daily', trigger: 'manual' });
+  captures[0]!.emitFrames(30, 0);
+  clock += 3000;
+  session.pause();
+  clock += 2 * 60_000;
+  session.unpause();
+  captures[1]!.emitFrames(30, 0);
+  clock += 3000;
+  await new Promise((r) => setTimeout(r, 300)); // os blocos do WAV chegam ao disco
+  await updateMeta(dir, (m) => ({ ...m, state: 'interrupted' })); // o app caiu: ninguém chamou stop()
+  const frames: AudioFrame[] = [];
+  const result = await recoverMeeting(dir, {
+    createPipeline: async () => Object.assign(new EventEmitter(), { pushFrame: (f: AudioFrame) => frames.push(f), finish: async () => {} }) as never,
+    generateNotes: async () => {},
+    language: async () => 'pt' as const,
+    keepAudio: () => true,
+    encode: async (_w: string, m4a: string) => { await writeFile(m4a, 'm4a'); },
+  });
+  expect(result.audioRecovered).toBe(true);
+  expect((await readMeta(dir)).state).toBe('done');
+  expect(Math.max(...frames.map((f) => f.timestampMs), 0)).toBeGreaterThan(2 * 60_000); // o áudio de depois da pausa está na linha do tempo certa
+});
+
+test('o marcador de pausa segue o estilo dos outros marcadores discretos (repouso, retomada) e vem de t() nos dois idiomas', async () => {
+  const { gapMarkerLine } = await import('../../src/main/store/meeting-files');
+  const start = new Date(2026, 9, 8, 14, 0, 0);
+  const line = (language: 'pt-BR' | 'en', key: string) => gapMarkerLine(start, 3 * 60_000, 7 * 60_000, language, key).trim();
+  expect(line('pt-BR', 'marker.paused')).toBe('*[gravação pausada de 14:03 a 14:07]*');
+  expect(line('en', 'marker.paused')).toBe('*[recording paused from 14:03 to 14:07]*');
+  // mesma forma do marcador de repouso: asteriscos + colchetes, "gravação pausada de … a …"
+  expect(line('pt-BR', 'marker.sleep')).toMatch(/^\*\[gravação pausada de 14:03 a 14:07 — /);
+  expect(line('en', 'marker.sleep')).toMatch(/^\*\[recording paused from 14:03 to 14:07 — /);
 });

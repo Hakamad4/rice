@@ -185,7 +185,7 @@ function buildMeetingItem(m, inTree) {
   const item = build('div', { className: 'meeting' + (current === m.dir ? ' active' : '') + (inTree ? ' in-tree' : ''), title: `${m.title} — ${time}`, draggable: true }, [
     ...(inTree ? [build('span', { className: 'tree-dot' }, [])] : []),
     build('span', { className: 'm-title', textContent: m.title }, []),
-    ...(recState === 'recording' && recDir === m.dir ? [build('span', { className: 'live-dot', title: t('live.in-progress') }, [])] : []),
+    ...(recState === 'recording' && recDir === m.dir ? [build('span', { className: 'live-dot' + (recPaused ? ' paused' : ''), title: t(recPaused ? 'rec.paused' : 'live.in-progress') }, [])] : []),
     ...(m.state === 'interrupted' ? [build('span', { className: 'm-dot', title: t('meeting.interrupted') }, [])] : []),
     ...(m.state === 'damaged' ? [build('span', { className: 'm-dot', title: t('meeting.damaged') }, [])] : []),
     build('small', { textContent: m.state === 'finishing' ? t('meeting.finishing') : time }, []),
@@ -728,7 +728,7 @@ function drawProgress(dir) {
 const effectiveTemplate = (data, list) => list.templates.find((t) => t.id === data.meta.templateId) || list.templates.find((t) => t.id === list.defaultId) || null;
 
 /** Área "Notas": chip de template, banner de regerar, e o corpo (cartão do template sem notas; notas + link com notas). */
-function notesArea(dir, data, list) {
+function notesArea(dir, data, list, generateAction) {
   let template = effectiveTemplate(data, list);
   const body = build('div', { className: 'notes-body' }, []);
   const progress = build('p', { className: 'notes-progress', hidden: true }, []);
@@ -773,7 +773,7 @@ function notesArea(dir, data, list) {
     body.replaceChildren(...nodes);
   };
   drawBody();
-  if (list.templates.length === 0) return [progress, body];
+  if (list.templates.length === 0) return [...(generateAction ? [build('div', { className: 'tpl-picker' }, [build('span', { className: 'tpl-right' }, [generateAction])])] : []), progress, body];
   const picker = window.RiceTemplatePicker.create({
     templates: list.templates,
     selectedId: template && template.id,
@@ -795,7 +795,7 @@ function notesArea(dir, data, list) {
   });
   // histórico de versões: o chip só aparece quando já existe alguma
   const versionsHost = build('span', { className: 'ver-host' }, []);
-  const pickerRow = build('div', { className: 'tpl-picker' }, [picker.root, versionsHost, banner]); // uma linha de 32px: template à esquerda, versões à direita
+  const pickerRow = build('div', { className: 'tpl-picker' }, [picker.root, build('span', { className: 'tpl-right' }, [...(generateAction ? [generateAction] : []), versionsHost]), banner]); // uma linha de 32px: template à esquerda, versões à direita
   const drawVersions = async () => {
     if (!window.rice.notesVersions) return;
     const versions = await window.rice.notesVersions(dir).catch(() => []);
@@ -991,16 +991,18 @@ async function openMeeting(dir, opts = {}) {
   await screens.setDir(dir, transcriptNode); // miniaturas no ponto do tempo; as notas só citam capturas desta lista
   if (current !== dir) return;
   const extras = [];
+  let generateAction = null;
   if (!openIsDraft && data.meta.notesStatus !== 'done' && !(recState !== 'idle' && recDir === dir) && !(notesPending.has(dir) && data.transcript.includes('**[')) && !notesProgress.has(dir)) {
-    const gen = build('button', { textContent: t('notes.generate') }, []);
+    // ação discreta ao lado do seletor de template (aba Notas), no mesmo estilo dos chips dali
+    const gen = build('button', { type: 'button', className: 'tpl-chip gen-chip' }, [window.RiceIcons.icon('sparkles'), build('span', { textContent: t('notes.generate') }, [])]);
     gen.onclick = async () => {
       gen.disabled = true;
-      gen.textContent = t('notes.generating');
+      gen.lastChild.textContent = t('notes.generating');
       const result = await window.rice.generateNotes(dir);
       if (!result.ok) setWarning(t('notes.failed', { message: result.message }));
       if (current === dir) openMeeting(dir);
     };
-    extras.push(gen);
+    generateAction = gen;
   }
   if (data.meta.state === 'interrupted' && !(recState !== 'idle' && recDir === dir) && window.rice.recoverMeeting) extras.push(recoverNote(dir));
   const metaNode = metaLine(data.meta);
@@ -1016,7 +1018,7 @@ async function openMeeting(dir, opts = {}) {
   document.body.dataset.attachDrop = t('attach.drop');
   attachments.setDir(dir);
   const tabs = meetingTabs(dir, {
-    notes: [...notesArea(dir, data, templateList), annotations.heading, annotations.body, ...section(t('attach.title'), attachments.node)], // sem o rótulo "Notas" repetido: a aba já se chama assim
+    notes: [...notesArea(dir, data, templateList, generateAction), annotations.heading, annotations.body, ...section(t('attach.title'), attachments.node)], // sem o rótulo "Notas" repetido: a aba já se chama assim
     transcript: transcriptNode,
     recording: recState !== 'idle' && recDir === dir,
     hasNotes: Boolean(data.notes),
@@ -1047,7 +1049,7 @@ async function openMeeting(dir, opts = {}) {
   }
   const messages = $('messages');
   messages.replaceChildren();
-  for (const turn of data.chat) addTurn(turn.question, turn.answer);
+  for (const turn of data.chat) addTurn(turn.question, turn.answer, turn.sources);
   if (data.chat.length === 0) messages.append(build('p', { className: 'empty', textContent: t('chat.none') }, []));
   $('question').disabled = false;
   $('send').disabled = false;
@@ -1341,6 +1343,23 @@ let chatPref = readChatPref();
 /** "Buscar na web" do chat (criado mais abaixo): ligado por conversa, só para as perguntas feitas com ele ligado. */
 let webSearch = null;
 const webOn = () => webSearch !== null && webSearch.isOn();
+/** Bolha da pergunta com o ⋯ (aparece ao passar o mouse ou focar): "Salvar como pergunta pronta". */
+function userBubble(question) {
+  const more = build('button', { type: 'button', className: 'msg-more' }, [window.RiceIcons.icon('more')]);
+  more.title = t('chat.prompts.msg-more');
+  more.setAttribute('aria-label', t('chat.prompts.msg-more'));
+  more.setAttribute('aria-haspopup', 'menu');
+  more.onclick = () => {
+    const can = promptChips ? promptChips.canSave(question) : { ok: false, reason: '' };
+    window.RiceActionMenu.open({ anchor: more, items: [{ label: t('chat.prompts.save'), icon: 'plus', disabled: !can.ok, ...(can.reason ? { title: can.reason } : {}), onSelect: () => promptChips.save(question) }] });
+  };
+  const bubble = build('p', { className: 'msg user' }, [question, more]);
+  bubble.dataset.question = question; // "Salvar a última pergunta" do menu de perguntas prontas
+  return bubble;
+}
+
+/** Perguntas prontas abaixo do campo (criadas mais abaixo); só aparecem com o chat da vez vazio. */
+let promptChips = null;
 const openWebSource = (url) => {
   if (window.RiceWebSearch.safeUrl(url)) window.rice.openLink(url);
 };
@@ -1398,8 +1417,10 @@ function openCitation(citation, terms) {
 
 function renderGlobalTurn(box, turn) {
   const message = build('div', { className: 'msg rice' }, [build('div', { className: 'md' }, [])]);
-  box.append(build('p', { className: 'msg user' }, [turn.question]), message);
+  box.append(userBubble(turn.question), message);
   window.RiceGlobalChat.fillAnswer(message.lastChild, message, md(turn.answer), turn.citations || [], (c) => openCitation(c, turn.terms));
+  const web = window.RiceWebSearch.sourcesBox(turn.sources, openWebSource);
+  if (web) message.append(web);
 }
 
 function showGlobalEmpty() {
@@ -1528,14 +1549,16 @@ $('send').addEventListener('click', (e) => {
   window.rice.cancel(stopChatId);
 });
 
-function addTurn(question, answer) {
+function addTurn(question, answer, sources) {
   const messages = $('messages');
   messages.querySelector('.empty')?.remove();
   const answerNode = build('div', { className: 'md' }, answer ? [md(answer)] : []);
   messages.append(
-    build('p', { className: 'msg user' }, [question]),
+    userBubble(question),
     build('div', { className: 'msg rice' }, [answerNode]),
   );
+  const web = window.RiceWebSearch.sourcesBox(sources, openWebSource); // histórico: as fontes da busca voltam junto da resposta
+  if (web) messages.lastElementChild.append(web);
   messages.scrollTop = messages.scrollHeight;
   return answerNode;
 }
@@ -1574,7 +1597,7 @@ async function askGlobal(question) {
     if (label && streamRaw === '') label.textContent = t('chat.thinking');
   }, 1500);
   const message = build('div', { className: 'msg rice' }, [answerNode]);
-  box.append(build('p', { className: 'msg user' }, [question]), message);
+  box.append(userBubble(question), message);
   box.scrollTop = box.scrollHeight;
   streamNode = answerNode;
   streamRaw = '';
@@ -1789,11 +1812,15 @@ function renderLangChip() {
 
 // reunião em andamento: tempo decorrido, item fixo na barra lateral, cartão no Início e o botão da faixa levando até ela
 let recStartedAt = 0;
+/** Gravação pausada: o tempo parado não conta no relógio. */
+let recPaused = false;
+let pausedSince = 0;
+let pausedTotal = 0;
 let liveTimer = null;
 /** Gravando uma reunião que não é a aberta agora: o botão da faixa vira "tempo · Abrir reunião". */
 const liveAway = () => recState === 'recording' && Boolean(recDir) && current !== recDir;
 function elapsedText() {
-  const total = Math.max(0, Math.floor((Date.now() - recStartedAt) / 1000));
+  const total = Math.max(0, Math.floor((Date.now() - recStartedAt - pausedTotal - (recPaused ? Date.now() - pausedSince : 0)) / 1000));
   const two = (n) => String(n).padStart(2, '0');
   const h = Math.floor(total / 3600);
   return h > 0 ? `${h}:${two(Math.floor((total % 3600) / 60))}:${two(total % 60)}` : `${two(Math.floor(total / 60))}:${two(total % 60)}`;
@@ -1807,19 +1834,25 @@ function renderLive() {
   const item = $('live-item');
   item.hidden = !on;
   if (on) {
-    const label = t('live.item', { title: liveTitle(), time: elapsedText() });
+    const label = t(recPaused ? 'live.item-paused' : 'live.item', { title: liveTitle(), time: elapsedText() }); // pausado: "Pausado · título · 00:18" (o relógio está parado)
     const text = item.querySelector('.live-text');
     if (text) {
       if (text.textContent !== label) text.textContent = label; // a cada segundo só o texto muda (sem recriar o ponto nem o botão)
     } else {
       item.replaceChildren(build('span', { className: 'live-dot' }, []), build('span', { className: 'live-text', textContent: label }, []));
     }
+    const dot = item.querySelector('.live-dot');
+    if (dot) dot.classList.toggle('paused', recPaused);
     if (item.title !== label) item.title = label;
     item.classList.toggle('active', current === recDir);
   }
   const home = $('detail').querySelector('.live-card');
   if (home && !on) home.remove();
-  if (home && on) home.querySelector('.live-card-text').textContent = `${liveTitle()} · ${elapsedText()}`;
+  if (home && on) {
+    home.querySelector('.live-card-text').textContent = `${liveTitle()} · ${elapsedText()}`;
+    home.querySelector('.live-dot').classList.toggle('paused', recPaused);
+    home.querySelector('small').textContent = t(recPaused ? 'rec.paused' : 'live.in-progress');
+  }
   if (!home && on && view === 'home') {
     const box = $('detail').querySelector('.page');
     if (box) box.prepend(liveCard());
@@ -1829,9 +1862,9 @@ function liveCard() {
   const open = build('button', { type: 'button', textContent: t('live.open-short') }, []);
   open.onclick = () => recDir && openMeeting(recDir);
   return build('div', { className: 'live-card' }, [
-    build('span', { className: 'live-dot' }, []),
+    build('span', { className: 'live-dot' + (recPaused ? ' paused' : '') }, []),
     build('div', { className: 'live-card-body' }, [
-      build('small', { textContent: t('live.in-progress') }, []),
+      build('small', { textContent: t(recPaused ? 'rec.paused' : 'live.in-progress') }, []),
       build('span', { className: 'live-card-text', textContent: `${liveTitle()} · ${elapsedText()}` }, []),
     ]),
     open,
@@ -1839,13 +1872,60 @@ function liveCard() {
 }
 $('live-item').onclick = () => recDir && openMeeting(recDir);
 function syncLiveTimer() {
-  if (recState === 'recording' && !liveTimer) liveTimer = setInterval(() => (renderLive(), renderRecLabel()), 1000);
+  if (recState === 'recording' && !liveTimer) liveTimer = setInterval(() => (renderLive(), renderRecLabel(), recPaused && renderPause()), 1000);
   if (recState !== 'recording' && liveTimer) {
     clearInterval(liveTimer);
     liveTimer = null;
   }
   renderLive();
 }
+
+function setPaused(on) {
+  on = Boolean(on);
+  if (on === recPaused) return;
+  if (on) pausedSince = Date.now();
+  else {
+    pausedTotal += Date.now() - pausedSince;
+    pausedSince = 0;
+  }
+  recPaused = on;
+  renderPause();
+  renderLive();
+  renderRecButton();
+  refreshList(); // o ponto do item da reunião vira âmbar (e volta a vermelho)
+}
+
+/** "Pausar"/"Continuar" ao lado de "Parar" e o selo âmbar "Pausado"; só durante a gravação. */
+function renderPause() {
+  const btn = $('pause');
+  const on = recState === 'recording' && recPaused;
+  btn.hidden = recState !== 'recording';
+  btn.classList.toggle('paused', on);
+  const stopped = on ? pausedText() : '';
+  const label = on ? `${t('rec.resume')} · ${stopped}` : t('rec.pause'); // o estado vive no próprio botão: "Continuar · 12:03" (tempo parado)
+  const span = btn.querySelector('.pause-label');
+  if (span && btn.dataset.paused === String(on)) {
+    if (span.textContent !== label) span.textContent = label; // a cada segundo só o texto muda
+  } else {
+    btn.replaceChildren(window.RiceIcons.icon(on ? 'play' : 'pause'), build('span', { className: 'pause-label', textContent: label }, []));
+    btn.dataset.paused = String(on);
+  }
+  btn.title = on ? `${t('rec.resume.title')} · ${t('rec.paused')} ${stopped}` : t('rec.pause.title'); // na faixa estreita só o ícone: o estado e o tempo ficam no title
+  btn.setAttribute('aria-label', btn.title);
+}
+/** Há quanto tempo está pausado (mm:ss, ou h:mm:ss). */
+function pausedText() {
+  const total = Math.max(0, Math.floor((Date.now() - pausedSince) / 1000));
+  const two = (n) => String(n).padStart(2, '0');
+  const h = Math.floor(total / 3600);
+  return h > 0 ? `${h}:${two(Math.floor((total % 3600) / 60))}:${two(total % 60)}` : `${two(Math.floor(total / 60))}:${two(total % 60)}`;
+}
+$('pause').onclick = () => (recPaused ? window.rice.unpauseRecording() : window.rice.pauseRecording());
+window.rice.on('session:pause', ({ dir, paused, line }) => {
+  setPaused(paused);
+  // o marcador "pausado 14:03–14:07" aparece na transcrição ao vivo assim que se continua
+  if (!paused && line && dir === current && transcriptNode) liveScroll.follow(() => addTranscriptLines(line));
+});
 
 function renderRecLabel() {
   const resume = current !== null && openIsRecorded;
@@ -1861,6 +1941,8 @@ function renderRecButton() {
   const btn = $('rec');
   btn.disabled = recState === 'finishing';
   btn.classList.toggle('recording', recState === 'recording');
+  btn.classList.toggle('paused', recState === 'recording' && recPaused);
+  renderPause();
   renderRecLabel();
   if (recState === 'idle') {
     lastAsrStatus = null;
@@ -1896,13 +1978,19 @@ window.rice.on('session:state', async (state) => {
   const was = recState;
   recState = state;
   if (state === 'recording' && !recStartedAt) recStartedAt = Date.now();
-  if (state === 'idle') recStartedAt = 0;
+  if (state === 'idle') {
+    recStartedAt = 0;
+    recPaused = false;
+    pausedSince = 0;
+    pausedTotal = 0;
+  }
   renderRecButton();
   if (state === 'idle') {
     recDir = null;
   } else {
     const info = await window.rice.sessionState();
     recDir = info.dir;
+    setPaused(info.paused === true);
     if (info.dir) markRecorded(info.dir);
     if (state === 'finishing' && info.dir) notesPending.add(info.dir);
   }
@@ -2008,15 +2096,36 @@ window.rice.on('asr:download-progress', ({ receivedBytes, totalBytes }) => {
   renderStatus();
 });
 
-window.rice.sessionState().then(({ state, dir }) => {
+window.rice.sessionState().then(({ state, dir, paused }) => {
   recState = state;
   recDir = dir;
+  setPaused(paused === true);
   renderRecButton();
   syncShotsChip();
 });
 
 /** Indicador discreto “via …” perto do chat; relê o provedor ativo quando o guia o troca. */
 const aiChip = window.rice.aiStatus ? window.RiceAiChip.create({ rice: window.rice, node: $('ai-via'), onConfigure: () => showGuide('ai'), onSettings: () => showSettings('ai') }) : null;
+const activeMessages = () => $(isGlobalScope() ? 'messages-global' : 'messages');
+promptChips = window.RicePromptsMenu.create({
+  button: $('prompts-btn'),
+  saved: [],
+  persist: (list) => (window.rice.setSavedPrompts ? window.rice.setSavedPrompts(list) : Promise.resolve(list)),
+  defaults: () => (isGlobalScope()
+    ? [{ label: t('chat.prompt.week'), prompt: t('chat.prompt.week-q') }, { label: t('chat.prompt.decisions'), prompt: t('chat.prompt.decisions-q') }, { label: t('chat.prompt.owners'), prompt: t('chat.prompt.owners-q') }]
+    : [{ label: t('chat.prompt.summary'), prompt: t('chat.prompt.summary-q') }, { label: t('chat.prompt.next'), prompt: t('chat.prompt.next-q') }, { label: t('chat.prompt.risks'), prompt: t('chat.prompt.risks-q') }]),
+  canSend: () => (isGlobalScope() ? !globalBusy : current !== null && !$('question').disabled) && $('send').dataset.stop !== '1',
+  lastQuestion: () => {
+    const asked = activeMessages().querySelectorAll('.msg.user');
+    return asked.length > 0 ? asked[asked.length - 1].dataset.question || '' : '';
+  },
+  onSend: (prompt) => {
+    $('question').value = prompt;
+    fitQuestion();
+    $('ask').requestSubmit();
+  },
+});
+if (window.rice.getSettings) window.rice.getSettings().then((s) => promptChips.set(s.savedPrompts)).catch(() => {});
 webSearch = window.RiceWebSearch.create({
   button: $('web-toggle'),
   note: $('web-note'),

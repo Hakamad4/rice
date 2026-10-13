@@ -158,6 +158,7 @@ describe('arquivo chat-global.jsonl', () => {
 
 describe('Buscar na web no chat entre reuniões', () => {
   const run = async (webOn: boolean | 'throws') => {
+    let rootDir = '';
     const seen: any[] = [];
     const runner: AiRunner = {
       async *run(o) {
@@ -167,13 +168,14 @@ describe('Buscar na web no chat entre reuniões', () => {
         return 'Resposta';
       },
     };
-    const { deps } = await setup(runner);
+    const { root, deps } = await setup(runner);
+    rootDir = root;
     deps.web = async () => {
       if (webOn === 'throws') throw new AiError('other', 'sem busca neste provedor');
       return webOn;
     };
     const result = await askAcrossMeetings(deps, 'Qual o orçamento da Acme?', { kind: 'all' }, new AbortController().signal, () => {});
-    return { result, seen };
+    return { result, seen, root: rootDir };
   };
 
   test('desligada: sem ferramentas e sem fontes', async () => {
@@ -185,6 +187,7 @@ describe('Buscar na web no chat entre reuniões', () => {
   test('ligada: o runner recebe a busca (sem MCP) e a resposta traz as fontes', async () => {
     const { result, seen } = await run(true);
     expect(seen[0]).toMatchObject({ web: true, mcp: false });
+    expect(result).toMatchObject({ sources: [{ url: 'https://nodejs.org/docs' }] });
     expect(result).toMatchObject({ ok: true, sources: [{ url: 'https://nodejs.org/docs', title: 'Node' }] });
   });
 
@@ -192,5 +195,12 @@ describe('Buscar na web no chat entre reuniões', () => {
     const { result, seen } = await run('throws');
     expect(seen).toEqual([]);
     expect(result).toMatchObject({ ok: false, message: 'sem busca neste provedor' });
+  });
+
+  test('as fontes ficam salvas no turno da conversa', async () => {
+    const { root } = await run(true);
+    expect((await readGlobalConversation(root))[0]).toMatchObject({ sources: [{ url: 'https://nodejs.org/docs', title: 'Node' }] });
+    const off = await run(false);
+    expect((await readGlobalConversation(off.root))[0]!.sources).toBeUndefined();
   });
 });

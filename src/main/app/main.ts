@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, session as electronSession, nativeImage, nativeTheme, Notification, powerMonitor, safeStorage, screen, shell, systemPreferences, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, globalShortcut, ipcMain, Menu, session as electronSession, nativeImage, nativeTheme, Notification, powerMonitor, safeStorage, screen, shell, systemPreferences, Tray } from 'electron';
 import { CalendarFeed } from '../calendar/calendar-feed';
 import { fromEventKit } from '../calendar/google-events';
 import { GoogleAuth } from '../calendar/google-auth';
@@ -42,6 +42,8 @@ import { runChat } from '../ai/chat-run';
 import { readBuildInfo, type BuildInfo } from '../update/build-info';
 import { createUpdateChecker, RELEASES_URL, type UpdateState } from '../update/check';
 import { openUpdateInTerminal } from '../update/terminal';
+import { createShortcutManager, toggleRecording, SHORTCUT_NONE } from './record-shortcut';
+import { normalizeSavedPrompts } from '../../shared/saved-prompts';
 import { webSearchSupported } from '../ai/web-search';
 import { guardedIpc, lockdownWebContents } from './hardening';
 import { decideMeetingEnd } from '../session/stop-policy';
@@ -92,7 +94,7 @@ import { configureLongNotes, type NotesProgress } from '../session/long-notes';
 import type { AlertActionKind } from '../session/alerts';
 import { saveAnnotations } from '../store/annotations';
 
-type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ checkUpdates?: boolean; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean };
+type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean };
 
 const tokenCrypto: TokenCrypto = {
   encrypt: (plain) => safeStorage.encryptString(plain),
@@ -497,6 +499,7 @@ function updateNub(): void {
   const w = window && !window.isDestroyed() ? window : null;
   nub?.update({
     recording: session?.state === 'recording',
+    paused: session?.paused === true,
     mainFocused: Boolean(w?.isFocused()),
     mainVisible: Boolean(w?.isVisible() && !w.isMinimized()),
   });
@@ -629,8 +632,9 @@ function applyUiLanguage(language: UiLanguage): void {
 function updateTray(state: SessionState = session?.state ?? 'idle'): void {
   if (!tray) return;
   // o logo (imagem template) fica sempre; só o texto muda durante a gravação, sem emoji
-  if (isMac()) tray.setTitle(state === 'recording' ? ' REC' : state === 'finishing' ? ' …' : '');
-  else tray.setToolTip(state === 'recording' ? t('tray.tooltip-recording') : 'Rice'); // Windows: sem texto ao lado do ícone; o estado vai na dica
+  const paused = session?.paused === true && state === 'recording';
+  if (isMac()) tray.setTitle(paused ? ` ${t('rec.paused').toUpperCase()}` : state === 'recording' ? ' REC' : state === 'finishing' ? ' …' : '');
+  else tray.setToolTip(paused ? t('rec.paused') : state === 'recording' ? t('tray.tooltip-recording') : 'Rice'); // Windows: sem texto ao lado do ícone; o estado vai na dica
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
@@ -640,6 +644,7 @@ function updateTray(state: SessionState = session?.state ?? 'idle'): void {
           ensureMicAccess().then(() => session?.start({ title: t('meeting.default-title'), trigger: 'manual' })).catch((err: Error) => dialog.showErrorBox('Rice', err.message));
         },
       },
+      { label: paused ? t('rec.resume') : t('rec.pause'), enabled: state === 'recording', click: () => (paused ? session?.unpause() : session?.pause()) },
       { label: t('tray.stop'), enabled: state === 'recording', click: () => void session?.stop() },
       { type: 'separator' },
       { label: t('tray.open'), click: createWindow },
@@ -687,6 +692,8 @@ async function runAlertAction(s: MeetingSession, kind: AlertActionKind, dir?: st
       return s.stop();
     case 'keep-recording':
       return s.keepRecording();
+    case 'unpause-recording':
+      return s.unpause();
     case 'resume-recording':
       if (id) s.alerts.clear(id);
       if (dir && s.state === 'idle') {
@@ -731,12 +738,14 @@ function setupSession(runner: AiRunner): AsrService {
   session = s;
   s.alerts.on('change', (list) => send('session:alerts', list));
   // lembretes que merecem uma notificação do sistema (o app pode estar em segundo plano durante a reunião)
-  s.on('attention', ({ kind, message }: { kind: 'idle' | 'long' | 'auto-stopped'; message: string }) => {
+  s.on('attention', ({ kind, message }: { kind: 'idle' | 'long' | 'auto-stopped' | 'paused'; message: string }) => {
     notify({
       title: message,
-      actionText: kind === 'auto-stopped' ? t('alert.action.resume') : t('alert.action.keep'),
+      actionText: kind === 'auto-stopped' ? t('alert.action.resume') : kind === 'paused' ? t('alert.action.stop') : t('alert.action.keep'),
       onAction: () => {
-        if (kind === 'auto-stopped') {
+        if (kind === 'paused') {
+          void s.stop();
+        } else if (kind === 'auto-stopped') {
           const a = s.alerts.list().find((x) => x.id === 'auto-stopped');
           if (a) void runAlertAction(s, 'resume-recording', a.dir, a.id).catch((err: Error) => dialog.showErrorBox('Rice', err.message));
         } else {
@@ -750,6 +759,14 @@ function setupSession(runner: AiRunner): AsrService {
   }
   s.on('state', updateTray);
   s.on('state', updateNub);
+  s.on('pause', (e: { dir: string; paused: boolean }) => {
+    send('session:pause', e);
+    updateTray();
+    updateNub();
+    syncScreenshots(); // pausado: nenhuma captura de tela
+    if (e.paused) warRoom.engine.stop(e.dir); // pausado: os ciclos de ideias e de war room também
+    else warRoom.onSessionState('recording', e.dir);
+  });
   // gravação iniciada fora da janela (aviso de reunião, notificação): a tela relê o estado agora que o dir existe
   s.on('active', () => send('session:state', s.state));
   // falas ainda não finalizadas (parciais atuais de cada fonte): entram nos ciclos como "provisório"
@@ -775,7 +792,7 @@ function setupSession(runner: AiRunner): AsrService {
     language: async (d) => ((await notesLanguageOf(await readMeta(d))).headings === 'en' ? 'en' : 'pt-BR'),
     transcript: (d) => readMeetingText(d, 'transcript'),
     partials: (d) => [...(livePartials.get(d) ?? new Map<string, { text: string; at: number }>())].filter(([, p]) => p.text && Date.now() - p.at < 8000).map(([source, p]) => `${source}: ${p.text}`), // parcial parado há 8 s não conta (alucinação sem final)
-    isRecording: (d) => s.state === 'recording' && s.currentDir === d,
+    isRecording: (d) => s.state === 'recording' && !s.paused && s.currentDir === d, // pausado: sem ciclos
     pickFolder: async () => {
       const options = { title: t('warroom.src.folder'), properties: ['openDirectory' as const] };
       const result = window && !window.isDestroyed() ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
@@ -823,7 +840,7 @@ function setupSession(runner: AiRunner): AsrService {
   // capturas de tela: só enquanto grava, só com a opção ligada; as imagens só vão ao provedor de IA ativo (e só se ele aceita imagem)
   const shotLanguage = async (d: string): Promise<'pt' | 'en'> => ((await notesLanguageOf(await readMeta(d))).headings === 'en' ? 'en' : 'pt');
   const screenshotCapture = new ScreenshotCapture({
-    grab: TEST_INSTANCE && process.env.RICE_SHOT_SOURCE_DIR ? grabFromFolder(process.env.RICE_SHOT_SOURCE_DIR) : grabScreen, // RICE_SHOT_SOURCE_DIR: só instâncias de teste, quadros prontos no lugar da tela
+    grab: TEST_INSTANCE && process.env.RICE_SHOT_SOURCE_DIR ? grabFromFolder(process.env.RICE_SHOT_SOURCE_DIR) : (hint) => grabScreen({ apps: [...activeMeetingApps], preferWindow: hint.preferWindow }), // o detector diz qual app usa o microfone; RICE_SHOT_SOURCE_DIR: só instâncias de teste, quadros prontos no lugar da tela
     // a decisão é só por texto (últimos ~60 s + o trecho candidato): vale para qualquer provedor, inclusive os CLIs
     decide: async (context, candidates, d) => decideCapture(lightRunner ?? runner, await shotLanguage(d), context, candidates),
     // com provedor que aceita imagem, a legenda pode ser refinada pela imagem; sem ele fica o motivo da fala
@@ -842,9 +859,9 @@ function setupSession(runner: AiRunner): AsrService {
   });
   const syncScreenshots = () => {
     const dir = s.currentDir;
-    if (cachedSettings.screenshots === true && s.state === 'recording' && dir) {
+    if (cachedSettings.screenshots === true && s.state === 'recording' && !s.paused && dir) {
       void readMeta(dir).then((meta) => {
-        if (cachedSettings.screenshots === true && s.state === 'recording' && s.currentDir === dir) screenshotCapture.start(dir, new Date(meta.startedAt));
+        if (cachedSettings.screenshots === true && s.state === 'recording' && !s.paused && s.currentDir === dir) screenshotCapture.start(dir, new Date(meta.startedAt));
       }).catch((err) => logError('screenshots', err));
     } else screenshotCapture.stop();
   };
@@ -871,7 +888,7 @@ function setupSession(runner: AiRunner): AsrService {
       if (process.platform === 'darwin') void shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
     },
     isRecording: (d) => s.state === 'recording' && s.currentDir === d,
-    captureNow: async () => s.state === 'recording' && (await screenshotCapture.captureNow()) !== null,
+    captureNow: async () => s.state === 'recording' && !s.paused && (await screenshotCapture.captureNow()) !== null,
   });
   let warRoomDir: string | null = null;
   const warRoomBeat = setInterval(() => warRoom.ensure(s.currentDir), 15_000);
@@ -935,12 +952,26 @@ function setupSession(runner: AiRunner): AsrService {
     }
   };
   handle('session:stop', stopRecording);
+  handle('session:pause', () => {
+    s.pause();
+    return { ok: true as const, paused: s.paused };
+  });
+  handle('session:unpause', () => {
+    s.unpause();
+    return { ok: true as const, paused: s.paused };
+  });
   // os IPCs do nub só valem se vierem da própria janelinha
   const fromNub = (e: Electron.IpcMainInvokeEvent) => nubWindow !== null && e.sender === nubWindow.webContents;
   handle('nub:open-main', (e) => {
     if (fromNub(e)) showMainWindow();
   });
   handle('nub:stop', (e) => (fromNub(e) ? stopRecording() : { ok: false as const, message: t('err.foreign-origin') }));
+  handle('nub:pause', (e) => {
+    if (!fromNub(e)) return { ok: false as const, message: t('err.foreign-origin') };
+    if (s.paused) s.unpause();
+    else s.pause();
+    return { ok: true as const };
+  });
   const nubIpc = createNubIpc<Electron.IpcMainInvokeEvent>({
     fromNub,
     activeDir: () => (s.state === 'recording' ? s.currentDir : null),
@@ -966,7 +997,7 @@ function setupSession(runner: AiRunner): AsrService {
     if (fromNub(e)) nub?.persistPosition();
   });
   handle('session:recovered-count', () => recoveredCount);
-  handle('session:state', () => ({ state: s.state, dir: s.currentDir }));
+  handle('session:state', () => ({ state: s.state, dir: s.currentDir, paused: s.paused }));
   handle('asr:retry', () => s.retryAsr());
   handle('notes:generate', async (_e, rawDir: string) => {
     try {
@@ -1044,8 +1075,9 @@ async function chatAnswer(runner: AiRunner, dir: string, question: string, signa
   const warAccess = warOn && (war.sources.web || war.sources.mcp || folder) && supportsWarRoom(await currentAiSettings().then((a) => a.provider)) ? { mcp: war.sources.mcp, web: war.sources.web, ...(folder ? { folder } : {}) } : undefined;
   const apiProvider = ['claude-api', 'openai-api', 'gemini-api'].includes((await currentAiSettings()).provider);
   const images = apiProvider ? await attachmentImages(dir) : []; // imagens só vão para APIs que aceitam bloco de imagem; os CLIs as ignoram
-  const answer = await runChat(runner, { system, prompt, signal, ...(images.length ? { images } : {}) }, { useTools: (await loadSettings()).chatTools === true, ...(warAccess ? { access: warAccess } : {}), language: language === 'en' ? 'en' : 'pt-BR', onDelta, ...(web ? { web: true } : {}), ...(onSources ? { onSources } : {}) });
-  await appendChat(dir, new Date(), question, answer);
+  let found: WebSource[] = [];
+  const answer = await runChat(runner, { system, prompt, signal, ...(images.length ? { images } : {}) }, { useTools: (await loadSettings()).chatTools === true, ...(warAccess ? { access: warAccess } : {}), language: language === 'en' ? 'en' : 'pt-BR', onDelta, ...(web ? { web: true, onSources: (list: WebSource[]) => { found = list; onSources?.(list); } } : {}) });
+  await appendChat(dir, new Date(), question, answer, found); // as fontes ficam junto da resposta e voltam ao reabrir
   return answer;
 }
 
@@ -1111,6 +1143,72 @@ function shareDeps(runner: AiRunner): ShareDeps {
   };
 }
 
+/** "Nova reunião" / nota de um evento: reaproveita o rascunho vazio mais recente quando não há título nem agenda; senão cria a pasta. */
+async function createMeetingDraft(title: string, calendarEventId?: string, folderId?: string, kind?: string): Promise<string> {
+  const { root, defaultTemplateId } = await loadSettings();
+  const inFolder = typeof folderId === 'string' && folderId && (await folderExists(root, folderId)) ? folderId : null;
+  const warroom = kind === 'warroom' ? 'warroom' : undefined;
+  const eventId = typeof calendarEventId === 'string' && calendarEventId ? calendarEventId : undefined;
+  const draft = !eventId && !(typeof title === 'string' && title.trim()) ? await findEmptyDraft(root) : null;
+  let dir: string;
+  if (draft) {
+    dir = draft;
+    await reuseDraft(dir, { startedAt: new Date(), ...(inFolder ? { folderId: inFolder } : {}), ...(warroom ? { kind: warroom } : {}) });
+  } else {
+    ({ dir } = await createMeeting(root, {
+      title,
+      startedAt: new Date(),
+      trigger: 'manual',
+      state: 'draft',
+      ...(eventId ? { calendarEventId: eventId } : {}),
+      ...(inFolder ? { folderId: inFolder } : {}),
+      templateId: (await resolveTemplate(root, defaultTemplateId)).id,
+    }));
+    if (warroom) await writeWarRoomConfig(dir, { ...(await readWarRoomConfig(dir)), kind: 'warroom' });
+  }
+  await rememberParticipants(dir, eventId);
+  return dir;
+}
+
+/** Nota do evento: o rascunho que já existe para ele ou um novo (a mesma nota do "Preparar notas" do Início). */
+async function draftForEvent(event: { id: string; title: string }): Promise<string> {
+  const { root } = await loadSettings();
+  for (const dir of await listMeetingDirs(root)) {
+    const meta = await readMeta(dir).catch(() => null);
+    if (meta?.calendarEventId === event.id && meta.state === 'draft') return dir;
+  }
+  return createMeetingDraft(event.title, event.id);
+}
+
+/**
+ * Atalho global de gravar e parar (padrão ⌥⌘R), com o Rice em segundo plano. Instância de teste não registra nada (não disputa o
+ * atalho com o Rice do dia a dia); `RICE_TEST_SHORTCUT=conflict` só simula um atalho já ocupado para os prints.
+ */
+const shortcutManager = createShortcutManager({
+  register: (accelerator, callback) => (TEST_INSTANCE ? process.env.RICE_TEST_SHORTCUT !== 'conflict' : globalShortcut.register(accelerator, callback)),
+  unregister: (accelerator) => {
+    if (!TEST_INSTANCE) globalShortcut.unregister(accelerator);
+  },
+  onTrigger: () => {
+    void toggleRecording({
+      state: () => session?.state ?? 'idle',
+      events: () => calendarFeed.events(),
+      draftFor: draftForEvent,
+      defaultTitle: () => t('meeting.default-title'),
+      start: async (input) => {
+        await ensureMicAccess();
+        const request = parseStartInput(input, (await loadSettings()).root);
+        return session?.start(request);
+      },
+      stop: async () => session?.stop(),
+      notify: (kind, detail) => {
+        const body = kind === 'recording' ? t('shortcut.recording') : kind === 'stopped' ? t('shortcut.stopped') : t('common.error', { message: detail ?? '' });
+        if (Notification.isSupported()) new Notification({ title: 'Rice', body, silent: true }).show();
+      },
+    });
+  },
+});
+
 /** Versão do build (commit, remote público, clone de origem); lida uma vez ao abrir. Instância de teste nunca consulta nada. */
 let buildInfo: BuildInfo | null = null;
 const updateChecker = createUpdateChecker({
@@ -1137,6 +1235,7 @@ function registerIpc(runner: AiRunner): void {
       screenshots: settings.screenshots === true,
       chatTools: settings.chatTools === true,
       checkUpdates: settings.checkUpdates !== false,
+      savedPrompts: normalizeSavedPrompts(settings.savedPrompts),
       warroomMaxCycles: normalizeMaxCycles(settings.warroomMaxCycles),
     };
   });
@@ -1186,6 +1285,13 @@ function registerIpc(runner: AiRunner): void {
     const provider = (await currentAiSettings()).provider;
     return webSearchSupported(provider) ? { available: true as const, provider } : { available: false as const, provider, hint: t('chat.web.unavailable-provider', { provider: PROVIDER_LABEL[provider] }) };
   });
+  // atalho global: o renderer só pede "none", "default" ou um atalho; o main valida e só guarda o que conseguiu registrar
+  handle('shortcut:status', () => shortcutManager.status());
+  handle('shortcut:set', async (_e, choice: unknown) => {
+    const result = shortcutManager.change(choice);
+    if (result.ok) await saveSettings({ ...(await loadSettings()), recordShortcut: result.saved });
+    return { ok: result.ok, invalid: result.invalid === true, ...result.status };
+  });
   // atualização: o aviso vem do build-info + uma consulta anônima por dia; nada se atualiza sozinho
   handle('update:status', async () => {
     // SÓ instância de teste: força o aviso para os prints ("clone" = veio de um clone; "release" = veio de uma release)
@@ -1208,6 +1314,12 @@ function registerIpc(runner: AiRunner): void {
     }
     void shell.openExternal(RELEASES_URL);
     return { ok: true as const, mode: 'releases' as const };
+  });
+  // perguntas prontas do chat: até 8, texto puro; devolve a lista normalizada (o que o main guardou)
+  handle('settings:set-saved-prompts', async (_e, list: unknown) => {
+    const savedPrompts = normalizeSavedPrompts(list);
+    await saveSettings({ ...(await loadSettings()), savedPrompts });
+    return savedPrompts;
   });
   handle('settings:set-keep-audio', async (_e, keep: unknown) => {
     await saveSettings({ ...(await loadSettings()), keepAudio: keep !== false });
@@ -1543,31 +1655,7 @@ function registerIpc(runner: AiRunner): void {
   );
 
   // "Nova reunião" / "Nova war room" sem título e sem agenda reaproveitam o rascunho vazio mais recente (não criam mais uma pasta)
-  handle('meetings:create', async (_e, title: string, calendarEventId?: string, folderId?: string, kind?: string) => {
-    const { root, defaultTemplateId } = await loadSettings();
-    const inFolder = typeof folderId === 'string' && folderId && (await folderExists(root, folderId)) ? folderId : null;
-    const warroom = kind === 'warroom' ? 'warroom' : undefined;
-    const eventId = typeof calendarEventId === 'string' && calendarEventId ? calendarEventId : undefined;
-    const draft = !eventId && !(typeof title === 'string' && title.trim()) ? await findEmptyDraft(root) : null;
-    let dir: string;
-    if (draft) {
-      dir = draft;
-      await reuseDraft(dir, { startedAt: new Date(), ...(inFolder ? { folderId: inFolder } : {}), ...(warroom ? { kind: warroom } : {}) });
-    } else {
-      ({ dir } = await createMeeting(root, {
-        title,
-        startedAt: new Date(),
-        trigger: 'manual',
-        state: 'draft',
-        ...(eventId ? { calendarEventId: eventId } : {}),
-        ...(inFolder ? { folderId: inFolder } : {}),
-        templateId: (await resolveTemplate(root, defaultTemplateId)).id,
-      }));
-      if (warroom) await writeWarRoomConfig(dir, { ...(await readWarRoomConfig(dir)), kind: 'warroom' });
-    }
-    await rememberParticipants(dir, eventId);
-    return dir;
-  });
+  handle('meetings:create', (_e, title: string, calendarEventId?: string, folderId?: string, kind?: string) => createMeetingDraft(title, calendarEventId, folderId, kind));
   // ao sair de uma reunião: se ela ficou vazia (rascunho), vai para a Lixeira em silêncio; a que está gravando nunca
   handle('meetings:discard-draft', async (_e, rawDir: unknown) => {
     const dir = await checkedDir(rawDir);
@@ -1826,6 +1914,7 @@ app.whenReady().then(async () => {
   calendarFeed.start();
   setInterval(() => void refreshEventKit(), 5 * 60_000).unref();
   setTimeout(() => void asr.warmup(), 2000);
+  shortcutManager.init((await loadSettings()).recordShortcut);
   // versão nova: lê o build-info e consulta (no máximo uma vez por dia) pouco depois de abrir e a cada 6 h com o app aberto
   buildInfo = await readBuildInfo(join(__dirname, 'build-info.json'));
   const checkUpdate = () => void updateChecker.maybeCheck().then((status) => send('update:changed', status)).catch(() => {});
@@ -1837,6 +1926,7 @@ app.whenReady().then(async () => {
 
   app.on('before-quit', (event) => {
     if (quitting) return;
+    shortcutManager.dispose();
     event.preventDefault();
     quitting = true;
     detector?.stop();

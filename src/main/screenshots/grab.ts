@@ -1,7 +1,10 @@
+import { execFile } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
+import { promisify } from 'node:util';
 import { join } from 'node:path';
 import { BrowserWindow, desktopCapturer, nativeImage, screen, systemPreferences } from 'electron';
 import type { Frame } from './capture';
+import { chooseTarget, LIST_WINDOWS_JXA, parseWindows, type WinInfo } from './target';
 import { dHash, grayFromBitmap, HASH_H, HASH_W } from './phash';
 
 /** Largura máxima guardada (o brief pede ~1280 px) e a qualidade do JPEG. */
@@ -19,19 +22,51 @@ export function screenPermission(): ScreenPermission {
   return status === 'granted' ? 'granted' : status === 'not-determined' ? 'not-determined' : 'denied';
 }
 
+/** O que a captura sabe sobre o momento: os apps da chamada (detector) e se vale capturar só a janela deles. */
+export type GrabHint = { apps?: readonly string[]; preferWindow?: boolean };
+
+const execFileAsync = promisify(execFile);
+
+/** Janelas na tela (macOS, da frente para trás). No Windows o `desktopCapturer` não diz onde a janela está: a lista vem vazia e vale a tela do cursor. */
+async function listWindows(): Promise<WinInfo[]> {
+  if (process.platform !== 'darwin') return [];
+  try {
+    const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', LIST_WINDOWS_JXA], { timeout: 3000, maxBuffer: 4 * 1024 * 1024 });
+    return parseWindows(stdout);
+  } catch {
+    return [];
+  }
+}
+
 /**
- * Tira um quadro da tela onde o usuário está trabalhando (a do cursor; senão a principal), SEM as janelas do Rice: elas
- * ficam protegidas contra captura só durante o instante da foto. Nunca dispara o pedido de permissão do sistema: sem a
- * permissão já concedida, devolve null.
+ * Tira um quadro: a janela do app da chamada (se outra pessoa está mostrando algo) ou a tela que a contém; sem o app
+ * da chamada, a tela do cursor, como antes. As janelas do Rice ficam protegidas contra captura só durante a foto.
+ * Nunca pede a permissão do sistema: sem ela já concedida, devolve null.
  */
-export async function grabScreen(): Promise<Frame | null> {
+export async function grabScreen(hint: GrabHint = {}): Promise<Frame | null> {
   if (screenPermission() !== 'granted') return null;
-  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) ?? screen.getPrimaryDisplay();
+  const displays = screen.getAllDisplays();
+  const cursor = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) ?? screen.getPrimaryDisplay();
+  const target = chooseTarget({
+    windows: hint.apps?.length ? await listWindows() : [],
+    displays: displays.map((d) => ({ id: d.id, bounds: d.bounds })),
+    apps: hint.apps ?? [],
+    cursorDisplayId: cursor.id,
+    primaryDisplayId: screen.getPrimaryDisplay().id,
+    preferWindow: hint.preferWindow === true,
+  });
+  const display = displays.find((d) => d.id === target.displayId) ?? cursor;
   const width = Math.min(SHOT_WIDTH, Math.round(display.size.width * display.scaleFactor));
   const height = Math.max(1, Math.round((width * display.size.height) / display.size.width));
   const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.isVisible());
   for (const w of windows) w.setContentProtection(true);
   try {
+    if (target.kind === 'window') {
+      const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: SHOT_WIDTH, height: SHOT_WIDTH } });
+      const source = sources.find((s) => s.id === `window:${target.windowId}:0`);
+      const frame = source && !source.thumbnail.isEmpty() ? frameFromImage(source.thumbnail) : null;
+      if (frame) return frame; // senão cai na tela que contém a janela
+    }
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
     const source = sources.find((s) => s.display_id === String(display.id)) ?? sources[0];
     if (!source || source.thumbnail.isEmpty()) return null;

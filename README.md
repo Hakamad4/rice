@@ -193,6 +193,10 @@ Click **New meeting**, then **Record**. When you stop, Rice writes the notes. If
 
 Rice also notices meetings (Zoom, Meet, Teams) and calendar events and offers to record.
 
+### Pause recording
+
+For a side conversation that should not be recorded, use **Pause** (next to **Stop**, the **Pause** item in the tray or the Mini Rice button). While paused, Rice releases the microphone: audio is neither recorded nor transcribed, the clock stops, the button becomes **Resume · 00:42** (the paused time, in discreet amber) and the recording dot in the sidebar, the meeting item and the tray turns amber and still. Live ideas, the War room and screenshots stop too. **Resume** continues in the same meeting, and the transcript gets a discreet marker, for example “recording paused from 14:03 to 14:07”; times after the pause stay correct. While paused, Rice does not ask “still recording?” and does not stop by itself; after 30 minutes it only asks whether you want to stop. If the app crashes during a pause, “Recover meeting” works as usual.
+
 ### Notes versions
 
 Generating the notes again (another template, or a new transcript) no longer loses the previous ones: the old notes are kept in `notas-versoes/` (up to 20, the oldest go first). A discreet **Versions (3)** chip next to the template chip lists them ("Brainstorm · today 4:40 PM · current"); picking one shows it read-only with a thin bar (**Back to current** / **Restore this one**). Search, chat, copy and PDF always use the current notes.
@@ -245,7 +249,7 @@ In **Settings › Participants**, Rice tells the voices on the computer audio ap
 
 Off by default. Turn it on in **Settings › Screenshots**, after a notice. While you record, Rice follows the conversation and, when it notices someone is about to show something (“let me share my screen”, “look at this chart”, “here’s the dashboard”), it takes a screenshot about 2 seconds later, to let the screen change. The screenshot stays in the meeting folder (`capturas/`), linked to the sentence that triggered it: the thumbnail appears right after that sentence in the transcript, with a short caption, and the AI can cite it in the notes. Click the thumbnail to enlarge; ⋯ removes it. When the AI misses the moment, use the camera button in the bar (or **⌘⇧S**).
 
-How it works: a local filter, in Portuguese and English, picks the sentences worth a question; only then does Rice send the last ~60 s of the transcript (text) to the AI you configured to confirm. This works with any provider, including CLI subscriptions. With an API key (Claude, OpenAI or Gemini) the image also goes to the AI, only to refine the caption; with CLI subscriptions images stay on your computer. At most one question every ~15 s and one screenshot every ~10 s; screenshots equal to the previous one are dropped. Needs the macOS Screen Recording permission. You can turn it off at any time, even while recording.
+How it works: a local filter, in Portuguese and English, picks the sentences worth a question; only then does Rice send the last ~60 s of the transcript (text) to the AI you configured to confirm. This works with any provider, including CLI subscriptions. With an API key (Claude, OpenAI or Gemini) the image also goes to the AI, only to refine the caption; with CLI subscriptions images stay on your computer. At most one question every ~15 s and one screenshot every ~10 s; screenshots equal to the previous one are dropped. Which screen: Rice uses the app the detector saw using the microphone (Zoom, Teams, Meet in a browser…) and captures the screen where its window is; when someone else is speaking (computer audio), it captures only the call window. If it cannot find the app, it uses the screen under the cursor (on Windows, always that one). Needs the macOS Screen Recording permission. You can turn it off at any time, even while recording.
 
 ### Edit and create templates
 
@@ -256,7 +260,7 @@ Open **Templates** in the sidebar. Built-in templates can be edited (and restore
 
 ### Ask the AI
 
-Click **Ask Rice** (top right) and ask anything about the open meeting: decisions, who does what, what was said about a topic. Questions and answers are saved in the meeting. **Search the web** (globe button next to the chips, off by default and per conversation) lets Rice look things up on the internet for the questions you ask while it is on; it works in the meeting chat and in the all-meetings chat, and the sources appear as links under the answer (title and domain, opened in your browser). The question goes to the AI provider's own search; the meeting notes still go only to the AI. Claude CLI uses only WebSearch and WebFetch (never Bash, Edit or file reading), Codex uses its live search with the read-only sandbox and no shell, and the Anthropic, OpenAI and Gemini APIs use their own search tools. Not available with OpenCode or Antigravity (they cannot be restricted to search without giving them a shell), where the button is disabled with the reason.
+Click **Ask Rice** (top right) and ask anything about the open meeting: decisions, who does what, what was said about a topic. Questions and answers are saved in the meeting. **Saved questions:** the light-bulb button inside the question field (left of Send, always visible) opens a menu above the field with ready-made questions ("Summary for someone who missed it", "Next steps per person", "Risks and open items"; in the all-meetings chat, "What is still pending this week?" and others) and your own: one click sends the question. In the same menu, **Save last question** and **Add saved question…** keep your own (up to 8) and **Remove saved question** deletes one; **⋯ > Save to saved questions** on a question you already sent does the same. Answers that used *Search the web* keep their sources, and they show again when you reopen the meeting. **Search the web** (globe button next to the chips, off by default and per conversation) lets Rice look things up on the internet for the questions you ask while it is on; it works in the meeting chat and in the all-meetings chat, and the sources appear as links under the answer (title and domain, opened in your browser). The question goes to the AI provider's own search; the meeting notes still go only to the AI. Claude CLI uses only WebSearch and WebFetch (never Bash, Edit or file reading), Codex uses its live search with the read-only sandbox and no shell, and the Anthropic, OpenAI and Gemini APIs use their own search tools. Not available with OpenCode or Antigravity (they cannot be restricted to search without giving them a shell), where the button is disabled with the reason.
 
 
 **Switching the AI and model in the chat.** In the chat header, the chip with the AI name (for example "Claude · Sonnet") opens a menu with the providers you have already set up and each one's models; the current one shows a ✓. The choice applies to the whole app (it is the same as Settings > AI): the next question and the next notes already use the chosen model. Providers not set up yet appear at the end, with "Set up…". The chip is disabled while an answer is being written. In OpenCode, the free model is an explicit option and warns that it may use your transcripts to improve models.
@@ -268,6 +272,10 @@ Open **Home** (first item of the sidebar): the **Ask about your meetings** field
 The chip at the top of the panel switches between **This meeting**, **All meetings** and a single folder (with its subfolders). The conversation is saved in `.rice/chat-global.jsonl`; **New conversation** starts over.
 
 ![Chat across all meetings, with sources](docs/images/en/17-global-chat.png)
+
+### Record and stop from anywhere
+
+Press **⌥⌘R** (Ctrl+Alt+R on Windows) in any app, with Rice in the background: it starts a meeting, using the note of the calendar meeting that is happening or starts within 10 minutes (like **Record now** on Home), and stops when pressed again. A discreet notification says "Recording" or "Recording stopped". Change the keys or choose **None** in **Settings > Shortcuts**; if another app already uses them, Settings shows a warning so you can pick another.
 
 ### Mini Rice
 
@@ -368,6 +376,7 @@ The file names are in Portuguese for now. App settings, secrets and the transcri
 | **Esc** | Clear the search / close a menu or dialog |
 | **⌘⌫** | Delete the open meeting (asks first) |
 | **⌘,** | Open Settings |
+| **⌥⌘R** (global, works with Rice in the background; **Ctrl+Alt+R** on Windows) | Start recording, or stop if already recording. Change it or choose *None* in Settings > Shortcuts |
 | **⌘⇧S** | Take a screenshot now (only while recording, with screenshots on) |
 | **↑ ↓ → ← Enter** | Move through menus and submenus |
 
