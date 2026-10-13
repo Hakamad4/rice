@@ -1,7 +1,9 @@
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, session as electronSession, nativeImage, Notification, powerMonitor, safeStorage, screen, shell, systemPreferences, Tray } from 'electron';
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, ipcMain, Menu, session as electronSession, nativeImage, nativeTheme, Notification, powerMonitor, safeStorage, screen, shell, systemPreferences, Tray } from 'electron';
 import { CalendarFeed } from '../calendar/calendar-feed';
 import { fromEventKit } from '../calendar/google-events';
 import { GoogleAuth } from '../calendar/google-auth';
@@ -11,7 +13,7 @@ import { cachedAgyModels } from '../ai/agy-cli';
 import { createActiveRunner, createLightRunner, lightModelFor, isModelFor, resolveAiSettings, type AiSettings, type RunnerDeps } from '../ai/factory';
 import { clearSecret, loadSecret, migrateLegacyToken, saveSecret, validateKey, type TokenCrypto } from '../ai/secrets';
 import { aiStatus, invalidateAiStatus, listModels, testProvider } from '../ai/service';
-import { AiError, hasKeyField, isProvider, type AiRunner } from '../ai/types';
+import { AiError, hasKeyField, isProvider, PROVIDER_LABEL, type AiRunner, type WebSource } from '../ai/types';
 import { isTranscriptionLanguage, type MeetingMeta, type NoteTemplateInput, type TranscriptionLanguage } from '../../shared/types';
 import { canDeleteMeeting, deleteMeetingDir } from './delete-meeting';
 import { AsrService } from '../session/asr-service';
@@ -24,6 +26,10 @@ import { logError, logWarn } from '../log';
 import { tightenAppData } from '../store/permissions';
 import { probeClaudeMcpServers } from '../claude/runner';
 import { registerAttachments } from '../attachments/ipc';
+import { ScreenshotCapture, clockOfSegmentText, nearestSegmentClock } from '../screenshots/capture';
+import { grabFromFolder, grabScreen, screenPermission } from '../screenshots/grab';
+import { registerScreenshots } from '../screenshots/ipc';
+import { decideCapture, judgeShot, providerSeesImages } from '../screenshots/relevance';
 import { attachmentImages, attachmentsContext } from '../attachments/store';
 import { createWarRoom } from '../warroom/ipc';
 import { planGeminiMigration } from '../ai/migrate';
@@ -33,6 +39,10 @@ import { discardEmptyDraft, findEmptyDraft, reuseDraft } from '../store/drafts';
 import { normalizeMaxCycles } from '../warroom/engine';
 import { checkWorkFolder } from '../warroom/folder';
 import { runChat } from '../ai/chat-run';
+import { readBuildInfo, type BuildInfo } from '../update/build-info';
+import { createUpdateChecker, RELEASES_URL, type UpdateState } from '../update/check';
+import { openUpdateInTerminal } from '../update/terminal';
+import { webSearchSupported } from '../ai/web-search';
 import { guardedIpc, lockdownWebContents } from './hardening';
 import { decideMeetingEnd } from '../session/stop-policy';
 import { endKey, shouldOfferRecording, shouldPromptEnd, shouldPromptStart, titleFor } from '../session/prompt-policy';
@@ -42,7 +52,9 @@ import { recoverMeeting } from '../session/recover-meeting';
 import { alertPosition, AlertScheduler, ALERT_HEIGHT, ALERT_WIDTH, isHttpsUrl } from './meeting-alert';
 import { type AlertPlan } from '../calendar/google-events';
 import { LevelThrottle, NubController, NUB_BAR_WIDTH, NUB_HEIGHT, type Point } from './nub';
-import { findAppIcon, findTrayIcons } from './app-icon';
+import { findAppIcon, findTrayIcons, findWinIcon } from './app-icon';
+import { isMac, isWindows, remindersSupported, systemCalendarSupported } from '../platform';
+import { systemPanelUrl, titleBarOverlay } from '../platform/system';
 import { fromSystemLocale, locale, setLanguage, t, type UiLanguage } from '../i18n';
 import { copyNotes, draftEmail, exportInfo, exportPdf, openMail, type ShareDeps } from '../share/actions';
 import { uniquePath } from '../share/pdf';
@@ -80,7 +92,7 @@ import { configureLongNotes, type NotesProgress } from '../session/long-notes';
 import type { AlertActionKind } from '../session/alerts';
 import { saveAnnotations } from '../store/annotations';
 
-type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean };
+type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ checkUpdates?: boolean; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean };
 
 const tokenCrypto: TokenCrypto = {
   encrypt: (plain) => safeStorage.encryptString(plain),
@@ -100,6 +112,8 @@ const aiDeps = (): RunnerDeps => ({
   binaries: { claude: claudeBinary(), codex: codexBinary(), opencode: opencodeBinary(), agy: agyBinary() },
   workDir: app.getPath('userData'),
   ...(process.env.RICE_TEST_MCP_CONFIG ? { testMcpConfig: process.env.RICE_TEST_MCP_CONFIG } : {}),
+  // SÓ INSTÂNCIAS DE TESTE: as APIs de IA falam com um servidor local falso (RICE_TEST_AI_BASE_URL) em vez da internet
+  ...(TEST_INSTANCE && process.env.RICE_TEST_AI_BASE_URL ? { fetch: (url: string, init: RequestInit) => fetch(url.replace(/^https:\/\/[^/]+/, process.env.RICE_TEST_AI_BASE_URL ?? ''), init) } : {}),
 });
 let lightRunner: AiRunner | null = null; // modelo leve do provedor ativo: etapas simples (extrações, sugestões, ideias)
 const supportsWarRoom = (p: string) => p === 'claude-sub' || p === 'chatgpt-sub';
@@ -166,8 +180,9 @@ on('i18n:language', (event) => {
 on('ui:titlebar-zoom', (event, raw: unknown) => {
   const zoom = typeof raw === 'number' && Number.isFinite(raw) && raw >= 0.25 && raw <= 5 ? raw : 1;
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (!win || win !== window || process.platform !== 'darwin') return;
-  win.setWindowButtonPosition({ x: 16, y: Math.max(4, Math.round(24 * zoom - 6)) });
+  if (!win || win !== window) return;
+  if (isWindows()) win.setTitleBarOverlay(titleBarOverlay(nativeTheme.shouldUseDarkColors, zoom)); // botões do Windows na altura da faixa
+  else if (isMac()) win.setWindowButtonPosition({ x: 16, y: Math.max(4, Math.round(24 * zoom - 6)) });
 });
 
 async function currentUiLanguage(): Promise<UiLanguage> {
@@ -220,7 +235,13 @@ async function saveSettings(settings: Settings): Promise<void> {
 
 /** O rice-audio herda as permissões do app: o próprio Electron precisa pedir o microfone. */
 async function ensureMicAccess(): Promise<void> {
-  if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return;
+  const status = systemPreferences.getMediaAccessStatus('microphone');
+  if (status === 'granted') return;
+  // Windows: não há diálogo do app; o acesso é do usuário em Configurações > Privacidade > Microfone (só 'denied' bloqueia)
+  if (isWindows()) {
+    if (status === 'denied') throw new Error(t('err.mic-permission'));
+    return;
+  }
   const granted = await systemPreferences.askForMediaAccess('microphone');
   if (!granted) {
     throw new Error(t('err.mic-permission'));
@@ -343,9 +364,9 @@ function startFromPrompt(input: { title: string; trigger: 'mic' | 'calendar'; ap
 }
 
 /** Último acesso ao Calendário do macOS informado pelo detector: granted, denied, notDetermined (ou unknown antes da primeira resposta). */
-let calendarAccess = 'unknown';
+let calendarAccess = systemCalendarSupported() ? 'unknown' : 'unsupported'; // Windows: a agenda vem só do Google
 /** Idem para os Lembretes do macOS (permissão própria, pedida só quando o usuário clica em Permitir). */
-let remindersAccess = 'unknown';
+let remindersAccess = remindersSupported() ? 'unknown' : 'unsupported';
 
 /** Lista do Início (e avisos): Calendário do macOS dos próximos 7 dias, com os de dia inteiro. */
 async function refreshEventKit(): Promise<void> {
@@ -362,6 +383,7 @@ function setupDetector(): void {
   detector = d;
   d.on('error', () => {});
   d.on('calendar-access', (status: string) => {
+    if (!systemCalendarSupported()) return; // o detector do Windows responde "unsupported"; o estado já está fixo
     calendarAccess = status;
     if (status === 'granted') void refreshEventKit();
     if (window && !window.isDestroyed()) window.webContents.send('calendar:changed', null); // o passo "Agenda" do guia relê o status
@@ -369,6 +391,7 @@ function setupDetector(): void {
     void saveSettings({ ...cachedSettings, calendarAsked: true }).then(() => d.requestCalendarAccess());
   });
   d.on('reminders-access', (status: string) => {
+    if (!remindersSupported()) return;
     remindersAccess = status;
     send('reminders:changed', null);
   });
@@ -437,6 +460,8 @@ function setupDetector(): void {
 
 /** `RICE_BENCH=1`: instância de medição, sem janelas visíveis, nub, alertas, bandeja nem ícone no Dock. */
 const BENCH = process.env.RICE_BENCH === '1';
+/** Plataforma que o renderer mostra. Só as instâncias de teste (RICE_BENCH) aceitam RICE_FAKE_PLATFORM, para os prints do layout do Windows no Mac. */
+const PLATFORM_FOR_UI = BENCH && process.env.RICE_FAKE_PLATFORM === 'win32' ? 'win32' : process.platform;
 
 function createWindow(): void {
   if (window) {
@@ -448,10 +473,11 @@ function createWindow(): void {
     width: 1200,
     height: 780,
     title: 'Rice',
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 18 },
+    ...(isWindows()
+      ? { titleBarStyle: 'hidden' as const, titleBarOverlay: titleBarOverlay(nativeTheme.shouldUseDarkColors) } // botões do Windows à direita, sobre a faixa de 48px
+      : { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 18 } }),
     ...(appIconPath ? { icon: appIconPath } : {}),
-    webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: DEV_TOOLS },
+    webPreferences: { preload: join(__dirname, 'preload.cjs'), additionalArguments: [`--rice-platform=${PLATFORM_FOR_UI}`], contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, devTools: DEV_TOOLS },
   });
   window.loadFile(join(__dirname, '..', 'src', 'renderer', 'index.html'));
   window.on('focus', updateNub);
@@ -530,9 +556,17 @@ function buildAppMenu(): void {
     showMainWindow();
     window?.webContents.send('app:open-settings', null);
   };
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([
-      {
+  const appMenu: Electron.MenuItemConstructorOptions = isWindows()
+    ? {
+        // Windows: sem o menu do app do Mac (Sobre/Ocultar); Configurações e Sair ficam em "Rice", com atalhos Ctrl
+        label: 'Rice',
+        submenu: [
+          { label: t('menu.settings'), accelerator: 'Control+,', click: openSettings },
+          { type: 'separator' },
+          { label: t('menu.quit'), role: 'quit' },
+        ],
+      }
+    : {
         label: 'Rice',
         submenu: [
           { label: t('menu.about'), role: 'about' },
@@ -545,7 +579,10 @@ function buildAppMenu(): void {
           { type: 'separator' },
           { label: t('menu.quit'), role: 'quit' },
         ],
-      },
+      };
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      appMenu,
       {
         label: t('menu.edit'),
         submenu: [
@@ -572,7 +609,7 @@ function buildAppMenu(): void {
         label: t('menu.window'),
         submenu: [
           { label: t('menu.minimize'), role: 'minimize' },
-          { label: t('menu.zoom'), role: 'zoom' },
+          ...(isMac() ? [{ label: t('menu.zoom'), role: 'zoom' as const }] : []),
           { label: t('menu.close'), role: 'close' },
         ],
       },
@@ -592,7 +629,8 @@ function applyUiLanguage(language: UiLanguage): void {
 function updateTray(state: SessionState = session?.state ?? 'idle'): void {
   if (!tray) return;
   // o logo (imagem template) fica sempre; só o texto muda durante a gravação, sem emoji
-  tray.setTitle(state === 'recording' ? ' REC' : state === 'finishing' ? ' …' : '');
+  if (isMac()) tray.setTitle(state === 'recording' ? ' REC' : state === 'finishing' ? ' …' : '');
+  else tray.setToolTip(state === 'recording' ? t('tray.tooltip-recording') : 'Rice'); // Windows: sem texto ao lado do ícone; o estado vai na dica
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
@@ -613,6 +651,11 @@ function updateTray(state: SessionState = session?.state ?? 'idle'): void {
 
 /** Logo monocromático para a barra de menus: o macOS pinta imagens "template" de claro ou escuro conforme a barra. */
 function trayImage(): Electron.NativeImage {
+  if (isWindows()) {
+    // Windows: ícone colorido (a bandeja não pinta "template"), no tamanho de 16 DIP
+    const ico = findWinIcon(__dirname);
+    return ico ? nativeImage.createFromPath(ico) : nativeImage.createEmpty();
+  }
   const files = findTrayIcons(__dirname);
   if (!files) return nativeImage.createEmpty();
   const image = nativeImage.createFromPath(files.x1);
@@ -624,6 +667,7 @@ function trayImage(): Electron.NativeImage {
 function createTray(): void {
   tray = new Tray(trayImage());
   tray.setToolTip('Rice');
+  if (isWindows()) tray.on('click', createWindow); // no Windows o clique no ícone abre a janela (o menu fica no botão direito)
   updateTray('idle');
 }
 
@@ -631,21 +675,14 @@ function send(channel: string, payload: unknown): void {
   if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
 }
 
-/** Painéis do sistema que os avisos sabem abrir. */
-const SETTINGS_URLS = {
-  storage: 'x-apple.systempreferences:com.apple.settings.Storage',
-  microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
-  audioCapture: 'x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture',
-} as const;
-
 async function runAlertAction(s: MeetingSession, kind: AlertActionKind, dir?: string, id?: string): Promise<void> {
   switch (kind) {
     case 'open-storage':
-      return void (await shell.openExternal(SETTINGS_URLS.storage));
+      return void (await shell.openExternal(systemPanelUrl('storage')));
     case 'open-mic-privacy':
-      return void (await shell.openExternal(SETTINGS_URLS.microphone));
+      return void (await shell.openExternal(systemPanelUrl('microphone')));
     case 'open-audio-privacy':
-      return void (await shell.openExternal(SETTINGS_URLS.audioCapture));
+      return void (await shell.openExternal(systemPanelUrl('audioCapture')));
     case 'stop-recording':
       return s.stop();
     case 'keep-recording':
@@ -713,6 +750,8 @@ function setupSession(runner: AiRunner): AsrService {
   }
   s.on('state', updateTray);
   s.on('state', updateNub);
+  // gravação iniciada fora da janela (aviso de reunião, notificação): a tela relê o estado agora que o dir existe
+  s.on('active', () => send('session:state', s.state));
   // falas ainda não finalizadas (parciais atuais de cada fonte): entram nos ciclos como "provisório"
   const livePartials = new Map<string, Map<string, { text: string; at: number }>>();
   s.on('partial', ({ dir: d, partial }: { dir: string; partial: { source: string; text: string } }) => {
@@ -780,6 +819,59 @@ function setupSession(runner: AiRunner): AsrService {
       return image.isEmpty() ? null : image.resize({ width: 192, quality: 'good' }).toDataURL();
     },
     reindex: () => {}, // a busca relê sozinha: o index.json dos anexos conta na data de modificação
+  });
+  // capturas de tela: só enquanto grava, só com a opção ligada; as imagens só vão ao provedor de IA ativo (e só se ele aceita imagem)
+  const shotLanguage = async (d: string): Promise<'pt' | 'en'> => ((await notesLanguageOf(await readMeta(d))).headings === 'en' ? 'en' : 'pt');
+  const screenshotCapture = new ScreenshotCapture({
+    grab: TEST_INSTANCE && process.env.RICE_SHOT_SOURCE_DIR ? grabFromFolder(process.env.RICE_SHOT_SOURCE_DIR) : grabScreen, // RICE_SHOT_SOURCE_DIR: só instâncias de teste, quadros prontos no lugar da tela
+    // a decisão é só por texto (últimos ~60 s + o trecho candidato): vale para qualquer provedor, inclusive os CLIs
+    decide: async (context, candidates, d) => decideCapture(lightRunner ?? runner, await shotLanguage(d), context, candidates),
+    // com provedor que aceita imagem, a legenda pode ser refinada pela imagem; sem ele fica o motivo da fala
+    refine: async (jpeg, _reason, d) => {
+      if (!providerSeesImages((await currentAiSettings()).provider)) return null;
+      const verdict = await judgeShot(lightRunner ?? runner, { mime: 'image/jpeg', data: jpeg.toString('base64') }, await shotLanguage(d));
+      return verdict.useful && verdict.caption ? verdict.caption : null;
+    },
+    nearestSegment: async (d, at) => nearestSegmentClock(await readMeetingText(d, 'transcript'), at),
+    locate: async (d, text) => clockOfSegmentText(await readMeetingText(d, 'transcript'), text),
+    onChange: (d, list) => screenshotsIpc.changed(d, list),
+    onError: (err) => logError('screenshots', err),
+  });
+  s.on('segment', ({ dir: d, segment }: { dir: string; segment: { source: string; speaker?: number; text: string; startMs: number } }) => {
+    if (cachedSettings.screenshots === true) screenshotCapture.onSegment({ dir: d, who: segment.source === 'Outros' && segment.speaker ? `Pessoa ${segment.speaker}` : segment.source, text: segment.text, startMs: segment.startMs });
+  });
+  const syncScreenshots = () => {
+    const dir = s.currentDir;
+    if (cachedSettings.screenshots === true && s.state === 'recording' && dir) {
+      void readMeta(dir).then((meta) => {
+        if (cachedSettings.screenshots === true && s.state === 'recording' && s.currentDir === dir) screenshotCapture.start(dir, new Date(meta.startedAt));
+      }).catch((err) => logError('screenshots', err));
+    } else screenshotCapture.stop();
+  };
+  s.on('state', syncScreenshots);
+  s.on('active', syncScreenshots);
+  const screenshotsIpc = registerScreenshots({
+    handle,
+    send,
+    checkedDir,
+    thumbnail: (p, width) => {
+      const image = nativeImage.createFromPath(p);
+      return image.isEmpty() ? null : image.resize({ width, quality: 'good' }).toDataURL();
+    },
+    enabled: () => cachedSettings.screenshots === true,
+    setEnabled: async (on) => {
+      await saveSettings({ ...(await loadSettings()), screenshots: on });
+      syncScreenshots();
+    },
+    environment: async () => {
+      const provider = (await currentAiSettings()).provider;
+      return { provider, seesImages: providerSeesImages(provider), permission: screenPermission() };
+    },
+    openPrivacy: () => {
+      if (process.platform === 'darwin') void shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture');
+    },
+    isRecording: (d) => s.state === 'recording' && s.currentDir === d,
+    captureNow: async () => s.state === 'recording' && (await screenshotCapture.captureNow()) !== null,
   });
   let warRoomDir: string | null = null;
   const warRoomBeat = setInterval(() => warRoom.ensure(s.currentDir), 15_000);
@@ -919,7 +1011,14 @@ function setupSession(runner: AiRunner): AsrService {
 }
 
 /** Pergunta sobre a reunião: monta o prompt, transmite o texto aos poucos e grava a troca no chat.md. */
-async function chatAnswer(runner: AiRunner, dir: string, question: string, signal: AbortSignal, onDelta: (text: string) => void): Promise<string> {
+/** "Buscar na web" pedido para UMA pergunta: só vale com `true` exato e se o provedor ativo suporta; senão a pergunta nem sai. */
+async function webRequested(raw: unknown): Promise<boolean> {
+  if (raw !== true) return false;
+  if (!webSearchSupported((await currentAiSettings()).provider)) throw new AiError('other', t('chat.web.unavailable'));
+  return true;
+}
+
+async function chatAnswer(runner: AiRunner, dir: string, question: string, signal: AbortSignal, onDelta: (text: string) => void, web = false, onSources?: (sources: WebSource[]) => void): Promise<string> {
   const meta = await readMeta(dir);
   const { language } = await notesLanguageOf(meta);
   const prompt = buildChatPrompt(
@@ -945,7 +1044,7 @@ async function chatAnswer(runner: AiRunner, dir: string, question: string, signa
   const warAccess = warOn && (war.sources.web || war.sources.mcp || folder) && supportsWarRoom(await currentAiSettings().then((a) => a.provider)) ? { mcp: war.sources.mcp, web: war.sources.web, ...(folder ? { folder } : {}) } : undefined;
   const apiProvider = ['claude-api', 'openai-api', 'gemini-api'].includes((await currentAiSettings()).provider);
   const images = apiProvider ? await attachmentImages(dir) : []; // imagens só vão para APIs que aceitam bloco de imagem; os CLIs as ignoram
-  const answer = await runChat(runner, { system, prompt, signal, ...(images.length ? { images } : {}) }, { useTools: (await loadSettings()).chatTools === true, ...(warAccess ? { access: warAccess } : {}), language: language === 'en' ? 'en' : 'pt-BR', onDelta });
+  const answer = await runChat(runner, { system, prompt, signal, ...(images.length ? { images } : {}) }, { useTools: (await loadSettings()).chatTools === true, ...(warAccess ? { access: warAccess } : {}), language: language === 'en' ? 'en' : 'pt-BR', onDelta, ...(web ? { web: true } : {}), ...(onSources ? { onSources } : {}) });
   await appendChat(dir, new Date(), question, answer);
   return answer;
 }
@@ -1012,6 +1111,17 @@ function shareDeps(runner: AiRunner): ShareDeps {
   };
 }
 
+/** Versão do build (commit, remote público, clone de origem); lida uma vez ao abrir. Instância de teste nunca consulta nada. */
+let buildInfo: BuildInfo | null = null;
+const updateChecker = createUpdateChecker({
+  info: () => buildInfo,
+  enabled: async () => (await loadSettings()).checkUpdates !== false,
+  getState: async () => (await loadSettings()).updateCheck ?? {},
+  setState: async (state) => saveSettings({ ...(await loadSettings()), updateCheck: state }),
+  disabled: () => TEST_INSTANCE,
+  cloneUsable: (path) => process.platform === 'darwin' && existsSync(join(path, 'update.sh')),
+});
+
 function registerIpc(runner: AiRunner): void {
   handle('settings:get', async () => {
     const settings = await loadSettings();
@@ -1024,7 +1134,9 @@ function registerIpc(runner: AiRunner): void {
       vocabulary: settings.vocabulary ?? '',
       vocabularyAttendees: settings.vocabularyAttendees !== false,
       identifySpeakers: settings.identifySpeakers === true,
+      screenshots: settings.screenshots === true,
       chatTools: settings.chatTools === true,
+      checkUpdates: settings.checkUpdates !== false,
       warroomMaxCycles: normalizeMaxCycles(settings.warroomMaxCycles),
     };
   });
@@ -1068,6 +1180,34 @@ function registerIpc(runner: AiRunner): void {
     }
     if (provider === 'chatgpt-sub') return { on, provider, available: true as const };
     return { on, provider, available: false as const, hint: t(provider === 'opencode-sub' || provider === 'agy-sub' ? 'chat-tools.unavailable-cli' : 'chat-tools.unavailable-api') };
+  });
+  // "Buscar na web" do chat: o provedor ativo suporta? (o interruptor fica desabilitado, com o motivo, quando não)
+  handle('ai:web-status', async () => {
+    const provider = (await currentAiSettings()).provider;
+    return webSearchSupported(provider) ? { available: true as const, provider } : { available: false as const, provider, hint: t('chat.web.unavailable-provider', { provider: PROVIDER_LABEL[provider] }) };
+  });
+  // atualização: o aviso vem do build-info + uma consulta anônima por dia; nada se atualiza sozinho
+  handle('update:status', async () => {
+    // SÓ instância de teste: força o aviso para os prints ("clone" = veio de um clone; "release" = veio de uma release)
+    const fake = TEST_INSTANCE ? process.env.RICE_TEST_UPDATE : undefined;
+    if (fake === 'clone' || fake === 'release') return { enabled: true, available: true, from: 'a1b2c3d', to: 'e4f5a6b', fromClone: fake === 'clone' };
+    return updateChecker.status();
+  });
+  handle('settings:set-check-updates', async (_e, on: unknown) => {
+    await saveSettings({ ...(await loadSettings()), checkUpdates: on !== false });
+    const status = await updateChecker.maybeCheck();
+    send('update:changed', status);
+    return status;
+  });
+  // "Atualizar": o comando sai só do build-info (nunca do renderer); sem clone, abre a página de releases
+  handle('update:run', async () => {
+    const status = await updateChecker.status();
+    if (status.fromClone) {
+      const res = await openUpdateInTerminal(buildInfo, (file) => void execFile('open', ['-a', 'Terminal', file], () => {}));
+      if (res.ok) return { ok: true as const, mode: 'terminal' as const };
+    }
+    void shell.openExternal(RELEASES_URL);
+    return { ok: true as const, mode: 'releases' as const };
   });
   handle('settings:set-keep-audio', async (_e, keep: unknown) => {
     await saveSettings({ ...(await loadSettings()), keepAudio: keep !== false });
@@ -1217,15 +1357,15 @@ function registerIpc(runner: AiRunner): void {
   }));
 
   // URL fixa: o renderer nunca escolhe o que abrir.
-  handle('app:open-privacy', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'));
+  handle('app:open-privacy', () => shell.openExternal(systemPanelUrl('microphone')));
 
   // URLs fixas: o renderer nunca escolhe o que abrir.
   handle('app:open-internet-accounts', () => shell.openExternal('x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension'));
   handle('app:open-calendar-privacy', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars'));
   handle('app:open-reminders-privacy', () => shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders'));
   // Lembretes de hoje (EKReminder): lidos só no Mac, mostrados no Início e nunca enviados à IA
-  const remindersEnabled = async () => (await loadSettings()).showReminders !== false;
-  handle('reminders:status', async () => ({ access: remindersAccess, enabled: await remindersEnabled() }));
+  const remindersEnabled = async () => remindersSupported() && (await loadSettings()).showReminders !== false;
+  handle('reminders:status', async () => ({ access: remindersAccess, enabled: remindersSupported() && (await remindersEnabled()) }));
   handle('reminders:request', () => {
     if (remindersAccess === 'notDetermined') detector?.requestRemindersAccess(); // a resposta chega por 'reminders:changed'
     return { access: remindersAccess };
@@ -1495,13 +1635,14 @@ function registerIpc(runner: AiRunner): void {
 
   handle('meetings:reveal', async (_e, dir: string) => shell.openPath(await checkedDir(dir)));
 
-  handle('chat:ask', async (event, id: number, rawDir: string, question: string) => {
+  handle('chat:ask', async (event, id: number, rawDir: string, question: string, web?: unknown) => {
     const controller = new AbortController();
     chats.set(id, controller);
     try {
       const dir = await checkedDir(rawDir);
-      const answer = await chatAnswer(runner, dir, question, controller.signal, (text) => event.sender.send('chat:delta', id, text));
-      return { ok: true as const, answer };
+      let sources: WebSource[] = [];
+      const answer = await chatAnswer(runner, dir, question, controller.signal, (text) => event.sender.send('chat:delta', id, text), await webRequested(web), (list) => (sources = list));
+      return { ok: true as const, answer, sources };
     } catch (err) {
       const kind = err instanceof AiError ? err.kind : 'other';
       return { ok: false as const, kind, message: (err as Error).message };
@@ -1554,7 +1695,7 @@ function registerIpc(runner: AiRunner): void {
     await startNewGlobalConversation((await loadSettings()).root);
     return { ok: true as const };
   });
-  handle('gchat:ask', async (event, id: number, question: unknown, scope: unknown) => {
+  handle('gchat:ask', async (event, id: number, question: unknown, scope: unknown, web?: unknown) => {
     const controller = new AbortController();
     chats.set(id, controller);
     try {
@@ -1569,6 +1710,7 @@ function registerIpc(runner: AiRunner): void {
           fallbackNotice: (lang) => t('gchat.fallback', undefined, lang === 'en' ? 'en' : 'pt-BR'),
           noMeetingsInPeriod: (lang) => t('gchat.none-period', undefined, lang === 'en' ? 'en' : 'pt-BR'),
           useTools: async () => (await loadSettings()).chatTools === true,
+          web: () => webRequested(web),
         },
         question,
         scope,
@@ -1621,6 +1763,12 @@ app.whenReady().then(async () => {
   ses.setPermissionCheckHandler(() => false);
   ses.setDevicePermissionHandler(() => false);
   ses.on('will-download', (event) => event.preventDefault());
+  if (isWindows()) {
+    app.setAppUserModelId('com.rice.app'); // avisos e agrupamento na barra de tarefas
+    nativeTheme.on('updated', () => {
+      if (window && !window.isDestroyed()) window.setTitleBarOverlay(titleBarOverlay(nativeTheme.shouldUseDarkColors, window.webContents.getZoomFactor()));
+    });
+  }
   if (BENCH) app.dock?.hide();
   if (appIconPath) {
     const image = nativeImage.createFromPath(appIconPath);
@@ -1678,6 +1826,11 @@ app.whenReady().then(async () => {
   calendarFeed.start();
   setInterval(() => void refreshEventKit(), 5 * 60_000).unref();
   setTimeout(() => void asr.warmup(), 2000);
+  // versão nova: lê o build-info e consulta (no máximo uma vez por dia) pouco depois de abrir e a cada 6 h com o app aberto
+  buildInfo = await readBuildInfo(join(__dirname, 'build-info.json'));
+  const checkUpdate = () => void updateChecker.maybeCheck().then((status) => send('update:changed', status)).catch(() => {});
+  setTimeout(checkUpdate, 20_000).unref();
+  setInterval(checkUpdate, 6 * 3_600_000).unref();
   // monta o índice de busca em segundo plano, para a primeira busca já encontrar tudo
   void loadSettings().then(({ root }) => searchIndex.refresh(root)).catch((err) => logError('search index', err));
   app.on('activate', createWindow);

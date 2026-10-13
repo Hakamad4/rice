@@ -40,6 +40,12 @@
     'opencode-sub': [['opencode-sub.1', ['curl -fsSL https://opencode.ai/install | bash']], ['opencode-sub.2', ['opencode auth login']], ['opencode-sub.3']],
   };
 
+  // Windows: sem Homebrew nem `curl | bash`; o npm instala os dois (o Claude Code tem instalador próprio, citado no texto do passo)
+  if (window.rice && window.rice.platform === 'win32') {
+    STEPS['chatgpt-sub'][0] = ['chatgpt-sub.1', ['npm i -g @openai/codex']];
+    STEPS['opencode-sub'][0] = ['opencode-sub.1', ['npm i -g opencode-ai']];
+  }
+
   /** Comando em `code` com um botão pequeno de copiar (o ícone muda para ✓ por um instante). */
   function commandLine(command) {
     const copy = el('button', { type: 'button', className: 'cmd-copy', title: t('ai.copy-command') }, [window.RiceIcons.icon('copy')]);
@@ -150,6 +156,7 @@
   /** Estado de uma linha (texto secundário à direita): Ativo, Conectado, Login expirado, Chave recusada ou Não configurado. */
   function vendorState(vendor, status) {
     const infos = [vendor.sub, vendor.api].filter(Boolean);
+    if (infos.every((id) => status.providers[id] && status.providers[id].unavailable)) return { key: 'none', text: t('ai.state.unavailable') };
     if (infos.includes(status.active)) return { key: 'active', text: t('ai.state.active') };
     if (infos.some((id) => status.providers[id] && status.providers[id].connected)) return { key: 'connected', text: t('ai.state.connected') };
     const failed = infos.find((id) => status.providers[id] && status.providers[id].verified === false);
@@ -213,6 +220,10 @@
         const provider = tab === 'api' ? vendor.api : vendor.sub;
         const info = status.providers[provider] || { hasKey: false, detail: '' };
         const isActive = status.active === provider;
+        if (info.unavailable) {
+          inner.replaceChildren(el('div', { className: 'ai-pad' }, [note(info.detail)])); // Antigravity no Windows: só o motivo
+          return;
+        }
         const hasField = provider !== 'chatgpt-sub' && provider !== 'opencode-sub' && provider !== 'agy-sub';
         let model = status.models[provider] || '';
         const configured = provider === 'opencode-sub' ? Boolean(info.loggedIn) : Boolean(info.connected);

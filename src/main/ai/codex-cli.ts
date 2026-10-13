@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { resolveSpawn, spawnOptions } from '../platform/spawn';
 import { t } from '../i18n';
 import { buildChildEnv } from './env';
 import { runCli, type CliLine } from './cli-run';
@@ -88,7 +89,8 @@ export function codexDisabledFeatures(binary: string, env: NodeJS.ProcessEnv): P
   const cached = featureCache.get(binary);
   if (cached) return cached;
   const result = new Promise<string[]>((resolve) => {
-    execFile(binary, ['features', 'list'], { env, timeout: 10_000, maxBuffer: 1 << 20 }, (err, stdout) => {
+    const spec = resolveSpawn(binary, ['features', 'list'], env);
+    execFile(spec.command, spec.args, spawnOptions(spec, { env, timeout: 10_000, maxBuffer: 1 << 20 }), (err, stdout) => {
       if (err) return resolve([]);
       const known = new Set(parseCodexFeatures(String(stdout)));
       resolve(CODEX_DENY_FEATURES.filter((f) => known.has(f)));

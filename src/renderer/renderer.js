@@ -41,6 +41,13 @@ const warRoom = window.RiceWarRoom.create({
 });
 const attachDeps = { rice: window.rice, warn: (message) => setWarning(t('common.error', { message })) };
 const attachments = window.RiceAttachments.create(attachDeps);
+const screens = window.RiceScreenshots.create({ rice: window.rice, warn: (message) => setWarning(message) });
+const shotsChip = window.RiceScreenshots.chip({ rice: window.rice, node: $('shots-chip'), captureNode: $('shots-capture') });
+const syncShotsChip = () => shotsChip.sync({ recording: recState === 'recording', dir: recDir });
+window.rice.on('screenshots:changed', (p) => {
+  screens.changed(p);
+  shotsChip.changed(p);
+});
 const liveScroll = window.RiceLiveScroll.create({ detail: $('detail'), button: $('live-jump') });
 let opening = false;
 let queuedSegments = [];
@@ -50,6 +57,8 @@ let partialRows = new Map();
 let streamNode = null;
 let streamRaw = '';
 const md = (text) => window.RiceMarkdown.renderMarkdown(text, document);
+/** Notas: a citação de uma captura vira a miniatura, só para capturas da reunião aberta. */
+const mdNotes = (text) => window.RiceMarkdown.renderMarkdown(text, document, { shot: (id) => screens.noteShot(id) });
 const notesPending = new Set();
 /** Progresso das notas em geração por reunião: { phase: 'extract' | 'write', part, total } (reuniões longas mostram a parte). */
 const notesProgress = new Map();
@@ -660,6 +669,7 @@ function recoverNote(dir) {
 /** Reunião com meta.json ilegível (R-52): uma página simples com a ação de reparar. */
 function openDamaged(m) {
   current = m.dir;
+  if (webSearch) webSearch.paint();
   view = 'meeting';
   setNav(null);
   const go = build('button', { type: 'button', className: 'primary', textContent: t('damaged.go') }, []);
@@ -749,7 +759,7 @@ function notesArea(dir, data, list) {
   const drawBody = () => {
     if (viewing) return;
     if (!data.notes) return body.replaceChildren(emptyNode());
-    const nodes = [build('div', { className: 'md' }, [md(data.notes)])];
+    const nodes = [build('div', { className: 'md' }, [mdNotes(data.notes)])];
     if (template) {
       const link = build('button', { className: 'link-button', textContent: t('notes.view-template') }, []);
       link.setAttribute('aria-expanded', String(expanded));
@@ -934,6 +944,7 @@ function leaveMeeting(next) {
 async function openMeeting(dir, opts = {}) {
   leaveMeeting(dir);
   current = dir;
+  if (webSearch) webSearch.paint();
   if (!opts.keepScope && isGlobalScope()) {
     // abrir uma reunião pela lista volta o chat para ela; vindo de uma citação, o chat entre reuniões fica
     chatScope = { kind: 'meeting' };
@@ -977,6 +988,8 @@ async function openMeeting(dir, opts = {}) {
   renderedLines = new Set();
   partialRows = new Map();
   addTranscriptLines(data.transcript);
+  await screens.setDir(dir, transcriptNode); // miniaturas no ponto do tempo; as notas só citam capturas desta lista
+  if (current !== dir) return;
   const extras = [];
   if (!openIsDraft && data.meta.notesStatus !== 'done' && !(recState !== 'idle' && recDir === dir) && !(notesPending.has(dir) && data.transcript.includes('**[')) && !notesProgress.has(dir)) {
     const gen = build('button', { textContent: t('notes.generate') }, []);
@@ -1052,6 +1065,7 @@ window.RiceShare.setup({ openDialog, warn: (message) => setWarning(t('common.err
 function goHome() {
   leaveMeeting(null);
   current = null;
+  if (webSearch) webSearch.paint();
   warRoom.setDir(null);
   attachments.setDir(null);
   openIsDraft = false;
@@ -1121,6 +1135,12 @@ let view = 'home';
 
 let homeBox = null; // a página do Início que está na tela (re-renderizar o Início não pisca)
 
+/** Nota do evento da agenda: o rascunho que já existe ou um novo (com o calendarEventId). */
+async function draftFor(ev) {
+  const existing = lastMeetings.find((m) => m.calendarEventId === ev.id && m.state === 'draft');
+  return existing ? existing.dir : window.rice.createMeeting(ev.title, ev.id);
+}
+
 async function showHome() {
   view = 'home';
   if (current === null) setNav('home');
@@ -1128,10 +1148,17 @@ async function showHome() {
   const args = {
     now: new Date(),
     onJoin: (ev) => rice.openLink(ev.joinUrl),
-    onNotes: async (ev) => {
-      const existing = lastMeetings.find((m) => m.calendarEventId === ev.id && m.state === 'draft');
-      openMeeting(existing ? existing.dir : await rice.createMeeting(ev.title, ev.id));
+    onNotes: async (ev) => openMeeting(await draftFor(ev)),
+    // grava já na nota do evento (a mesma do "Preparar notas", se existir) e abre a reunião
+    onRecord: async (ev) => {
+      if (recState !== 'idle') return;
+      const result = await rice.startRecording({ title: ev.title, dir: await draftFor(ev) });
+      if (!result.ok) return setWarning(t('common.error', { message: result.message }));
+      recDir = result.dir;
+      markRecorded(result.dir);
+      await openMeeting(result.dir);
     },
+    recording: recState !== 'idle',
     onConnect: () => showSettings('calendar'),
     onNewWarRoom: newWarRoom,
     onAsk: (question) => {
@@ -1217,6 +1244,7 @@ function closeGuide() {
 function showGuide(focus) {
   leaveMeeting(null);
   current = null;
+  if (webSearch) webSearch.paint();
   warRoom.setDir(null);
   attachments.setDir(null);
   view = 'guide';
@@ -1267,6 +1295,7 @@ function confirmDialog(message, label) {
 function showTemplates(tab) {
   leaveMeeting(null);
   current = null;
+  if (webSearch) webSearch.paint();
   warRoom.setDir(null);
   attachments.setDir(null);
   view = 'templates';
@@ -1308,6 +1337,13 @@ function writeChatPref(open) {
 }
 
 let chatPref = readChatPref();
+
+/** "Buscar na web" do chat (criado mais abaixo): ligado por conversa, só para as perguntas feitas com ele ligado. */
+let webSearch = null;
+const webOn = () => webSearch !== null && webSearch.isOn();
+const openWebSource = (url) => {
+  if (window.RiceWebSearch.safeUrl(url)) window.rice.openLink(url);
+};
 
 /** Escopo do chat: a reunião aberta, todas as reuniões ou uma pasta (o chat entre reuniões). */
 let chatScope = { kind: 'meeting' };
@@ -1352,6 +1388,7 @@ function applyChat() {
     $('send').disabled = current === null;
   }
   wasGlobal = global;
+  if (webSearch) webSearch.paint();
 }
 
 /** Abre o citado e destaca onde as palavras da pergunta aparecem (notas, senão transcrição); o chat entre reuniões continua aberto. */
@@ -1423,6 +1460,7 @@ $('scope-chip').onclick = () => {
 
 $('gchat-new').onclick = async () => {
   await window.rice.newGlobalChat();
+  if (webSearch) webSearch.reset('global'); // conversa nova começa com a busca desligada
   showGlobalEmpty();
   $('question').focus();
 };
@@ -1448,9 +1486,12 @@ $('chat-toggle').onclick = () => {
   if (chatIsOpen()) $('question').focus();
 };
 
+/** Tecla de atalho: ⌘ no Mac, Ctrl no Windows (titlebar.js define RiceKeys; sem ele, ⌘). */
+const modKey = (e) => (window.RiceKeys ? window.RiceKeys.mod(e) : e.metaKey);
+
 /** ⌘J: abre o chat de todas as reuniões, de qualquer tela. */
 const onGlobalChatShortcut = (e) => {
-  if (!(e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j')) return;
+  if (!(modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'j')) return;
   e.preventDefault();
   setScope(isGlobalScope() ? chatScope : { kind: 'all' }, true);
 };
@@ -1540,7 +1581,7 @@ async function askGlobal(question) {
   const scope = chatScope.kind === 'folder' ? { kind: 'folder', folderId: chatScope.folderId } : { kind: 'all' };
   let result;
   try {
-    result = await window.rice.askGlobal(id, question, scope);
+    result = await window.rice.askGlobal(id, question, scope, webOn());
   } catch (err) {
     result = { ok: false, message: String((err && err.message) || err) };
   }
@@ -1550,7 +1591,11 @@ async function askGlobal(question) {
   streamNode = null;
   answerNode.classList.remove('streaming');
   if (stopped && !result.ok) answerNode.textContent = streamRaw ? `${streamRaw}\n\n${t('chat.stopped')}` : t('chat.stopped');
-  else if (result.ok) window.RiceGlobalChat.fillAnswer(answerNode, message, md(result.answer), result.citations || [], (c) => openCitation(c, result.terms));
+  else if (result.ok) {
+    window.RiceGlobalChat.fillAnswer(answerNode, message, md(result.answer), result.citations || [], (c) => openCitation(c, result.terms));
+    const web = window.RiceWebSearch.sourcesBox(result.sources, openWebSource);
+    if (web) message.append(web);
+  }
   else {
     answerNode.textContent = result.message;
     noteLoginError(result);
@@ -1593,7 +1638,7 @@ $('ask').onsubmit = async (event) => {
   node.append(thinkingNode(t('chat.thinking')));
   streamNode = node;
   streamRaw = '';
-  const result = await window.rice.ask(id, current, question);
+  const result = await window.rice.ask(id, current, question, webOn());
   const stopped = userStopped;
   setSendStop(false);
   streamNode = null;
@@ -1603,6 +1648,8 @@ $('ask').onsubmit = async (event) => {
   } else if (result.ok) {
     if (streamRaw) node.replaceChildren(md(streamRaw));
     else node.replaceChildren();
+    const web = window.RiceWebSearch.sourcesBox(result.sources, openWebSource);
+    if (web) node.parentElement.append(web);
   } else {
     node.textContent = result.message; // já vem amigável (pt-BR) do provedor ativo
     noteLoginError(result);
@@ -1861,7 +1908,9 @@ window.rice.on('session:state', async (state) => {
   }
   syncLiveTimer();
   renderRecLabel();
+  syncShotsChip();
   if (state === 'recording' || was === 'recording') refreshList(); // ponto vermelho na reunião que está gravando
+  if (view === 'home' && (was === 'idle') !== (state === 'idle')) showHome(); // "Gravar agora" some/volta na agenda
   if (was !== 'idle' && state === 'idle') {
     refreshList();
     if (current) openMeeting(current);
@@ -1963,11 +2012,26 @@ window.rice.sessionState().then(({ state, dir }) => {
   recState = state;
   recDir = dir;
   renderRecButton();
+  syncShotsChip();
 });
 
 /** Indicador discreto “via …” perto do chat; relê o provedor ativo quando o guia o troca. */
 const aiChip = window.rice.aiStatus ? window.RiceAiChip.create({ rice: window.rice, node: $('ai-via'), onConfigure: () => showGuide('ai'), onSettings: () => showSettings('ai') }) : null;
-const refreshAiVia = () => aiChip && aiChip.refresh();
+webSearch = window.RiceWebSearch.create({
+  button: $('web-toggle'),
+  note: $('web-note'),
+  keyOf: () => (isGlobalScope() ? 'global' : current),
+  status: () => (window.rice.aiWebStatus ? window.rice.aiWebStatus() : Promise.resolve({ available: false, hint: t('chat.web.unavailable') })),
+});
+// versão nova: ponto no item Configurações; o aviso completo fica em Configurações › Atualizações
+const applyUpdate = (status) => window.dispatchEvent(new CustomEvent('rice:update-changed', { detail: status })); // a tela de Configurações ouve o mesmo evento
+window.addEventListener('rice:update-changed', (e) => window.RiceUpdate.applyDot($('settings-link'), e.detail));
+if (window.rice.updateStatus) window.rice.updateStatus().then(applyUpdate).catch(() => {});
+window.rice.on('update:changed', applyUpdate);
+const refreshAiVia = () => {
+  if (webSearch) webSearch.refreshSupport();
+  return aiChip && aiChip.refresh();
+};
 window.addEventListener('rice:ai-changed', refreshAiVia);
 refreshAiVia();
 
@@ -2061,6 +2125,8 @@ function syncSearchChrome() {
   $('search-hint').hidden = has;
 }
 
+if (window.RiceKeys) $('search-hint').textContent = window.RiceKeys.label('K'); // dica ⌘K (Mac) ou Ctrl K (Windows)
+
 function openResult(result) {
   const hit = window.RiceSearch.bestHit(result);
   openMeeting(result.dir, { reveal: { terms: searchWords, field: hit ? hit.field : 'title' } });
@@ -2125,7 +2191,7 @@ $('search').onkeydown = (e) => {
   }
 };
 const onSearchShortcut = (e) => {
-  if (!(e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k')) return;
+  if (!(modKey(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k')) return;
   e.preventDefault();
   if (document.body.classList.contains('side-collapsed')) applySidebar(false);
   $('search').focus();
@@ -2140,6 +2206,7 @@ syncSearchChrome();
 function showSettings(focus) {
   leaveMeeting(null);
   current = null;
+  if (webSearch) webSearch.paint();
   warRoom.setDir(null);
   attachments.setDir(null);
   view = 'settings';
@@ -2194,7 +2261,7 @@ window.rice.on('ui:language', async (language) => {
 
 /** ⌘⌫ com uma reunião aberta abre o diálogo de apagar (fora de campos de texto). */
 const onDeleteShortcut = (e) => {
-  if (!(e.metaKey && e.key === 'Backspace') || current === null) return;
+  if (!(modKey(e) && e.key === 'Backspace') || current === null) return;
   const target = e.target;
   if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
   if (document.querySelector('.overlay')) return;

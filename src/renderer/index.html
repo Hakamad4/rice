@@ -177,7 +177,7 @@
   /* Agenda do Início: monocromática, uma grade fixa por linha (hora | título | participantes no hover | ações), 36px */
   .day-label { display:flex; align-items:baseline; gap:8px; font-size:13px; font-weight:600; color:var(--ink); margin:24px 0 4px; }
   .day-label:first-of-type { margin-top:16px; } .day-label .day-date { font-weight:400; color:var(--muted); }
-  .event { --ev-time:92px; --ev-meta:116px; --ev-actions:164px; display:grid; grid-template-columns:var(--ev-time) minmax(0,1fr) var(--ev-meta) var(--ev-actions); align-items:center; column-gap:10px; height:40px; padding:0 10px; margin:0 -10px; border-radius:8px; }
+  .event { --ev-time:92px; --ev-meta:116px; --ev-actions:196px; display:grid; grid-template-columns:var(--ev-time) minmax(0,1fr) var(--ev-meta) var(--ev-actions); align-items:center; column-gap:10px; height:40px; padding:0 10px; margin:0 -10px; border-radius:8px; }
   .h12 .event { --ev-time:132px; }
   .event:hover, .event:focus-within { background:var(--hover); }
   .ev-time { color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -189,8 +189,9 @@
   .event:hover .ev-actions, .event:focus-within .ev-actions, .event.soon .ev-actions { opacity:1; }
   .ev-actions button { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 8px; color:var(--muted); font-size:12px; border-radius:6px; } .ev-actions button:hover:not(:disabled) { color:var(--ink); background:var(--active); }
   .ev-actions .icon { width:14px; height:14px; display:none; }
-  .ev-actions .ev-join.hot { color:var(--ink); box-shadow:inset 0 0 0 1px var(--line); }
-  .event.soon .ev-actions button:not(.hot) { opacity:0; } .event.soon:hover .ev-actions button, .event.soon:focus-within .ev-actions button { opacity:1; }
+  .ev-actions .ev-rec.hot { color:var(--ink); box-shadow:inset 0 0 0 1px var(--line); }
+  .ev-actions .ev-rec.hot::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--rec); } .ev-actions .ev-rec .icon { display:none; }
+  .event.soon .ev-actions button:not(.hot):not(.ev-join) { opacity:0; } .event.soon:hover .ev-actions button, .event.soon:focus-within .ev-actions button { opacity:1; }
   .event.allday { display:block; color:var(--muted); font-size:13px; line-height:40px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .event.allday:hover { background:none; }
   @container detail (max-width: 600px) {
     .event { --ev-time:84px; --ev-meta:0px; --ev-actions:auto; grid-template-columns:var(--ev-time) minmax(0,1fr) auto; } .h12 .event { --ev-time:124px; } .ev-meta { display:none; }
@@ -329,6 +330,23 @@
 
   /* transcrição: texto corrido, falante discreto */
   .transcript:empty { display:none; }
+  /* capturas de tela: miniatura de 64px com raio 6 no ponto do tempo, legenda em cor secundária, contador discreto na barra */
+  .t-shot { display:flex; align-items:center; gap:var(--space-3); margin:0 0 var(--space-3); }
+  .shot { display:flex; align-items:center; gap:var(--space-3); min-width:0; max-width:100%; }
+  .shot-open { flex:none; padding:0; border-radius:6px; line-height:0; box-shadow:inset 0 0 0 1px var(--line); overflow:hidden; } .shot-open[hidden] { display:none; }
+  .shot-img { display:block; height:64px; width:auto; min-width:48px; max-width:min(160px, 38vw); object-fit:cover; border-radius:6px; background:var(--hover); }
+  .shot-caption { display:flex; flex-direction:column; min-width:0; font-size:12px; line-height:1.4; color:var(--muted); }
+  .shot-clock { font-variant-numeric:tabular-nums; color:var(--faint); } .shot-text { overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .shot-more { flex:none; opacity:.6; } .shot:hover .shot-more, .shot:focus-within .shot-more { opacity:1; }
+  .note-shot { margin:var(--space-2) 0 var(--space-3); } .note-shot .shot-img { height:96px; max-width:min(240px, 60vw); }
+  .shots-chip { flex:none; display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 8px; border-radius:999px; font-size:11px; color:var(--muted); white-space:nowrap; } .shots-chip:hover { color:var(--ink); background:var(--hover); } .shots-chip[hidden] { display:none; } .shots-chip .icon { width:12px; height:12px; } .shots-chip.warn { color:var(--warn); }
+  .shots-capture { flex:none; width:24px; height:24px; } .shots-capture[hidden] { display:none; } .shots-capture .icon { width:14px; height:14px; } .shots-capture:disabled { opacity:.4; }
+  .shots-confirm-list { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:var(--space-2); font-size:14px; line-height:1.5; }
+  .shot-viewer { background:rgba(0,0,0,.72); z-index:60; }
+  .shot-viewer-box { display:flex; flex-direction:column; gap:var(--space-2); max-width:min(1280px, 94vw); max-height:92vh; }
+  .shot-viewer-img { display:block; max-width:100%; max-height:calc(92vh - 44px); object-fit:contain; border-radius:10px; background:var(--bg); }
+  .shot-viewer-bar { display:flex; align-items:center; justify-content:space-between; gap:var(--space-3); color:rgba(255,255,255,.88); font-size:13px; } .shot-viewer-bar .icon-btn { color:rgba(255,255,255,.88); }
+  .shot-viewer-caption { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .t-row { margin:0 0 var(--space-3); }
   .t-who { font-size:12px; font-weight:600; margin-right:8px; }
   .t-row.other .t-who { color:var(--muted); font-weight:500; }
@@ -646,6 +664,23 @@
   .ai-chip .tools-on { color:var(--accent, currentColor); }
   .ai-chip .ai-chip-text { min-width:0; line-height:1.4; padding:1px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .ai-chip .icon { width:12px; height:12px; flex:none; }
   .ai-chip .provider-logo.small { width:14px; height:14px; flex:none; }
+  /* aviso de versão nova: ponto discreto no item Configurações e a linha com o botão em Configurações › Atualizações */
+  .nav-item.has-update::after { content:''; flex:none; width:7px; height:7px; margin-left:auto; border-radius:50%; background:var(--accent, currentColor); }
+  .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  .update-notice { margin:0 0 14px; padding:12px 14px; border-radius:10px; background:var(--hover); }
+  .update-notice[hidden] { display:none; } .update-notice .set-help { margin:8px 0 0; }
+  .update-line { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; min-width:0; }
+  .update-text { flex:1 1 180px; min-width:0; font-size:13px; font-weight:500; overflow-wrap:anywhere; }
+  /* Buscar na web: interruptor discreto ao lado dos chips; ligado ganha cor de destaque e o rótulo "Web" */
+  .web-chip { flex:none; display:inline-flex; align-items:center; gap:5px; height:28px; min-width:28px; justify-content:center; padding:0 7px; border-radius:8px; font-size:12px; line-height:1.4; background:var(--hover); color:var(--muted); }
+  .web-chip .icon { width:14px; height:14px; flex:none; }
+  .web-chip:hover:not(:disabled) { background:var(--active); color:var(--ink); }
+  .web-chip.on { color:var(--accent, var(--ink)); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent, currentColor) 45%, transparent); }
+  .web-chip:disabled { opacity:.45; cursor:default; }
+  .web-note { display:flex; align-items:center; gap:8px; margin:0 16px 10px; padding:7px 10px; border-radius:8px; background:var(--hover); color:var(--muted); font-size:11px; line-height:1.45; }
+  .web-note[hidden] { display:none; } .web-note span { flex:1 1 auto; min-width:0; } .web-note button { flex:none; height:24px; padding:0 8px; font-size:11px; }
+  .sources.web-sources { flex-direction:column; align-items:flex-start; gap:3px; margin-top:10px; }
+  .web-sources .web-source { max-width:100%; text-align:left; overflow-wrap:anywhere; } .web-source-domain { color:var(--faint); }
   /* Privacidade e segurança: linhas com ícone de linha, título e texto curto */
   .priv-list { display:grid; grid-template-columns:1fr; gap:10px; padding:10px 0; }
   .priv-item { display:grid; grid-template-columns:16px minmax(0,1fr); column-gap:10px; row-gap:6px; align-items:center; padding:14px; border-radius:10px; background:var(--hover); min-width:0; } .priv-ico { grid-column:1; grid-row:1; display:inline-flex; color:var(--muted); } .priv-ico .icon { width:16px; height:16px; display:block; }
@@ -799,6 +834,15 @@
   .cmd { margin:6px 0; } .row { display:flex; gap:var(--gap-3); flex-wrap:wrap; align-items:center; margin:10px 0; }
   .row input { flex:1; min-width:200px; }
   .feedback.ok { color:var(--muted); } .feedback.bad { color:var(--bad); } .howto { margin:8px 0; padding-left:20px; }
+
+  /* Windows (body.platform-win): sem semáforos nem o recuo à esquerda; os botões nativos (titleBarOverlay, ~140px) ficam no canto direito
+     e nada do que está no topo direito (barra de gravação sem chat, cabeçalho do chat com chat) passa por baixo deles */
+  :root { --overlay-r:0px; }
+  body.platform-win:not(.chat-open) #rec-bar { padding-right:calc(20px + var(--overlay-r)); }
+  body.platform-win.chat-open .chat-head { padding-right:calc(16px + var(--overlay-r)); min-height:var(--titlebar); box-sizing:border-box; }
+  /* chat estreito: o título não cabe ao lado dos botões nativos; o cabeçalho desce para baixo deles (nada de título quebrado) */
+  body.platform-win #chat { container:chat / inline-size; }
+  @container chat (max-width:400px) { body.platform-win.chat-open .chat-head { padding-right:16px; padding-top:calc(var(--titlebar) + 2px); } }
 </style>
 </head>
 <body>
@@ -838,6 +882,8 @@
   <div id="center">
     <div id="rec-bar">
       <span id="status" class="empty"></span>
+      <button id="shots-chip" type="button" class="shots-chip" hidden></button>
+      <button id="shots-capture" type="button" class="icon-btn shots-capture" hidden></button>
       <button id="retry" data-i18n="rec.retry" hidden>Tentar de novo</button>
       <span id="wr-indicator" class="wr-indicator" hidden></span>
       <span id="lang-slot" class="lang-slot"></span>
@@ -859,7 +905,9 @@
     <div class="chat-chips">
       <button class="scope-chip" id="scope-chip" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-title="gchat.scope-title" title="Sobre o que o Rice responde"><span id="scope-label"></span></button>
       <button class="ai-chip" id="ai-via" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-title="ai.chip.title" title="Trocar a IA e o modelo"></button>
+      <button class="web-chip" id="web-toggle" type="button" aria-pressed="false" data-i18n-title="chat.web.title-off" title="Buscar na web nesta conversa (desligado)" data-i18n-aria="chat.web.label" aria-label="Buscar na web" disabled></button>
     </div>
+    <div class="web-note" id="web-note" role="note" hidden><span data-i18n="chat.web.note">A pergunta é enviada para a busca do provedor de IA. As notas da reunião continuam indo só para a IA.</span><button class="ghost" type="button" data-i18n="chat.web.note-dismiss">Entendi</button></div>
     <div id="messages"><p class="empty" data-i18n="chat.open-first">Abra uma reunião para conversar sobre ela.</p></div>
     <div id="messages-global" hidden></div>
     <form id="ask">
@@ -882,6 +930,8 @@
   <script src="annotations.js"></script>
   <script src="speaker-popover.js"></script>
   <script src="ai-chip.js"></script>
+  <script src="web-search.js"></script>
+  <script src="update-notice.js"></script>
   <script src="privacy.js"></script>
   <script src="grouping.js"></script>
   <script src="search.js"></script>
@@ -906,6 +956,7 @@
   <script src="idea-templates.js"></script>
   <script src="live-scroll.js"></script>
   <script src="attachments.js"></script>
+  <script src="screenshots.js"></script>
   <script src="warroom.js"></script>
   <script src="renderer.js"></script>
 </body>

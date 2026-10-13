@@ -1,3 +1,4 @@
+import { renameRetry } from '../platform/fs';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, type WriteStream } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -122,7 +123,7 @@ export async function ensureModel(
     );
     const actual = hash.digest('hex');
     if (actual !== expectedSha) throw new Error(`SHA-256 do modelo não confere (esperado ${expectedSha}, obtido ${actual})`);
-    await rename(part, dest);
+    await renameRetry(part, dest);
     await writeFile(`${dest}.sha256`, `${actual} ${receivedBytes}\n`);
     return dest;
   } catch (err) {

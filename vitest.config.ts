@@ -1,8 +1,39 @@
 import { defineConfig } from 'vitest/config';
 
+/**
+ * Suítes que dependem de coisas só do macOS/POSIX: executam scripts com `#!` direto (os "falsos" CLIs e helpers em tests/fixtures),
+ * `/bin/sh`, `bash`, `chmod`/modos 0700 e o `.command`. No Windows elas não rodam; o equivalente do Windows é coberto por
+ * tests/platform/** (simulando `process.platform`) e pelo smoke test (scripts/smoke.mjs) no CI.
+ */
+const POSIX_ONLY = [
+  'tests/ai/agy-sandbox.test.ts',
+  'tests/ai/cli-runners.test.ts',
+  'tests/ai/factory.test.ts',
+  'tests/ai/light.test.ts',
+  'tests/ai/model-choice.test.ts',
+  'tests/ai/opencode-cli.test.ts',
+  'tests/ai/status-cache.test.ts',
+  'tests/asr/whisper-server.test.ts',
+  'tests/claude/runner.test.ts',
+  'tests/session/audio-capture.test.ts',
+  'tests/update/update-sh.test.ts',
+  'tests/session/detector-client.test.ts',
+  'tests/session/notes.test.ts',
+  'tests/session/reminders.test.ts',
+  'tests/store/permissions.test.ts',
+  'tests/warroom/handoff.test.ts',
+  'tests/packaging.test.ts', // install.sh, bash
+];
+
+/** Precisam de `swift build` dos helpers do Mac (e das dependências em native/third_party, que o CI não tem): só rodam na máquina de desenvolvimento. */
+const NEEDS_SWIFT_BUILD = ['tests/native/rice-audio.test.ts', 'tests/native/rice-detector.test.ts'];
+/** Compila o núcleo C++ dos helpers do Windows e depende do APM vendorizado: roda no windows.yml (que define RICE_WIN_BIN_DIR e testa os .exe já compilados), não no ci.yml. */
+const NEEDS_NATIVE_TOOLCHAIN = ['tests/native/win-parity.test.ts'];
+
 export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts'],
+    exclude: ['**/node_modules/**', ...(process.platform === 'win32' ? POSIX_ONLY : []), ...(process.env.CI ? [...NEEDS_SWIFT_BUILD, ...(process.env.RICE_WIN_BIN_DIR ? [] : NEEDS_NATIVE_TOOLCHAIN)] : [])],
     env: { TZ: 'America/Sao_Paulo' },
     testTimeout: 20_000,
   },

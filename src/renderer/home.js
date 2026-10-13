@@ -68,7 +68,7 @@
     input.setAttribute('aria-label', t('gchat.field-aria'));
     input.id = 'home-ask-input';
     const hint = el('span', { className: 'ask-ph' }, [el('span', { className: 'ph-long', textContent: t('gchat.home-ph') }, []), el('span', { className: 'ph-mid', textContent: t('gchat.field-aria') }, []), el('span', { className: 'ph-short', textContent: t('gchat.home-ph-short') }, [])]);
-    const form = el('form', { className: 'home-ask' }, [el('span', { className: 'ico' }, [window.RiceIcons.icon('sparkles')]), el('div', { className: 'ask-field' }, [input, hint]), el('kbd', { className: 'kbd-hint', textContent: '⌘J' }, [])]);
+    const form = el('form', { className: 'home-ask' }, [el('span', { className: 'ico' }, [window.RiceIcons.icon('sparkles')]), el('div', { className: 'ask-field' }, [input, hint]), el('kbd', { className: 'kbd-hint', textContent: window.RiceKeys ? window.RiceKeys.label('J') : '⌘J' }, [])]);
     form.onsubmit = (e) => {
       e.preventDefault();
       const question = input.value.trim();
@@ -126,7 +126,7 @@
   function applyReminders(container, state, handlers) {
     const slot = container.querySelector('.reminders-slot');
     if (!slot) return;
-    if (!state || state.enabled === false) return slot.replaceChildren();
+    if (!state || state.enabled === false || state.access === 'unsupported') return slot.replaceChildren();
     if (state.access === 'notDetermined' || state.access === 'denied') {
       const denied = state.access === 'denied';
       const row = el('div', { className: 'rem-allow' }, [
@@ -187,7 +187,7 @@
     return b;
   }
 
-  function render(container, { events, now, google, connected, loading, onJoin, onNotes, onConnect, onAsk, onNewWarRoom }) {
+  function render(container, { events, now, google, connected, loading, onJoin, onNotes, onRecord, recording, onConnect, onAsk, onNewWarRoom }) {
     const anySource = connected !== undefined ? connected : Boolean(google && google.connected); // Google OU Calendário do macOS
     container.classList.toggle('h12', uses12h()); // "4:14 PM–4:44 PM" precisa de coluna de hora mais larga
     const nodes = [el('div', { className: 'ai-notice-slot' }, [])]; // o aviso de IA entra aqui quando o status chega, sem atrasar a página
@@ -222,12 +222,12 @@
         const soon = happening || (start > now && start - now <= SOON_MS);
         const actions = [];
         if (isMeeting(e)) {
-          // "Entrar" só no evento de agora ou que começa em até 10 min; o espaço dele é reservado para "Fazer notas" não pular de lugar
-          actions.push(e.joinUrl && soon ? action(t('home.join'), 'video', () => onJoin(e), 'ev-join hot') : el('span', {}, []));
-          actions.push(action(t('home.take-notes'), 'file-text', () => onNotes(e)));
+          // agora ou em até 10 min: "Entrar" (com link) e "Gravar agora"; antes disso, só "Preparar notas" (rascunho, sem gravar)
+          actions.push(e.joinUrl && soon ? action(t('home.join'), 'video', () => onJoin(e), 'ev-join') : el('span', {}, []));
+          actions.push(soon && onRecord && !recording ? action(t('home.record-now'), 'record', () => onRecord(e), 'ev-rec hot') : action(t('home.prepare-notes'), 'file-text', () => onNotes(e)));
         }
         nodes.push(
-          el('div', { className: 'event' + (soon && e.joinUrl ? ' soon' : '') + (happening ? ' now' : '') }, [
+          el('div', { className: 'event' + (soon && isMeeting(e) ? ' soon' : '') + (happening ? ' now' : '') }, [
             el('span', { className: 'ev-time', textContent: range(e) }, []),
             el('span', { className: 'ev-main' }, [el('span', { className: 'ev-title', textContent: e.title }, []), ...(happening ? [el('span', { className: 'now-tag', textContent: t('home.now') }, [])] : [])]),
             el('span', { className: 'ev-meta', textContent: e.attendees > 0 ? window.RiceI18n.tn('home.attendees', e.attendees) : '' }, []),

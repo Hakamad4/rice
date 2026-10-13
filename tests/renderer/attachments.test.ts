@@ -16,6 +16,7 @@ async function setup(list = items, supported = false) {
   const attachPick = vi.fn(async () => []);
   const attachRemove = vi.fn(async () => ({ ok: true }));
   const { handlers } = bootRenderer({
+    saveAnnotations: async () => ({ ok: true }),
     attachList: async () => ({ items: list, images: { supported, provider: 'claude-sub' } }),
     attachThumb: async () => 'data:image/png;base64,AAAA',
     attachFiles, attachData, attachPick, attachRemove,

@@ -10,9 +10,11 @@
     "test:watch": "TZ=America/Sao_Paulo vitest",
     "typecheck": "tsc --noEmit",
     "build:native": "scripts/build-native.sh",
-    "build:app": "esbuild src/main/app/main.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --external:onnxruntime-node --external:better-sqlite3 --outfile=out/main.cjs && cp src/main/app/preload.cjs out/preload.cjs && cp src/main/app/nub-preload.cjs out/nub-preload.cjs && cp src/main/app/alert-preload.cjs out/alert-preload.cjs && (cp assets/icon/icon.png assets/icon/trayTemplate.png assets/icon/trayTemplate@2x.png out/ 2>/dev/null || true)",
+    "build:app": "esbuild src/main/app/main.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --external:onnxruntime-node --external:better-sqlite3 --outfile=out/main.cjs && node scripts/copy-app-files.mjs && node scripts/write-build-info.mjs",
     "app": "npm run build:app && electron .",
-    "dist": "scripts/build-native.sh && scripts/stage-native.sh && npm run build:app && electron-builder --mac --arm64"
+    "dist": "scripts/build-native.sh && scripts/stage-native.sh && npm run build:app && electron-builder --mac --arm64",
+    "dist:win": "powershell -ExecutionPolicy Bypass -File scripts/stage-native-win.ps1 && powershell -ExecutionPolicy Bypass -File scripts/fetch-whisper-win.ps1 && npm run build:app && electron-builder --win --x64 --publish never",
+    "smoke:win": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -49,12 +51,7 @@
       "assets/icon/**",
       "resources/models/**",
       "native-bin/**",
-      "node_modules/**",
-      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
-      "!node_modules/onnxruntime-node/bin/napi-v6/win32/**",
-      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/x64/**",
-      "!node_modules/better-sqlite3/prebuilds/!(darwin-arm64.node)",
-      "!node_modules/better-sqlite3/{src,deps,build}/**"
+      "node_modules/**"
     ],
     "mac": {
       "target": [
@@ -87,7 +84,16 @@
         "NSRemindersFullAccessUsageDescription": "O Rice lê os Lembretes para mostrar o que vence hoje. / Rice reads your Reminders to show what is due today.",
         "NSRemindersUsageDescription": "O Rice lê os Lembretes para mostrar o que vence hoje. / Rice reads your Reminders to show what is due today.",
         "LSUIElement": false
-      }
+      },
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+        "!node_modules/onnxruntime-node/bin/napi-v6/win32/**",
+        "!node_modules/onnxruntime-node/bin/napi-v6/darwin/x64/**",
+        "!node_modules/better-sqlite3/prebuilds/!(darwin-arm64.node)",
+        "!node_modules/better-sqlite3/{src,deps,build}/**",
+        "!native-bin/win/**",
+        "!resources/win/**"
+      ]
     },
     "dmg": {
       "title": "Rice ${version}",
@@ -103,6 +109,39 @@
           "path": "/Applications"
         }
       ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon/icon.ico",
+      "files": [
+        "resources/win/**",
+        "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+        "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+        "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**",
+        "!node_modules/better-sqlite3/prebuilds/!(win32-x64.node)",
+        "!node_modules/better-sqlite3/{src,deps,build}/**",
+        "!native-bin/rice-audio",
+        "!native-bin/rice-detector"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Rice",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Rice-Setup-${version}-${arch}.${ext}",
+      "installerIcon": "assets/icon/icon.ico",
+      "uninstallerIcon": "assets/icon/icon.ico"
     }
   }
 }

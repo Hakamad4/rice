@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
-import { dirname, delimiter } from 'node:path';
+import { dirname, posix, win32 } from 'node:path';
+import { cliDirs, envGet, isWindows, pathDelimiter, pathKey } from '../platform';
 
 /** Credenciais que o Rice nunca deixa vazar do ambiente do usuário para um processo filho. */
 export const SENSITIVE_ENV = [
@@ -21,10 +22,10 @@ export const isSecretEnvName = (name: string): boolean => (SENSITIVE_ENV as read
 
 /** App aberto pelo Finder herda um PATH mínimo; os CLIs são scripts `#!/usr/bin/env node` e precisam achar o `node`. */
 function extendedPath(current: string | undefined, binary?: string): string {
-  const extra = ['/usr/local/bin', '/opt/homebrew/bin', `${homedir()}/.local/bin`];
-  if (binary && binary.includes('/')) extra.unshift(dirname(binary));
-  const parts = [...(current ?? '').split(delimiter).filter(Boolean), ...extra];
-  return [...new Set(parts)].join(delimiter);
+  const extra = isWindows() ? cliDirs() : ['/usr/local/bin', '/opt/homebrew/bin', `${homedir()}/.local/bin`];
+  if (binary && (binary.includes('/') || (isWindows() && binary.includes('\\')))) extra.unshift((isWindows() ? win32 : posix).dirname(binary));
+  const parts = [...(current ?? '').split(pathDelimiter()).filter(Boolean), ...extra];
+  return [...new Set(parts)].join(pathDelimiter());
 }
 
 /**
@@ -34,6 +35,6 @@ function extendedPath(current: string | undefined, binary?: string): string {
 export function buildChildEnv(base: NodeJS.ProcessEnv, inject: Record<string, string> = {}, binary?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...base };
   for (const name of Object.keys(env)) if (isSecretEnvName(name)) delete env[name];
-  env.PATH = extendedPath(env.PATH, binary);
+  env[pathKey(env)] = extendedPath(envGet(env, 'PATH'), binary); // no Windows a chave é `Path`: não criar uma segunda
   return { ...env, ...inject };
 }

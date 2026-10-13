@@ -18,3 +18,8 @@ export function findTrayIcons(dir: string, exists: (path: string) => boolean = e
   }
   return null;
 }
+
+/** Windows: `icon.ico` (vários tamanhos) ao lado do `icon.png` em `out/` ou em `assets/icon/`; serve ao instalador e à bandeja. */
+export function findWinIcon(dir: string, exists: (path: string) => boolean = existsSync): string | null {
+  return [join(dir, 'icon.ico'), join(dir, '..', 'assets', 'icon', 'icon.ico')].find(exists) ?? null;
+}

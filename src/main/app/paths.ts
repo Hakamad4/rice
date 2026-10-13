@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exeName, findCli, isWindows } from '../platform';
 
 /** Sobe a partir deste arquivo até achar o package.json do Rice (funciona em src/ e em out/). */
 export function repoRoot(): string {
@@ -15,10 +16,17 @@ export function repoRoot(): string {
   throw new Error('não encontrei a raiz do repositório do Rice');
 }
 
-/** Binário nativo: o compilado no repositório (`native/<nome>/.build/release`) ou, no app empacotado, o de `native-bin/`. */
-function nativeBinary(name: string): string {
-  const built = join(repoRoot(), 'native', name, '.build', 'release', name);
-  return existsSync(built) ? built : join(repoRoot(), 'native-bin', name);
+/**
+ * Binário nativo. Mac: o compilado no repositório (`native/<nome>/.build/release`) ou, no app empacotado, o de `native-bin/`.
+ * Windows: o do build CMake (`native/win/build/Release`) ou, empacotado, `native-bin/win/<nome>.exe`.
+ */
+export function nativeBinary(name: string, exists: (path: string) => boolean = existsSync, root: string = repoRoot()): string {
+  if (isWindows()) {
+    const dev = [join(root, 'native', 'win', 'build', 'Release', exeName(name)), join(root, 'native', 'win', 'build', exeName(name))].find((p) => exists(p));
+    return dev ?? join(root, 'native-bin', 'win', exeName(name));
+  }
+  const built = join(root, 'native', name, '.build', 'release', name);
+  return exists(built) ? built : join(root, 'native-bin', name);
 }
 
 export function riceAudioBinary(): string {
@@ -29,14 +37,14 @@ export function riceDetectorBinary(): string {
   return process.env.RICE_DETECTOR_BIN ?? nativeBinary('rice-detector');
 }
 
-export function claudeBinary(): string {
-  const candidates = [join(homedir(), '.local', 'bin', 'claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude'];
-  return candidates.find((p) => existsSync(p)) ?? 'claude';
+/** Claude Code: `claude.exe` (instalador nativo) ou `claude.cmd` (npm) no Windows; `claude` no PATH se não achar. */
+export function claudeBinary(exists?: (path: string) => boolean): string {
+  return findCli('claude', [], exists ? { exists } : {}) ?? 'claude';
 }
 
+/** CLI `name` nos lugares comuns e no PATH; o próprio nome se não achar (o spawn falha com ENOENT e a UI explica). */
 function findBinary(name: string, extra: string[]): string {
-  const candidates = [...extra, `/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`, join(homedir(), '.local', 'bin', name), join(homedir(), '.npm-global', 'bin', name)];
-  return candidates.find((p) => existsSync(p)) ?? name;
+  return findCli(name, extra) ?? name;
 }
 
 /** Codex CLI (assinatura do ChatGPT); `codex` no PATH se não achar nos lugares comuns. */
@@ -44,14 +52,14 @@ export function codexBinary(): string {
   return process.env.RICE_CODEX_BIN ?? findBinary('codex', []); // RICE_CODEX_BIN: instância de teste com um codex falso
 }
 
-/** Antigravity CLI (`agy`, em `~/.local/bin`). */
+/** Antigravity CLI (`agy`, em `~/.local/bin`). Só roda no macOS (sandbox-exec): ver `agySupported()`. */
 export function agyBinary(): string {
-  return process.env.RICE_AGY_BIN ?? findBinary('agy', [join(homedir(), '.local', 'bin', 'agy')]);
+  return process.env.RICE_AGY_BIN ?? findBinary('agy', [join(homedir(), '.local', 'bin')]);
 }
 
 /** OpenCode CLI (instala em `~/.opencode/bin`). */
 export function opencodeBinary(): string {
-  return process.env.RICE_OPENCODE_BIN ?? findBinary('opencode', [join(homedir(), '.opencode', 'bin', 'opencode')]);
+  return process.env.RICE_OPENCODE_BIN ?? findBinary('opencode', [join(homedir(), '.opencode', 'bin')]);
 }
 
 /** `/Users/ana/Rice` → `~/Rice` (só para mostrar; o caminho real continua o completo). */

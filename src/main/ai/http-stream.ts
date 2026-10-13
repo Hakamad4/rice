@@ -1,14 +1,14 @@
 import { t } from '../i18n';
 import { aiError, classifyHttpStatus } from './errors';
 import { parseSse, type SseEvent } from './sse';
-import { AiError, RUN_TIMEOUT_MS, type AiProvider, type AiRunOptions } from './types';
+import { AiError, RUN_TIMEOUT_MS, type AiProvider, type AiRunOptions, type WebSource } from './types';
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
 export type HttpRequest = { url: string; headers: Record<string, string>; body?: unknown; method?: 'GET' | 'POST' };
 
 /** O que um provedor extrai de cada evento SSE. */
-export type SseStep = { delta?: string; error?: AiError; done?: boolean };
+export type SseStep = { delta?: string; error?: AiError; done?: boolean; sources?: WebSource[] };
 
 const ERROR_BODY_LIMIT = 4000;
 
@@ -66,7 +66,7 @@ export async function* streamText(
   req: HttpRequest,
   secret: string,
   step: (event: SseEvent) => SseStep,
-  { signal }: Pick<AiRunOptions, 'signal'>,
+  { signal, onSources }: Pick<AiRunOptions, 'signal'> & { onSources?: (sources: WebSource[]) => void },
 ): AsyncGenerator<string, string, void> {
   const res = await request(provider, fetchImpl, req, secret, signal);
   if (!res.body) throw aiError(provider, 'other', t('ai.err.no-body'));
@@ -75,6 +75,7 @@ export async function* streamText(
     for await (const event of parseSse(res.body as unknown as AsyncIterable<Uint8Array>)) {
       const out = step(event);
       if (out.error) throw out.error;
+      if (out.sources?.length) onSources?.(out.sources);
       if (out.delta) {
         full += out.delta;
         yield out.delta;

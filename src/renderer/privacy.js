@@ -45,6 +45,7 @@
       item('download', t('privacy.downloads.title'), t('privacy.downloads.text')),
       item('shield', t('privacy.none.title'), t('privacy.none.text')),
       item('paperclip', t('privacy.attach.title'), t('privacy.attach.text'), [], true),
+      item('image', t('privacy.shots.title'), t('privacy.shots.text'), [], true),
     ];
   }
 

@@ -31,6 +31,9 @@ export class AiError extends Error {
   }
 }
 
+/** Fonte de uma resposta com busca na web: título e endereço https (o domínio é calculado ao mostrar). */
+export type WebSource = { url: string; title: string };
+
 /** Uma chamada de ferramenta MCP feita pela IA durante a resposta (para mostrar ao usuário). */
 export type ToolCall = { server: string; tool: string; /** Consulta, URL ou arquivo (busca/leitura do War room). */ detail?: string };
 
@@ -42,8 +45,10 @@ export type ToolsRequest = {
   onCall: (call: ToolCall) => void;
   /** MCPs do usuário (padrão: ligado; o chat usa só isto). */
   mcp?: boolean;
-  /** War room: busca e leitura de páginas na internet. */
+  /** Busca na internet: War room (fonte ligada) ou chat com "Buscar na web" ligado SÓ para aquela pergunta. Nunca dá shell (ver web-search.ts). */
   web?: boolean;
+  /** Fontes que a busca na web trouxe (links https), na ordem em que chegam. */
+  onSources?: (sources: WebSource[]) => void;
   /** War room: pasta de trabalho, SOMENTE LEITURA (já validada por `checkWorkFolder`). */
   folder?: string;
 };

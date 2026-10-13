@@ -72,6 +72,38 @@ Como não é assinado pela Apple, o macOS pode pedir de novo as permissões (mic
 
 Você ainda precisa do `brew install whisper.cpp` para o servidor de transcrição; o modelo de transcrição em si é baixado na primeira abertura.
 
+### Atualizar
+
+**Instalou com `git clone` + `./install.sh`:** rode, na pasta do clone:
+
+```bash
+cd rice
+./update.sh
+```
+
+Se o seu clone é antigo e ainda não tem o `update.sh`, atualize uma vez à mão (feche o Rice antes): `git pull && ./install.sh`. Daí em diante, use o `./update.sh`.
+
+ou clique em **Atualizar** em **Configurações > Atualizações** quando o Rice mostrar "Nova versão disponível" (um pontinho aparece em Configurações na barra lateral; o botão abre o Terminal já rodando `./update.sh` no seu clone). O `update.sh` confere que a pasta é um clone git com remote, mostra o que mudou (até 20 linhas), roda `git pull --ff-only`, fecha o Rice, refaz o build com `./install.sh` e abre o Rice de novo. Ele para com uma explicação, sem alterar nem descartar nada, quando: há alterações locais (use `git stash`, e `git stash pop` depois), a atualização não é um fast-forward ou o Rice está **gravando** (pare a gravação antes). Se o build falhar, o Rice antigo continua em `/Applications` e é reaberto. `./update.sh --force` reconstrói mesmo sem versão nova, e `./install.sh --update` é um atalho para `./update.sh`. Suas reuniões, configurações e chaves continuam onde estavam.
+
+**Aviso de versão nova:** uma vez por dia o Rice faz uma requisição anônima à API pública do GitHub (`repos/WalissonCF/rice/commits/main`: sem token e sem nada sobre você ou suas reuniões) para ver se o `main` está à frente do seu build. Desligue em **Configurações > Atualizações > Procurar atualizações**. Ele só avisa: nada se atualiza sozinho, e instâncias de teste nunca consultam. Se esta cópia do Rice não veio de um clone (por exemplo o .dmg), o botão vira **Baixar no GitHub** e abre a página de releases. O build grava o commit e a pasta do clone em `out/build-info.json`, dentro do app; esse caminho fica no seu Mac e nunca é enviado a lugar nenhum.
+
+**Instalou pelo .dmg:** baixe o `.dmg` mais novo em **Releases**, arraste o **Rice** para **Aplicativos** substituindo o antigo e rode de novo o `xattr` acima.
+
+**Windows:** baixe o instalador mais novo em **Releases** e rode por cima; ele substitui a versão anterior.
+
+Depois de atualizar, o macOS pode pedir de novo as permissões (microfone, áudio do sistema, Gravação de Tela, Calendário), porque o app não é assinado pela Apple.
+
+### Windows (x64, Windows 10 22H2 ou 11) — em andamento
+
+O port para Windows é compilado e testado no CI, mas ainda não foi experimentado num PC de verdade. No PowerShell, na pasta do repositório:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -Check   # confere o Windows, o Node 22, o CMake e as ferramentas C++ do Visual Studio
+powershell -ExecutionPolicy Bypass -File install.ps1           # compila os helpers e o instalador (dist\Rice-Setup-*.exe) e o abre
+```
+
+O instalador é por usuário (sem administrador) e não é assinado: o SmartScreen pode avisar "O Windows protegeu o computador"; escolha "Mais informações" e "Executar assim mesmo". Diferenças do Mac: sem Antigravity, sem Lembretes, sem o Calendário do sistema (a agenda vem do Google), as chaves ficam protegidas pelo Windows (DPAPI) e os atalhos usam Ctrl.
+
 ### Rodar a partir do código (desenvolvimento)
 
 ```bash
@@ -209,6 +241,12 @@ Em **Configurações › Participantes**, o Rice separa as vozes do áudio do co
 
 ![Dando um nome a um participante](docs/images/pt-BR/23-speakers.png)
 
+### Capturas de tela (opcional)
+
+Desligadas por padrão. Em **Configurações › Capturas de tela** você liga, depois de um aviso. Enquanto grava, o Rice acompanha a conversa e, quando percebe que alguém vai mostrar algo (“vou compartilhar minha tela”, “olha esse gráfico”, “here’s the dashboard”), tira um print da tela uns 2 segundos depois, para dar tempo de a tela trocar. O print fica na pasta da reunião (`capturas/`), ligado à frase que o motivou: a miniatura aparece logo depois dela na transcrição, com uma legenda curta, e a IA pode citá-la nas notas. Clique na miniatura para ampliar; ⋯ remove. Quando a IA não perceber o momento, use o botão da câmera na barra (ou **⌘⇧S**).
+
+Como funciona: um filtro local, em português e inglês, escolhe as falas que valem uma pergunta; só então o Rice envia à IA que você configurou os últimos ~60 s da transcrição (texto) para confirmar. Isso funciona com qualquer provedor, inclusive as assinaturas por CLI. Com uma chave de API (Claude, OpenAI ou Gemini) a imagem também vai para a IA, só para refinar a legenda; nas assinaturas por CLI as imagens ficam só no seu computador. No máximo uma pergunta a cada ~15 s e um print a cada ~10 s; prints iguais ao anterior são descartados. Exige a permissão de Gravação de Tela do macOS. Dá para desligar a qualquer momento, até gravando.
+
 ### Editar e criar templates
 
 Abra **Templates** na barra lateral. Os templates embutidos podem ser editados (e restaurados depois); **Duplicar** cria o seu. Um template é só um título, uma descrição curta e a lista de seções que o Rice deve preencher.
@@ -218,7 +256,7 @@ Abra **Templates** na barra lateral. Os templates embutidos podem ser editados (
 
 ### Perguntar à IA
 
-Clique em **Pergunte ao Rice** (canto superior direito) e pergunte qualquer coisa sobre a reunião aberta: decisões, quem faz o quê, o que se falou sobre um assunto. Perguntas e respostas ficam salvas na reunião.
+Clique em **Pergunte ao Rice** (canto superior direito) e pergunte qualquer coisa sobre a reunião aberta: decisões, quem faz o quê, o que se falou sobre um assunto. Perguntas e respostas ficam salvas na reunião. **Buscar na web** (botão do globo ao lado dos chips, desligado por padrão e por conversa) deixa o Rice pesquisar na internet nas perguntas feitas enquanto está ligado; vale no chat da reunião e no chat de todas as reuniões, e as fontes aparecem como links embaixo da resposta (título e domínio, abertos no navegador). A pergunta vai para a busca do próprio provedor de IA; as notas da reunião continuam indo só para a IA. O Claude CLI usa apenas WebSearch e WebFetch (nunca Bash, Edit nem leitura de arquivos), o Codex usa a busca ao vivo com o sandbox somente leitura e sem shell, e as APIs da Anthropic, da OpenAI e do Gemini usam as ferramentas de busca delas. Indisponível no OpenCode e no Antigravity (não dá para restringir a busca sem dar shell), onde o botão fica desabilitado com o motivo.
 
 
 **Trocar a IA e o modelo no chat.** No cabeçalho do chat, o chip com o nome da IA (por exemplo "Claude · Sonnet") abre um menu com os provedores que você já configurou e os modelos de cada um; o atual aparece com ✓. A escolha vale para o app inteiro (é a mesma de Configurações > IA): a próxima pergunta e as próximas notas já usam o modelo escolhido. Provedores ainda não configurados aparecem no fim, com "Configurar…". Durante uma resposta o chip fica desabilitado. No OpenCode, o modelo gratuito é uma opção explícita e avisa que pode usar suas transcrições para melhorar modelos.
@@ -330,6 +368,7 @@ As configurações do app, os segredos e o modelo de transcrição ficam em `~/L
 | **Esc** | Limpa a busca / fecha um menu ou diálogo |
 | **⌘⌫** | Apaga a reunião aberta (pergunta antes) |
 | **⌘,** | Abre as Configurações |
+| **⌘⇧S** | Captura a tela agora (só gravando, com as capturas ligadas) |
 | **↑ ↓ → ← Enter** | Navega por menus e submenus |
 
 ## Solução de problemas
@@ -366,7 +405,7 @@ Confira se `xcode-select -p` mostra um caminho e se o `brew install meson ninja 
 **O Rice diz que falta o `whisper-server`.**
 Rode `brew install whisper.cpp` ou aponte `RICE_WHISPER_SERVER` para o binário.
 
-**Atualizar.**
+**Atualizar no modo de desenvolvimento (`npm run app`).** Para o app instalado, veja [Atualizar](#atualizar).
 ```bash
 cd rice
 git pull
@@ -387,6 +426,7 @@ Em Configurações > Ferramentas e MCPs no chat você pode deixar o chat usar os
 - Os CLIs de IA rodam sem ferramentas que mexam nos seus arquivos (Claude sem ferramentas; Codex com shell, navegador, computador e plugins desligados; OpenCode com todas as permissões negadas; Antigravity dentro de um sandbox do macOS que só deixa gravar numa pasta temporária vazia, bloqueia comandos e bloqueia a leitura da sua pasta pessoal). O modelo gratuito do OpenCode Zen pode usar suas transcrições para melhorar modelos.
 - Os modelos de transcrição e de vozes são baixados uma vez e conferidos por SHA-256. O Google Agenda (opcional) é só leitura; dá para usar a Agenda do macOS no lugar.
 - O app só carrega as próprias páginas locais: não navega para sites, não abre janelas nem pede permissões de página.
+- Capturas de tela (opcionais, desligadas por padrão): ficam na pasta da reunião. Para decidir quando tirar o print, trechos recentes da transcrição (texto) vão para a IA que você escolheu; a imagem só vai se for uma chave de API.
 - Apagar uma reunião a move para a Lixeira; nada fica guardado em outro lugar.
 - As leis variam: em muitos lugares é preciso avisar os participantes de que a reunião está sendo gravada.
 

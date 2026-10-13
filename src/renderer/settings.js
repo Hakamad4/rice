@@ -50,9 +50,9 @@
 
   /** Lista de seções do menu lateral (Ajustes do macOS): grupo, ícone de linha e chave i18n do nome. */
   const NAV = [
-    { group: 'settings.group.general', items: [['language', 'globe', 'settings.language'], ['audio', 'mic', 'settings.audio'], ['folder', 'folder', 'settings.folder']] },
+    { group: 'settings.group.general', items: [['language', 'globe', 'settings.language'], ['audio', 'mic', 'settings.audio'], ['folder', 'folder', 'settings.folder'], ['updates', 'download', 'settings.updates']] },
     { group: 'settings.group.ai', items: [['ai', 'sparkles', 'settings.ai'], ['tools', 'plug', 'settings.nav.tools']] },
-    { group: 'settings.group.meetings', items: [['calendar', 'calendar', 'settings.calendar'], ['vocabulary', 'file-text', 'settings.vocabulary'], ['speakers', 'users', 'settings.speakers']] },
+    { group: 'settings.group.meetings', items: [['calendar', 'calendar', 'settings.calendar'], ['vocabulary', 'file-text', 'settings.vocabulary'], ['speakers', 'users', 'settings.speakers'], ['screenshots', 'image', 'settings.screenshots']] },
     { group: null, items: [['privacy', 'shield', 'settings.nav.privacy']] },
   ];
   const IDS = NAV.flatMap((g) => g.items.map((i) => i[0]));
@@ -83,6 +83,20 @@
     keep.onchange = () => rice.setKeepAudio(keep.checked);
     const identify = toggle('identify-speakers', settings.identifySpeakers === true, t('settings.speakers.label'));
     identify.onchange = () => rice.setIdentifySpeakers(identify.checked);
+    // atualização: opção "Procurar atualizações" (ligada por padrão) e, com versão nova, o aviso com o botão
+    const checkUpdates = toggle('check-updates', settings.checkUpdates !== false, t('settings.updates.label'));
+    const updateBox = window.RiceUpdate.box(null, () => rice.updateRun());
+    const paintUpdate = (status) => window.RiceUpdate.paint(updateBox, status, () => rice.updateRun());
+    if (rice.updateStatus) rice.updateStatus().then(paintUpdate).catch(() => {});
+    const onUpdateChanged = (e) => {
+      if (!updateBox.isConnected) return window.removeEventListener('rice:update-changed', onUpdateChanged); // a tela foi refeita: este ouvinte sai
+      paintUpdate(e.detail);
+    };
+    window.addEventListener('rice:update-changed', onUpdateChanged);
+    checkUpdates.onchange = async () => {
+      const status = await rice.setCheckUpdates(checkUpdates.checked);
+      window.dispatchEvent(new CustomEvent('rice:update-changed', { detail: status }));
+    };
     // opt-in "por sua conta e risco": ligar pede confirmação destrutiva; o estado do provedor ativo aparece como dica
     const toolsHint = el('p', { className: 'set-desc', hidden: true }, []);
     const showHint = ({ hint }) => {
@@ -161,7 +175,7 @@
     const loadReminders = async () => {
       if (!rice.remindersStatus) return;
       const st = await rice.remindersStatus().catch(() => null);
-      if (!st || !remBox.isConnected) return;
+      if (!st || !remBox.isConnected || st.access === 'unsupported') return; // Windows: não há app de Lembretes
       const sw = toggle('show-reminders', st.enabled !== false, t('settings.reminders.label'));
       sw.onchange = async () => {
         await rice.remindersSetEnabled(sw.checked);
@@ -169,6 +183,38 @@
       };
       const help = st.access === 'denied' ? t('settings.reminders.denied') : t('settings.reminders.help');
       remBox.replaceChildren(row(t('settings.reminders.label'), help, sw));
+    };
+    // capturas de tela: desligadas por padrão; ligar pede confirmação em linguagem simples (a IA vê as imagens)
+    const shots = toggle('screenshots', settings.screenshots === true, t('settings.screenshots.label'));
+    const shotsNote = el('p', { className: 'set-help', hidden: true }, []);
+    const shotsOpen = button(t('settings.screenshots.open'), () => rice.screenshotsOpenPrivacy(), 'ghost');
+    shotsOpen.hidden = true;
+    const showShotsEnv = (env) => {
+      if (!env || !shots.checked) {
+        shotsNote.hidden = true;
+        shotsOpen.hidden = true;
+        return;
+      }
+      const label = window.RiceAiProviders && env.provider ? window.RiceAiProviders.label(env.provider) : env.provider || '';
+      const denied = env.permission === 'denied' || env.permission === 'not-determined';
+      shotsNote.textContent = denied ? t('settings.screenshots.denied') : !env.seesImages ? t('settings.screenshots.no-images', { provider: label }) : '';
+      shotsNote.hidden = !shotsNote.textContent;
+      shotsOpen.hidden = !denied;
+    };
+    if (rice.screenshotsStatus) rice.screenshotsStatus().then(showShotsEnv).catch(() => {});
+    shots.onchange = async () => {
+      if (shots.checked) {
+        const env = await rice.screenshotsStatus();
+        if (!(await window.RiceScreenshots.confirmEnable(env))) {
+          shots.checked = false;
+          return;
+        }
+        showShotsEnv(await rice.screenshotsSetEnabled(true));
+      } else {
+        await rice.screenshotsSetEnabled(false);
+        showShotsEnv(null);
+      }
+      window.dispatchEvent(new CustomEvent('rice:shots-changed'));
     };
     const calBox = el('div', { className: 'cal-box' }, []);
     const loadCalendar = async () => {
@@ -213,9 +259,11 @@
       section(t('settings.calendar'), t('settings.calendar.text'), [calBox], 'calendar'),
       section(t('settings.vocabulary'), t('settings.vocabulary.help'), [vocabulary.root, row(t('settings.vocabulary.attendees'), null, attendees)], 'vocabulary'),
       section(t('settings.speakers'), null, [row(t('settings.speakers.label'), t('settings.speakers.help'), identify)], 'speakers'),
+      section(t('settings.screenshots'), t('settings.screenshots.text'), [row(t('settings.screenshots.label'), t('settings.screenshots.help'), shots), shotsNote, shotsOpen], 'screenshots'),
       section(t('chat-tools.title'), null, [row(t('chat-tools.label'), t('chat-tools.help'), tools), toolsHint], 'tools'),
       section(t('settings.audio'), null, [row(t('settings.audio.keep'), t('settings.audio.help'), keep)], 'audio'),
       section(t('settings.privacy'), t('settings.privacy.text'), [privBox], 'privacy'),
+      section(t('settings.updates'), null, [updateBox, row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates)], 'updates'),
     ];
     const initial = [ctx && ctx.section, ctx && ctx.focus, remembered()].find((id) => IDS.includes(id)) || 'language';
     const buttons = new Map();

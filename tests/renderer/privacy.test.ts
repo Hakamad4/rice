@@ -23,8 +23,8 @@ it('seção "Privacidade e segurança" no esqueleto de seção, com ícones de l
   const section = box.closest('.setting-section');
   expect(section.firstElementChild.tagName).toBe('H2');
   expect(section.querySelector('h2').textContent).toBe('Privacidade e segurança');
-  expect(titles(box)).toEqual(['Fica só no seu Mac', 'O que sai, e para onde', 'O áudio nunca sai do seu Mac', 'Google Agenda, só se você conectar', 'Downloads', 'Sem servidores do Rice, sem telemetria', 'Anexos']);
-  expect([...box.querySelectorAll('.priv-ico svg')].map((s: any) => s.getAttribute('class'))).toEqual(['icon icon-lock', 'icon icon-arrow-up-right', 'icon icon-mic', 'icon icon-globe', 'icon icon-download', 'icon icon-shield', 'icon icon-paperclip']);
+  expect(titles(box)).toEqual(['Fica só no seu Mac', 'O que sai, e para onde', 'O áudio nunca sai do seu Mac', 'Google Agenda, só se você conectar', 'Downloads', 'Sem servidores do Rice, sem telemetria', 'Anexos', 'Capturas de tela, só se você ligar']);
+  expect([...box.querySelectorAll('.priv-ico svg')].map((s: any) => s.getAttribute('class'))).toEqual(['icon icon-lock', 'icon icon-arrow-up-right', 'icon icon-mic', 'icon icon-globe', 'icon icon-download', 'icon icon-shield', 'icon icon-paperclip', 'icon icon-image']);
   expect(box.textContent).toContain('Só texto: a transcrição e as suas perguntas');
   expect(box.textContent).toContain('Hoje: Claude (Anthropic).');
   expect(box.querySelector('.priv-note')).toBeNull();
@@ -85,6 +85,6 @@ it('cartões em 1 coluna (ícone + título na linha, descrição embaixo) e 2 co
   expect(css).toMatch(/\.priv-text, \.priv-today, \.priv-note \{ grid-column:1 \/ -1;/);
   expect(css).not.toMatch(/\.priv-text[^}]*max-width/);
   const box = await open({ active: 'claude-sub' });
-  expect(box.querySelectorAll('.priv-item.wide')).toHaveLength(3); // "Fica só no seu Mac", "O que sai" e "Anexos" ocupam a linha toda; os outros quatro formam 2 linhas de 2
-  expect([...box.querySelectorAll('.priv-item.wide .priv-title')].map((n: any) => n.textContent)).toEqual(['Fica só no seu Mac', 'O que sai, e para onde', 'Anexos']);
+  expect(box.querySelectorAll('.priv-item.wide')).toHaveLength(4); // "Fica só no seu Mac", "O que sai", "Anexos" e "Capturas de tela" ocupam a linha toda; os outros quatro formam 2 linhas de 2
+  expect([...box.querySelectorAll('.priv-item.wide .priv-title')].map((n: any) => n.textContent)).toEqual(['Fica só no seu Mac', 'O que sai, e para onde', 'Anexos', 'Capturas de tela, só se você ligar']);
 });

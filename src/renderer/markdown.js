@@ -37,7 +37,11 @@
     }
   }
 
-  function renderMarkdown(text, doc) {
+  /** Citação de captura de tela (`<!--shot:101530-->` numa linha só): vira o nó devolvido por `opts.shot(id)`, ou nada. */
+  const SHOT_LINE = /^<!--shot:(\d{6}(?:-\d{1,2})?)-->$/;
+
+  /** `opts.shot(id)`: devolve o nó da miniatura de uma captura DA REUNIÃO ABERTA (ou null). Sem ele, a citação é ignorada. */
+  function renderMarkdown(text, doc, opts) {
     const frag = doc.createDocumentFragment();
     const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
     let para = [];
@@ -59,6 +63,14 @@
       if (!line) {
         flushPara();
         list = null;
+        continue;
+      }
+      const shot = SHOT_LINE.exec(line);
+      if (shot) {
+        flushPara();
+        list = null;
+        const node = opts && typeof opts.shot === 'function' ? opts.shot(shot[1]) : null;
+        if (node) frag.append(node);
         continue;
       }
       const h = /^(#{1,3})\s+(.*)$/.exec(line);

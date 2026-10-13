@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'vitest';
-import { isInsideRoot, tildify, claudeBinary, codexBinary, opencodeBinary, repoRoot, riceAudioBinary, riceDetectorBinary } from '../../src/main/app/paths';
+import { isInsideRoot, nativeBinary, tildify, claudeBinary, codexBinary, opencodeBinary, repoRoot, riceAudioBinary, riceDetectorBinary } from '../../src/main/app/paths';
 
 afterEach(() => {
   delete process.env.RICE_AUDIO_BIN;
@@ -16,9 +16,11 @@ test('repoRoot aponta para a raiz com package.json', () => {
   expect(existsSync(join(repoRoot(), 'native', 'rice-audio', 'Package.swift'))).toBe(true);
 });
 
-test('binários nativos usam o build release por padrão', () => {
-  expect(riceAudioBinary()).toBe(join(repoRoot(), 'native/rice-audio/.build/release/rice-audio'));
-  expect(riceDetectorBinary()).toBe(join(repoRoot(), 'native/rice-detector/.build/release/rice-detector'));
+test('binários nativos: o build release no repositório; sem ele, o native-bin do app empacotado (independe do que a máquina compilou)', () => {
+  const root = '/repo';
+  expect(nativeBinary('rice-audio', () => true, root)).toBe('/repo/native/rice-audio/.build/release/rice-audio');
+  expect(nativeBinary('rice-detector', () => true, root)).toBe('/repo/native/rice-detector/.build/release/rice-detector');
+  expect(nativeBinary('rice-audio', () => false, root)).toBe('/repo/native-bin/rice-audio');
 });
 
 test('variáveis de ambiente sobrescrevem', () => {
@@ -28,9 +30,10 @@ test('variáveis de ambiente sobrescrevem', () => {
   expect(riceDetectorBinary()).toBe('/x/d');
 });
 
-test('claudeBinary prefere ~/.local/bin/claude quando existe', () => {
+test('claudeBinary prefere ~/.local/bin/claude quando existe; sem nenhum, "claude" (independe do que a máquina tem instalado)', () => {
   const local = join(homedir(), '.local', 'bin', 'claude');
-  expect(claudeBinary()).toBe(existsSync(local) ? local : expect.any(String));
+  expect(claudeBinary((p) => p === local)).toBe(local);
+  expect(claudeBinary(() => false)).toBe('claude');
 });
 
 test('isInsideRoot aceita a raiz e subpastas', () => {
@@ -46,7 +49,7 @@ test('isInsideRoot rejeita .., prefixo enganoso e caminhos fora', () => {
   expect(isInsideRoot('/a/Rice', '/a')).toBe(false);
 });
 
-test('tildify troca a home por ~ só quando o caminho está dentro dela', () => {
+test.skipIf(process.platform === 'win32')('tildify troca a home por ~ só quando o caminho está dentro dela', () => {
   expect(tildify('/Users/ana/Rice', '/Users/ana')).toBe('~/Rice');
   expect(tildify('/Users/ana', '/Users/ana')).toBe('~');
   expect(tildify('/Users/anabela/Rice', '/Users/ana')).toBe('/Users/anabela/Rice');

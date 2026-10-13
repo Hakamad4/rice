@@ -1,8 +1,10 @@
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, test, vi } from 'vitest';
 import { appPageOf, guardedIpc, lockdownWebContents, pageForChannel, trustedSender } from '../../src/main/app/hardening';
 
 const DIR = '/Users/ana/dev/rice/src/renderer';
-const page = (name: string, extra = '') => `file://${DIR}/${name}${extra}`;
+const page = (name: string, extra = '') => pathToFileURL(join(DIR, name)).href + extra; // no Windows: file:///D:/Users/…
 const frame = (url: string, parent: unknown = null) => ({ senderFrame: { url, parent } });
 
 describe('páginas do app', () => {

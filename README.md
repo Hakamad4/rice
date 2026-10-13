@@ -72,6 +72,38 @@ Because it is not signed by Apple, macOS may ask for the permissions again (micr
 
 You still need `brew install whisper.cpp` for the transcription server; the transcription model itself is downloaded on first launch.
 
+### Updating
+
+**Installed with `git clone` + `./install.sh`:** run, in the clone folder:
+
+```bash
+cd rice
+./update.sh
+```
+
+If your clone is older and has no `update.sh` yet, update once by hand (quit Rice first): `git pull && ./install.sh`. From then on, use `./update.sh`.
+
+or click **Update** in **Settings > Updates** when Rice shows "New version available" (a small dot appears on Settings in the sidebar; the button opens Terminal already running `./update.sh` in your clone). `update.sh` checks that the folder is a git clone with a remote, shows what changed (up to 20 lines), runs `git pull --ff-only`, quits Rice, rebuilds with `./install.sh` and opens Rice again. It stops with an explanation, without changing or discarding anything, when: there are local changes (use `git stash`, and `git stash pop` afterwards), the update is not a fast-forward, or Rice is **recording** (stop the recording first). If the build fails, the old Rice stays in `/Applications` and is reopened. `./update.sh --force` rebuilds even when already up to date, and `./install.sh --update` is a shortcut for `./update.sh`. Your meetings, settings and keys stay where they are.
+
+**Update notice:** once a day Rice makes one anonymous request to the public GitHub API (`repos/WalissonCF/rice/commits/main`: no token, nothing about you or your meetings) to see whether the `main` branch is ahead of your build. Turn it off with **Settings > Updates > Check for updates**. It only notifies: nothing updates by itself, and test instances never check. If this copy of Rice did not come from a clone (for example the .dmg), the button becomes **Download from GitHub** and opens the releases page. The build records the commit and the clone folder in `out/build-info.json` inside the app; that path stays on your Mac and is never sent anywhere.
+
+**Installed from the .dmg:** download the newest `.dmg` from **Releases**, drag **Rice** to **Applications** replacing the old one and run the `xattr` command above again.
+
+**Windows:** download the newest installer from **Releases** and run it over the old one; it replaces the previous version.
+
+After updating, macOS may ask for the permissions again (microphone, system audio, Screen Recording, Calendar), because the app is not signed by Apple.
+
+### Windows (x64, Windows 10 22H2 or 11) — work in progress
+
+The Windows port is built and tested in CI, but has not been tried on a real PC yet. In PowerShell, from the repository folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -Check   # checks Windows, Node 22, CMake and the Visual Studio C++ tools
+powershell -ExecutionPolicy Bypass -File install.ps1           # builds the helpers and the installer (dist\Rice-Setup-*.exe) and opens it
+```
+
+The installer is per user (no administrator) and unsigned: SmartScreen may show "Windows protected your PC"; choose "More info" and "Run anyway". Differences from the Mac: no Antigravity, no Reminders, no system Calendar (the agenda comes from Google), the keys are protected by Windows (DPAPI) and shortcuts use Ctrl.
+
 ### Running from source (development)
 
 ```bash
@@ -209,6 +241,12 @@ In **Settings › Participants**, Rice tells the voices on the computer audio ap
 
 ![Naming a participant](docs/images/en/23-speakers.png)
 
+### Screenshots (optional)
+
+Off by default. Turn it on in **Settings › Screenshots**, after a notice. While you record, Rice follows the conversation and, when it notices someone is about to show something (“let me share my screen”, “look at this chart”, “here’s the dashboard”), it takes a screenshot about 2 seconds later, to let the screen change. The screenshot stays in the meeting folder (`capturas/`), linked to the sentence that triggered it: the thumbnail appears right after that sentence in the transcript, with a short caption, and the AI can cite it in the notes. Click the thumbnail to enlarge; ⋯ removes it. When the AI misses the moment, use the camera button in the bar (or **⌘⇧S**).
+
+How it works: a local filter, in Portuguese and English, picks the sentences worth a question; only then does Rice send the last ~60 s of the transcript (text) to the AI you configured to confirm. This works with any provider, including CLI subscriptions. With an API key (Claude, OpenAI or Gemini) the image also goes to the AI, only to refine the caption; with CLI subscriptions images stay on your computer. At most one question every ~15 s and one screenshot every ~10 s; screenshots equal to the previous one are dropped. Needs the macOS Screen Recording permission. You can turn it off at any time, even while recording.
+
 ### Edit and create templates
 
 Open **Templates** in the sidebar. Built-in templates can be edited (and restored later); **Duplicate** creates your own. A template is just a title, a short description and the list of sections Rice should fill in.
@@ -218,7 +256,7 @@ Open **Templates** in the sidebar. Built-in templates can be edited (and restore
 
 ### Ask the AI
 
-Click **Ask Rice** (top right) and ask anything about the open meeting: decisions, who does what, what was said about a topic. Questions and answers are saved in the meeting.
+Click **Ask Rice** (top right) and ask anything about the open meeting: decisions, who does what, what was said about a topic. Questions and answers are saved in the meeting. **Search the web** (globe button next to the chips, off by default and per conversation) lets Rice look things up on the internet for the questions you ask while it is on; it works in the meeting chat and in the all-meetings chat, and the sources appear as links under the answer (title and domain, opened in your browser). The question goes to the AI provider's own search; the meeting notes still go only to the AI. Claude CLI uses only WebSearch and WebFetch (never Bash, Edit or file reading), Codex uses its live search with the read-only sandbox and no shell, and the Anthropic, OpenAI and Gemini APIs use their own search tools. Not available with OpenCode or Antigravity (they cannot be restricted to search without giving them a shell), where the button is disabled with the reason.
 
 
 **Switching the AI and model in the chat.** In the chat header, the chip with the AI name (for example "Claude · Sonnet") opens a menu with the providers you have already set up and each one's models; the current one shows a ✓. The choice applies to the whole app (it is the same as Settings > AI): the next question and the next notes already use the chosen model. Providers not set up yet appear at the end, with "Set up…". The chip is disabled while an answer is being written. In OpenCode, the free model is an explicit option and warns that it may use your transcripts to improve models.
@@ -330,6 +368,7 @@ The file names are in Portuguese for now. App settings, secrets and the transcri
 | **Esc** | Clear the search / close a menu or dialog |
 | **⌘⌫** | Delete the open meeting (asks first) |
 | **⌘,** | Open Settings |
+| **⌘⇧S** | Take a screenshot now (only while recording, with screenshots on) |
 | **↑ ↓ → ← Enter** | Move through menus and submenus |
 
 ## Troubleshooting
@@ -366,7 +405,7 @@ Check that `xcode-select -p` prints a path and that `brew install meson ninja pk
 **Rice says `whisper-server` is missing.**
 Run `brew install whisper.cpp`, or point `RICE_WHISPER_SERVER` to the binary.
 
-**Update.**
+**Updating in development mode (`npm run app`).** For the installed app, see [Updating](#updating).
 ```bash
 cd rice
 git pull
@@ -387,6 +426,7 @@ In Settings > Tools and MCPs in chat you can let the chat use the MCPs you alrea
 - The AI CLIs run without tools that touch your files (Claude with no tools; Codex with shell, browser, computer and plugins turned off; OpenCode with every permission denied; Antigravity inside a macOS sandbox that only allows writing to an empty temporary folder, blocks commands and blocks reading your home folder). OpenCode Zen's free model may use your transcripts to improve models.
 - The transcription and voice models are downloaded once and checked by SHA-256. Google Calendar (optional) is read-only; you can use the macOS Calendar instead.
 - The app only loads its own local pages: it does not navigate to websites, open windows or request page permissions.
+- Screenshots (optional, off by default): they stay in the meeting folder. To decide when to take one, recent parts of the transcript (text) go to the AI you chose; the image only goes if it is an API key.
 - Deleting a meeting moves it to the Trash; nothing is kept elsewhere.
 - Recording laws vary: in many places you must tell participants the meeting is being recorded.
 

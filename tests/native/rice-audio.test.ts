@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { beforeAll, describe, expect, test } from 'vitest';
@@ -7,8 +8,13 @@ import { FrameDecoder, type AudioFrame } from '../../src/shared/frames';
 const run = promisify(execFile);
 const PKG = resolve(__dirname, '../../native/rice-audio');
 const BIN = resolve(PKG, '.build/release/rice-audio');
+// O Swift do rice-audio liga a lib WebRTC de native/third_party (scripts/build-webrtc-apm.sh). Sem ela (ex.: runner do CI) o
+// build não existe, então a suíte inteira é pulada em vez de falhar.
+const hasWebrtc = process.platform === 'darwin' && existsSync(resolve(PKG, '../third_party/webrtc-apm/lib/libwebrtc-audio-processing-2.a'));
+const describeIf = describe.skipIf(!hasWebrtc);
 
 beforeAll(async () => {
+  if (!hasWebrtc) return;
   await run('swift', ['build', '-c', 'release', '--package-path', PKG], { maxBuffer: 64 * 1024 * 1024 });
 }, 600_000);
 
@@ -29,10 +35,11 @@ function rms(s: Int16Array): number {
   return Math.sqrt(sum / s.length);
 }
 
-describe('rice-audio --selftest-tone', () => {
+describeIf('rice-audio --selftest-tone', () => {
   let frames: AudioFrame[];
 
   beforeAll(async () => {
+    if (!hasWebrtc) return;
     const { stdout } = await run(BIN, ['--selftest-tone'], { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024 });
     frames = new FrameDecoder().push(stdout);
   });
@@ -73,7 +80,7 @@ describe('rice-audio --selftest-tone', () => {
   });
 });
 
-describe('rice-audio modo controle', () => {
+describeIf('rice-audio modo controle', () => {
   test('EOF no stdin encerra o processo em até 3 s e não escreve no stdout', async () => {
     const child = spawn(BIN, [], { stdio: ['pipe', 'pipe', 'pipe'] });
     try {
@@ -121,7 +128,7 @@ describe('rice-audio modo controle', () => {
   });
 });
 
-describe('rice-audio --selftest-gap', () => {
+describeIf('rice-audio --selftest-gap', () => {
   test('buraco de 1 s no relógio vira silêncio: ~3 s de áudio e timestamps de 100 ms', async () => {
     const { stdout, stderr } = await run(BIN, ['--selftest-gap'], { encoding: 'buffer', maxBuffer: 16 * 1024 * 1024 });
     const mic = new FrameDecoder().push(stdout).filter((f) => f.source === 'mic');
@@ -137,7 +144,7 @@ describe('rice-audio --selftest-gap', () => {
   });
 });
 
-describe('rice-audio --selftest-aec', () => {
+describeIf('rice-audio --selftest-aec', () => {
   test('o AEC3 remove ≥ 15 dB do eco do áudio do sistema no microfone', async () => {
     const { stdout } = await run(BIN, ['--selftest-aec']);
     const result = JSON.parse(stdout.trim()) as { inDb: number; outDb: number; reductionDb: number };

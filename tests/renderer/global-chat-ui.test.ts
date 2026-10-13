@@ -54,7 +54,7 @@ it('Início tem o campo "Pergunte sobre suas reuniões"; perguntar abre o chat e
   expect(g.document.body.classList.contains('chat-open')).toBe(false);
   type(input, 'Qual o orçamento da Acme?');
   input.form.dispatchEvent(new g.window.Event('submit', { cancelable: true, bubbles: true }));
-  await vi.waitFor(() => expect(askGlobal).toHaveBeenCalledWith(expect.any(Number), 'Qual o orçamento da Acme?', { kind: 'all' }));
+  await vi.waitFor(() => expect(askGlobal).toHaveBeenCalledWith(expect.any(Number), 'Qual o orçamento da Acme?', { kind: 'all' }, false));
   expect(g.document.body.classList.contains('chat-open')).toBe(true);
   expect(g.document.getElementById('scope-label').textContent).toBe('Todas');
   expect(g.document.getElementById('messages-global').hidden).toBe(false);
@@ -115,7 +115,7 @@ it('abrir uma reunião pela lista volta o chat para ela; o chip troca entre esta
   expect(g.document.getElementById('scope-label').textContent).toBe('Pasta: Acme');
   type(g.document.getElementById('question'), 'prazo?');
   g.document.getElementById('ask').dispatchEvent(new g.window.Event('submit', { cancelable: true, bubbles: true }));
-  await vi.waitFor(() => expect(askGlobal).toHaveBeenLastCalledWith(expect.any(Number), 'prazo?', { kind: 'folder', folderId: 'f1' }));
+  await vi.waitFor(() => expect(askGlobal).toHaveBeenLastCalledWith(expect.any(Number), 'prazo?', { kind: 'folder', folderId: 'f1' }, false)); // a busca na web nunca liga sozinha
 });
 
 it('⌘J abre o chat de todas as reuniões com foco na pergunta; Nova conversa limpa', async () => {

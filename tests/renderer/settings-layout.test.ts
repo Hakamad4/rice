@@ -18,14 +18,14 @@ async function open(extra: Record<string, unknown> = {}, lang: 'pt-BR' | 'en' = 
     ...extra,
   }, []);
   g.document.getElementById('settings-link').click();
-  await vi.waitFor(() => expect(g.document.querySelectorAll('.settings-page .setting-section').length).toBe(9));
+  await vi.waitFor(() => expect(g.document.querySelectorAll('.settings-page .setting-section').length).toBe(11));
   return out;
 }
 const sections = () => [...g.document.querySelectorAll('.settings-page .setting-section')] as any[];
 
 it('toda seção segue o esqueleto: <h2> primeiro, descrição opcional, depois o conteúdo', async () => {
   await open();
-  expect(sections().map((s) => s.querySelector('h2').textContent)).toEqual(['Idioma', 'Pasta das reuniões', 'Inteligência artificial', 'Agenda', 'Vocabulário', 'Participantes', 'Ferramentas e MCPs no chat', 'Áudio', 'Privacidade e segurança']);
+  expect(sections().map((s) => s.querySelector('h2').textContent)).toEqual(['Idioma', 'Pasta das reuniões', 'Inteligência artificial', 'Agenda', 'Vocabulário', 'Participantes', 'Capturas de tela', 'Ferramentas e MCPs no chat', 'Áudio', 'Privacidade e segurança', 'Atualizações']);
   for (const s of sections()) {
     expect(s.firstElementChild.tagName).toBe('H2');
     expect(s.querySelectorAll('h2')).toHaveLength(1);
@@ -38,7 +38,7 @@ it('linhas "rótulo à esquerda, controle à direita" (idioma, participantes, á
   await open();
   const rows = [...g.document.querySelectorAll('.settings-page .set-row')] as any[];
   expect(rows.map((r) => r.querySelector('.set-label').textContent)).toEqual([
-    'Idioma do app', 'Idioma das reuniões', 'Limite de ciclos por reunião', 'Incluir os participantes do evento da agenda', 'Identificar participantes (beta)', 'Permitir ferramentas e MCPs no chat (por sua conta e risco)', 'Manter o áudio das reuniões',
+    'Idioma do app', 'Idioma das reuniões', 'Limite de ciclos por reunião', 'Incluir os participantes do evento da agenda', 'Identificar participantes (beta)', 'Capturar a tela durante a gravação', 'Permitir ferramentas e MCPs no chat (por sua conta e risco)', 'Manter o áudio das reuniões', 'Procurar atualizações',
   ]);
   for (const r of rows) {
     expect(r.firstElementChild.className).toBe('set-text'); // rótulo + ajuda à esquerda
@@ -101,7 +101,7 @@ it('vocabulário: campo de chips na largura toda abaixo da descrição; a opçã
 
 it('em inglês: mesmos blocos, textos traduzidos', async () => {
   await open({}, 'en');
-  expect(sections().map((s) => s.querySelector('h2').textContent)).toEqual(['Language', 'Meetings folder', 'Artificial intelligence', 'Calendar', 'Vocabulary', 'Participants', 'Tools and MCPs in chat', 'Audio', 'Privacy and security']);
+  expect(sections().map((s) => s.querySelector('h2').textContent)).toEqual(['Language', 'Meetings folder', 'Artificial intelligence', 'Calendar', 'Vocabulary', 'Participants', 'Screenshots', 'Tools and MCPs in chat', 'Audio', 'Privacy and security', 'Updates']);
   expect([...g.document.querySelectorAll('.folder-actions button')].map((b: any) => b.textContent)).toEqual(['Show in Finder', 'Change…']);
 });
 
@@ -117,7 +117,7 @@ it('responsivo (≤560px): linhas rótulo+controle viram coluna, segmentado em l
   expect(block).toMatch(/\.folder-actions \.btn \{ flex:1; \}/);
   await open();
   const rows = [...g.document.querySelectorAll('.settings-page .set-row')] as any[];
-  expect(rows.map((r) => r.classList.contains('inline'))).toEqual([false, false, false, true, true, true, true]); // só os interruptores ficam lado a lado
+  expect(rows.map((r) => r.classList.contains('inline'))).toEqual([false, false, false, true, true, true, true, true, true]); // só os interruptores ficam lado a lado
 });
 
 it('responsivo: caminho longo da pasta é cortado no meio (completo no tooltip) e nada quebra palavra por palavra', async () => {
@@ -155,7 +155,7 @@ it('navegação por seções: grupos Geral, IA, Reuniões e Privacidade; cada it
   await open();
   const nav = g.document.querySelector('.set-nav');
   expect([...nav.querySelectorAll('.set-nav-group')].map((n: any) => n.textContent)).toEqual(['Geral', 'IA', 'Reuniões']);
-  expect(navButtons().map((b) => b.textContent)).toEqual(['Idioma', 'Áudio', 'Pasta das reuniões', 'Inteligência artificial', 'Ferramentas e MCPs', 'Agenda', 'Vocabulário', 'Participantes', 'Privacidade']);
+  expect(navButtons().map((b) => b.textContent)).toEqual(['Idioma', 'Áudio', 'Pasta das reuniões', 'Atualizações', 'Inteligência artificial', 'Ferramentas e MCPs', 'Agenda', 'Vocabulário', 'Participantes', 'Capturas de tela', 'Privacidade']);
   expect(navButtons().every((b) => b.querySelector('svg.icon'))).toBe(true);
   expect(visibleSections()).toEqual(['Idioma']); // a primeira seção, sem lembrança
   expect(navItem('Idioma').getAttribute('aria-current')).toBe('true');

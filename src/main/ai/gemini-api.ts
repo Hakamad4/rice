@@ -13,7 +13,7 @@ const headers = (key: string) => ({ 'x-goog-api-key': key });
 
 /** `streamGenerateContent?alt=sse`: cada evento é um JSON com `candidates[0].content.parts[].text` (ou `error`). */
 export function geminiStep(event: { event: string; data: string }): SseStep {
-  let data: { candidates?: Array<{ content?: { parts?: Array<{ text?: unknown; thought?: unknown }> } }>; error?: { code?: number; message?: string; status?: string } };
+  let data: { candidates?: Array<{ content?: { parts?: Array<{ text?: unknown; thought?: unknown }> }; groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: unknown; title?: unknown } }> } }>; error?: { code?: number; message?: string; status?: string } };
   try {
     data = JSON.parse(event.data);
   } catch {
@@ -27,13 +27,15 @@ export function geminiStep(event: { event: string; data: string }): SseStep {
   }
   const parts = data.candidates?.[0]?.content?.parts ?? [];
   const text = parts.filter((p) => p.thought !== true && typeof p.text === 'string').map((p) => p.text as string).join('');
-  return text ? { delta: text } : {};
+  // grounding com o Google Search: as fontes vêm em `groundingMetadata.groundingChunks[].web` (o `uri` é um redirecionamento https do Google)
+  const sources = (data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []).flatMap((c) => (typeof c.web?.uri === 'string' ? [{ url: c.web.uri, title: typeof c.web.title === 'string' ? c.web.title : '' }] : []));
+  return { ...(text ? { delta: text } : {}), ...(sources.length ? { sources } : {}) };
 }
 
 export function createGeminiApiRunner(config: ApiRunnerConfig): AiRunner {
   const fetchImpl = config.fetch ?? ((url, init) => fetch(url, init));
   return {
-    async *run({ system, prompt, signal, images }) {
+    async *run({ system, prompt, signal, images, tools }) {
       const key = await config.getKey();
       if (!key) throw aiError('gemini-api', 'auth');
       const model = config.model || GEMINI_DEFAULT_MODEL;
@@ -44,11 +46,11 @@ export function createGeminiApiRunner(config: ApiRunnerConfig): AiRunner {
         {
           url: `${BASE}/models/${model}:streamGenerateContent?alt=sse`,
           headers: headers(key),
-          body: { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: prompt }, ...(images ?? []).map((i) => ({ inlineData: { mimeType: i.mime, data: i.data } }))] }] },
+          body: { ...(tools?.web ? { tools: [{ google_search: {} }] } : {}), systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: prompt }, ...(images ?? []).map((i) => ({ inlineData: { mimeType: i.mime, data: i.data } }))] }] },
         },
         key,
         geminiStep,
-        { signal },
+        { signal, ...(tools?.web && tools.onSources ? { onSources: tools.onSources } : {}) },
       );
     },
   };

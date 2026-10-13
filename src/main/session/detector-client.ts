@@ -55,7 +55,7 @@ export class DetectorClient extends EventEmitter {
 
   private spawnChild(): void {
     if (this.child) return;
-    const child = spawn(this.binary, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(this.binary, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
     this.child = child;
     child.stdin.on('error', () => {});
     child.stderr.resume();

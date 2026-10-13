@@ -11,13 +11,14 @@ const headers = (key: string) => ({ authorization: `Bearer ${key}` });
 
 /** Responses API com streaming. Eventos: `response.output_text.delta`, `response.completed`, `response.failed`, `error`. */
 export function openaiStep(event: { event: string; data: string }): SseStep {
-  let data: { type?: string; delta?: string; message?: string; code?: string; response?: { error?: { message?: string; code?: string } } };
+  let data: { type?: string; delta?: string; annotation?: { type?: string; url?: unknown; title?: unknown }; message?: string; code?: string; response?: { error?: { message?: string; code?: string } } };
   try {
     data = JSON.parse(event.data);
   } catch {
     return {};
   }
   if (data.type === 'response.output_text.delta' && typeof data.delta === 'string') return { delta: data.delta };
+  if (data.type === 'response.output_text.annotation.added' && data.annotation?.type === 'url_citation' && typeof data.annotation.url === 'string') return { sources: [{ url: data.annotation.url, title: typeof data.annotation.title === 'string' ? data.annotation.title : '' }] };
   if (data.type === 'response.completed' || data.type === 'response.incomplete') return { done: true };
   if (data.type === 'response.failed' || data.type === 'error') {
     const message = data.type === 'error' ? data.message : data.response?.error?.message;
@@ -31,7 +32,7 @@ export function openaiStep(event: { event: string; data: string }): SseStep {
 export function createOpenAiApiRunner(config: ApiRunnerConfig): AiRunner {
   const fetchImpl = config.fetch ?? ((url, init) => fetch(url, init));
   return {
-    async *run({ system, prompt, signal, images }) {
+    async *run({ system, prompt, signal, images, tools }) {
       const key = await config.getKey();
       if (!key) throw aiError('openai-api', 'auth');
       return yield* streamText(
@@ -40,11 +41,11 @@ export function createOpenAiApiRunner(config: ApiRunnerConfig): AiRunner {
         {
           url: `${BASE}/responses`,
           headers: headers(key),
-          body: { model: config.model || OPENAI_DEFAULT_MODEL, instructions: system, input: images?.length ? [{ role: 'user', content: [{ type: 'input_text', text: prompt }, ...images.map((i) => ({ type: 'input_image', image_url: `data:${i.mime};base64,${i.data}` }))] }] : prompt, stream: true, store: false },
+          body: { model: config.model || OPENAI_DEFAULT_MODEL, instructions: system, input: images?.length ? [{ role: 'user', content: [{ type: 'input_text', text: prompt }, ...images.map((i) => ({ type: 'input_image', image_url: `data:${i.mime};base64,${i.data}` }))] }] : prompt, stream: true, store: false, ...(tools?.web ? { tools: [{ type: 'web_search' }] } : {}) },
         },
         key,
         openaiStep,
-        { signal },
+        { signal, ...(tools?.web && tools.onSources ? { onSources: tools.onSources } : {}) },
       );
     },
   };

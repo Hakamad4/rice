@@ -2,7 +2,7 @@ import { t } from '../i18n';
 import type { Folder } from '../../shared/types';
 import { buildGlobalPrompt, globalChatSystemPrompt, globalContextLabels, type GlobalLang } from '../claude/global-chat';
 import { runChat } from '../ai/chat-run';
-import { AiError, type AiRunner } from '../ai/types';
+import { AiError, type AiRunner, type WebSource } from '../ai/types';
 import { appendGlobalTurn, readGlobalConversation, type Citation, type GlobalScope } from '../store/global-chat';
 import type { SearchIndex } from './index';
 import { buildContext, retrieve } from './retrieve';
@@ -24,11 +24,13 @@ export type GlobalChatDeps = {
   noMeetingsInPeriod?: (lang: GlobalLang) => string;
   /** Opção do usuário "Permitir ferramentas e MCPs no chat" (desligada por padrão). */
   useTools?: () => Promise<boolean>;
+  /** "Buscar na web" pedido para esta pergunta (já conferido contra o provedor ativo; lança se não suportar). */
+  web?: () => Promise<boolean>;
   now?: () => Date;
 };
 
 export type GlobalAnswer =
-  | { ok: true; answer: string; citations: Citation[]; terms: string[] }
+  | { ok: true; answer: string; citations: Citation[]; terms: string[]; sources: WebSource[] }
   | { ok: false; kind: string; message: string };
 
 /** O escopo vem do renderer: só `all` ou uma pasta que existe; qualquer outra coisa vale `all`. */
@@ -52,6 +54,8 @@ export async function askAcrossMeetings(deps: GlobalChatDeps, rawQuestion: unkno
     await deps.index.refresh(root);
     const found = retrieve(deps.index, question, { folders, scopeFolderId: scope.kind === 'folder' ? scope.folderId : null, now: deps.now?.() ?? new Date() });
     const citations: Citation[] = found.meetings.map((m) => ({ n: m.n, dir: m.entry.dir, title: m.entry.title, date: m.entry.startedAt }));
+    const web = (await deps.web?.()) === true;
+    let sources: WebSource[] = [];
     let answer: string;
     if (found.meetings.length === 0) {
       answer = found.emptyPeriod && deps.noMeetingsInPeriod ? deps.noMeetingsInPeriod(lang) : deps.noMeetings(lang);
@@ -62,10 +66,10 @@ export async function askAcrossMeetings(deps: GlobalChatDeps, rawQuestion: unkno
       if (notice) onDelta(notice);
       const history = await readGlobalConversation(root);
       const context = buildContext(found.meetings, found.terms, globalContextLabels(lang), formatDate);
-      answer = await runChat(deps.runner, { system: globalChatSystemPrompt(lang), prompt: buildGlobalPrompt(context, history, question, lang), signal }, { useTools: (await deps.useTools?.()) === true, language: lang === 'en' ? 'en' : 'pt-BR', onDelta, prefix: notice });
+      answer = await runChat(deps.runner, { system: globalChatSystemPrompt(lang), prompt: buildGlobalPrompt(context, history, question, lang), signal }, { useTools: (await deps.useTools?.()) === true, language: lang === 'en' ? 'en' : 'pt-BR', onDelta, prefix: notice, ...(web ? { web: true, onSources: (list: WebSource[]) => (sources = list) } : {}) });
     }
     await appendGlobalTurn(root, { question, answer, scope, citations, terms: found.terms }, deps.now?.());
-    return { ok: true, answer, citations, terms: found.terms };
+    return { ok: true, answer, citations, terms: found.terms, sources };
   } catch (err) {
     return { ok: false, kind: err instanceof AiError ? err.kind : 'other', message: (err as Error).message };
   }

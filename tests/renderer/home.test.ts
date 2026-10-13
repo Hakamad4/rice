@@ -39,7 +39,7 @@ it('groupUpcoming: dia inteiro separado dos com horário, repetido em cada dia q
 
 function renderHome(events: any[], over: Record<string, unknown> = {}) {
   const box = g.document.createElement('div');
-  const cb = { onJoin: vi.fn(), onNotes: vi.fn(), onConnect: vi.fn() };
+  const cb = { onJoin: vi.fn(), onNotes: vi.fn(), onRecord: vi.fn(), onConnect: vi.fn() };
   g.window.RiceHome.render(box, { events, now, google: { connected: true, hasClient: true }, ...cb, ...over });
   return { box, cb };
 }
@@ -65,26 +65,32 @@ it('render: monocromático (sem pontos de cor), hora | título | participantes |
   expect(rows[0].querySelector('.ev-meta').textContent).toBe('5 participantes');
 });
 
-it('"Entrar" só no evento de agora ou que começa em até 10 min (destacado); "Fazer notas" só em reunião e sempre no mesmo lugar', () => {
+it('agora ou em até 10 min: "Entrar" e "Gravar agora" (destacado); antes disso "Preparar notas", sempre no mesmo lugar', () => {
   const link = 'https://meet.google.com/x';
   const { box, cb } = renderHome([
     evAt('now', 'Acontecendo', -10, 30, { attendees: 3, joinUrl: link }),
-    evAt('soon', 'Já já', 6, 30, { attendees: 2, joinUrl: link }),
+    evAt('soon', 'Já já', 6, 30, { attendees: 2 }),
     evAt('later', 'Mais tarde', 120, 30, { attendees: 2, joinUrl: link }),
     evAt('nolink', 'Sem link', 180, 30, { attendees: 2 }),
     evAt('solo', 'Dentista', 240, 30),
   ]);
   const rows = [...box.querySelectorAll('.event')];
-  expect(rows.map(labels)).toEqual([['Entrar', 'Fazer notas'], ['Entrar', 'Fazer notas'], ['Fazer notas'], ['Fazer notas'], []]);
+  expect(rows.map(labels)).toEqual([['Entrar', 'Gravar agora'], ['Gravar agora'], ['Preparar notas'], ['Preparar notas'], []]);
   expect(rows.map((r: any) => r.classList.contains('soon'))).toEqual([true, true, false, false, false]);
-  expect(rows[0].querySelector('.ev-join').classList.contains('hot')).toBe(true);
-  // "Fazer notas" é sempre o 2º filho das ações (o espaço de "Entrar" é reservado)
+  expect(rows[0].querySelector('.ev-rec').classList.contains('hot')).toBe(true);
+  // a 2ª ação é sempre o último filho (o espaço de "Entrar" é reservado)
   for (const r of rows.slice(0, 4)) expect(r.querySelector('.ev-actions').children).toHaveLength(2);
-  expect(rows[2].querySelector('.ev-actions').lastElementChild.textContent).toBe('Fazer notas');
   rows[0].querySelector('.ev-join').click();
-  rows[0].querySelector('.ev-actions').lastElementChild.click();
+  rows[0].querySelector('.ev-rec').click();
+  rows[2].querySelector('.ev-actions').lastElementChild.click();
   expect(cb.onJoin).toHaveBeenCalledWith(expect.objectContaining({ id: 'now' }));
-  expect(cb.onNotes).toHaveBeenCalledWith(expect.objectContaining({ id: 'now' }));
+  expect(cb.onRecord).toHaveBeenCalledWith(expect.objectContaining({ id: 'now' }));
+  expect(cb.onNotes).toHaveBeenCalledWith(expect.objectContaining({ id: 'later' }));
+});
+
+it('gravando outra reunião: sem "Gravar agora", volta "Preparar notas"', () => {
+  const { box } = renderHome([evAt('now', 'Acontecendo', -10, 30, { attendees: 3 })], { recording: true });
+  expect(labels(box.querySelector('.event'))).toEqual(['Preparar notas']);
 });
 
 it('"agora": marcador discreto só no evento em andamento; cabeçalho do dia: nome + data', () => {
@@ -142,7 +148,7 @@ it('em inglês: Today/Tomorrow, nomes de dias em en-US e textos da página', () 
       onConnect: vi.fn(),
     });
     const text = box.textContent;
-    for (const part of ['Calendar', 'Connect your calendar', '1 attendee', '3 attendees', 'Join', 'Take notes']) expect(text).toContain(part);
+    for (const part of ['Calendar', 'Connect your calendar', '1 attendee', '3 attendees', 'Join', 'Prep notes']) expect(text).toContain(part);
     expect(text).not.toContain('1 attendees');
   } finally {
     g.window.RiceI18n.setLanguage('pt-BR');

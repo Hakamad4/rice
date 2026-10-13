@@ -1,0 +1,94 @@
+name: ci
+
+# Typecheck, testes e build do app no macOS e no Windows; no Windows ainda o smoke test com os helpers nativos em modo simulado.
+# Os helpers (C++) são compilados aqui com os mesmos comandos de windows.yml (native/win). Quando o windows.yml ganhar `workflow_call`,
+# troque o passo "Helpers" por `uses: ./.github/workflows/windows.yml` e baixe o artefato `rice-helpers-win-x64`.
+on:
+  push:
+    branches: [main, feat/integration, windows]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: app (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Testes
+        # No Windows, as suítes só-POSIX ficam de fora (vitest.config.ts). Enquanto não houver uma primeira rodada limpa no
+        # windows-latest, esta etapa não derruba o job; typecheck, build e smoke continuam bloqueando.
+        continue-on-error: ${{ matrix.os == 'windows-latest' }}
+        run: npx vitest run
+      - name: Build do app
+        run: npm run build:app
+
+      # --- só Windows: helpers nativos em modo simulado + smoke do app ---
+      - name: MSVC
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Helpers (rice-audio.exe e rice-detector.exe)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cmake -S native/win -B build/win -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/win
+      - name: Smoke test (Início abre; helpers simulados; platform-win)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          RICE_AUDIO_BIN: ${{ github.workspace }}/build/win/rice-audio.exe
+          RICE_DETECTOR_BIN: ${{ github.workspace }}/build/win/rice-detector.exe
+        run: node scripts/smoke.mjs --expect-platform win32
+
+      # --- só macOS: o mesmo smoke com os helpers Swift não roda no CI (sem permissões); confere só o Início ---
+      - name: Smoke test (macOS, sem helpers nativos)
+        if: matrix.os == 'macos-latest'
+        env:
+          RICE_AUDIO_BIN: /usr/bin/true
+          RICE_DETECTOR_BIN: /usr/bin/true
+        run: node scripts/smoke.mjs --expect-platform darwin
+
+  installer:
+    name: instalador (windows-latest)
+    needs: app
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Helpers
+        run: |
+          cmake -S native/win -B build/win -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/win
+      - name: Instalador NSIS (sem assinatura)
+        run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Rice-Setup-win-x64
+          path: dist/Rice-Setup-*.exe

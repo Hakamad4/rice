@@ -249,6 +249,7 @@ export class MeetingSession extends EventEmitter {
       hasSegments: false, othersSpoke: false, incomplete: false, retrying: false, closing: false, sealed: false, restartTimer: null, writes: Promise.resolve(),
     };
     this.active = active;
+    this.emit('active', dir); // o 'recording' saiu antes de a reunião existir: quem leu o currentDir lá viu null
     active.spaceTimer = setInterval(() => void this.checkFreeSpace(dir), this.deps.diskCheckMs ?? 60_000);
     active.spaceTimer.unref?.();
     let ticks = 0;

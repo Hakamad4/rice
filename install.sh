@@ -1,9 +1,12 @@
 #!/bin/bash
 # Instala o Rice a partir do código: confere o ambiente, instala o que falta com o Homebrew, gera o app e o copia para /Applications.
 # Installs Rice from source: checks the environment, installs what is missing with Homebrew, builds the app and copies it to /Applications.
-# Idempotente: pode rodar de novo. / Idempotent: safe to run again.   Uso/Usage: ./install.sh [--check]   (--check só confere o ambiente / only checks the environment)
+# Idempotente: pode rodar de novo. / Idempotent: safe to run again.   Uso/Usage: ./install.sh [--check|--update]   (--check só confere o ambiente / only checks the environment; --update = ./update.sh)
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# atalho: ./install.sh --update chama o update.sh (puxa o código novo, fecha o app, refaz o build e abre de novo)
+[ "${1:-}" = "--update" ] && exec ./update.sh
 
 CHECK_ONLY=0
 [ "${1:-}" = "--check" ] && CHECK_ONLY=1
@@ -63,13 +66,20 @@ APP="dist/mac-arm64/Rice.app"
 [ -d "$APP" ] || die "não encontrei $APP depois do build." "could not find $APP after the build."
 
 # 7) copiar para /Applications (substitui a versão anterior) e tirar a quarentena
+# O build já deu certo aqui (os die acima abortam antes de tocar em /Applications). A troca é em duas etapas: copia para um nome
+# temporário e só então substitui, assim uma cópia que falha no meio não deixa o Mac sem o Rice.
+# The build succeeded (the dies above abort before touching /Applications). The swap is two-step: copy to a temp name, then replace,
+# so a copy that fails midway never leaves the Mac without Rice.
 DEST="/Applications/Rice.app"
+STAGE="/Applications/.Rice.app.new"
+rm -rf "$STAGE"
+ditto "$APP" "$STAGE" || { rm -rf "$STAGE"; die "não consegui copiar para /Applications (o Rice antigo continua lá)." "could not copy to /Applications (the old Rice is still there)."; }
+xattr -dr com.apple.quarantine "$STAGE" 2>/dev/null || true
 if [ -d "$DEST" ]; then
   say "substituindo $DEST…" "replacing $DEST…"
-  rm -rf "$DEST" || die "não consegui apagar $DEST (feche o Rice e tente de novo)." "could not remove $DEST (quit Rice and try again)."
+  rm -rf "$DEST" || { rm -rf "$STAGE"; die "não consegui apagar $DEST (feche o Rice e tente de novo)." "could not remove $DEST (quit Rice and try again)."; }
 fi
-ditto "$APP" "$DEST" || die "não consegui copiar para /Applications." "could not copy to /Applications."
-xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
+mv "$STAGE" "$DEST" || die "não consegui concluir a troca de $DEST." "could not complete the swap of $DEST."
 
 say "pronto: abra o Rice em /Applications (ou: open -a Rice)." "done: open Rice from /Applications (or: open -a Rice)."
 say "o app não é assinado pela Apple: o macOS pode pedir de novo as permissões (microfone, áudio do sistema, Calendário) após atualizar." "the app is not signed by Apple: macOS may ask for the permissions again (microphone, system audio, Calendar) after an update."

@@ -1,5 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
+
+/** Caminhos com `/` em qualquer sistema (as listas de exceções abaixo são escritas assim). */
+const posixPath = (p: string): string => p.split(sep).join('/');
 import { beforeAll, describe, expect, test } from 'vitest';
 
 const load = (): any => {
@@ -79,7 +82,7 @@ describe('dicionários', () => {
 
 describe('cobertura das chaves e textos fixos', () => {
   const files = (dir: string, ext: string[]): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name), ext) : ext.some((x) => e.name.endsWith(x)) ? [join(dir, e.name)] : []));
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name), ext) : ext.some((x) => e.name.endsWith(x)) ? [posixPath(join(dir, e.name))] : []));
   let api: any;
   beforeAll(() => {
     api = loadAll();
@@ -133,11 +136,11 @@ describe('cobertura das chaves e textos fixos', () => {
 
 describe('textos do main que chegam à tela', () => {
   const files = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : /\.(ts|cjs)$/.test(e.name) ? [join(dir, e.name)] : []));
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name)) : /\.(ts|cjs)$/.test(e.name) ? [posixPath(join(dir, e.name))] : []));
 
   // fora da varredura: o conteúdo dos prompts/templates (é o que o modelo lê/escreve) e diagnósticos técnicos de ASR,
   // caminhos de arquivo e logs, que não são texto de interface
-  const allowFile = /^src\/main\/asr\/|(claude\/prompts\.ts|warroom\/engine\.ts|claude\/global-chat\.ts|claude\/follow-up\.ts|session\/chat-context\.ts|templates\/builtin\.ts|warroom\/idea-templates\.ts|session\/audio-capture\.ts|store\/meeting-index\.ts|app\/paths\.ts)$/;
+  const allowFile = /^src\/main\/asr\/|(claude\/prompts\.ts|screenshots\/relevance\.ts|warroom\/engine\.ts|claude\/global-chat\.ts|claude\/follow-up\.ts|session\/chat-context\.ts|templates\/builtin\.ts|warroom\/idea-templates\.ts|session\/audio-capture\.ts|store\/meeting-index\.ts|app\/paths\.ts)$/;
   const allowLine = /console\.|canal não permitido|Responda só: ok|migração do token/;
 
   test('nenhuma string em português fixo no main fora da lista de exceções', () => {
@@ -157,7 +160,7 @@ describe('textos do main que chegam à tela', () => {
 
 describe('português SEM acento fixo (a varredura por acento não pega)', () => {
   const files = (dir: string, ext: RegExp): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name), ext) : ext.test(e.name) ? [join(dir, e.name)] : []));
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(join(dir, e.name), ext) : ext.test(e.name) ? [posixPath(join(dir, e.name))] : []));
   // palavras de interface que só existem em português (nada de "Meet", "Login", "Rice")
   const PT = /\b(Salve|Conecte|Falha|recusou|desconectado|expirou|Nenhum|Nenhuma|Salvar|Cancelar|Apagar|Abrir|Fechar|Copiar|Enviar|Buscar|Pergunte|Gravar|Escolha|Tente|Informe|Carregando|Verificando)\b/;
   const strings = /'[^'\\\n]*'|`[^`\\\n]*`|"[^"\\\n]*"/g;

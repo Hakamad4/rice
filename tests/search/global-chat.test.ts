@@ -155,3 +155,42 @@ describe('arquivo chat-global.jsonl', () => {
     await expect(readFile(globalChatFile(root), 'utf8')).rejects.toThrow();
   });
 });
+
+describe('Buscar na web no chat entre reuniões', () => {
+  const run = async (webOn: boolean | 'throws') => {
+    const seen: any[] = [];
+    const runner: AiRunner = {
+      async *run(o) {
+        seen.push(o.tools);
+        o.tools?.onSources?.([{ url: 'https://nodejs.org/docs', title: 'Node' }]);
+        yield 'Resposta';
+        return 'Resposta';
+      },
+    };
+    const { deps } = await setup(runner);
+    deps.web = async () => {
+      if (webOn === 'throws') throw new AiError('other', 'sem busca neste provedor');
+      return webOn;
+    };
+    const result = await askAcrossMeetings(deps, 'Qual o orçamento da Acme?', { kind: 'all' }, new AbortController().signal, () => {});
+    return { result, seen };
+  };
+
+  test('desligada: sem ferramentas e sem fontes', async () => {
+    const { result, seen } = await run(false);
+    expect(seen).toEqual([undefined]);
+    expect(result).toMatchObject({ ok: true, sources: [] });
+  });
+
+  test('ligada: o runner recebe a busca (sem MCP) e a resposta traz as fontes', async () => {
+    const { result, seen } = await run(true);
+    expect(seen[0]).toMatchObject({ web: true, mcp: false });
+    expect(result).toMatchObject({ ok: true, sources: [{ url: 'https://nodejs.org/docs', title: 'Node' }] });
+  });
+
+  test('provedor sem suporte: a pergunta nem sai, o erro é amigável', async () => {
+    const { result, seen } = await run('throws');
+    expect(seen).toEqual([]);
+    expect(result).toMatchObject({ ok: false, message: 'sem busca neste provedor' });
+  });
+});

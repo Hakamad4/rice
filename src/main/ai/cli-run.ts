@@ -2,6 +2,7 @@ import { t } from '../i18n';
 import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
+import { resolveSpawn, spawnOptions } from '../platform/spawn';
 import { aiError, classifyMessage } from './errors';
 import { AiError, RUN_TIMEOUT_MS, type AiProvider, type ToolCall } from './types';
 
@@ -37,7 +38,9 @@ export async function* runCli(config: CliRunConfig): AsyncGenerator<string, stri
   await mkdir(config.cwd, { recursive: true });
   if (signal?.aborted) throw new AiError('cancelled', t('ai.err.cancelled'));
 
-  const child = spawn(config.binary, config.args, { cwd: config.cwd, env: config.env, stdio: ['pipe', 'pipe', 'pipe'] });
+  // Windows: shims .cmd do npm rodam sem shell (ver platform/spawn.ts); no Mac é o spawn direto de sempre
+  const spec = resolveSpawn(config.binary, config.args, config.env);
+  const child = spawn(spec.command, spec.args, spawnOptions(spec, { cwd: config.cwd, env: config.env, stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'] }));
   const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 
   let spawnError: NodeJS.ErrnoException | null = null;

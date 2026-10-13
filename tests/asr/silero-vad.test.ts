@@ -27,7 +27,7 @@ test('silêncio tem probabilidade baixa', async () => {
   expect(Math.max(...probs)).toBeLessThan(0.1);
 });
 
-test('fala pt-BR tem probabilidade alta', async () => {
+test.skipIf(process.platform !== 'darwin')('fala pt-BR tem probabilidade alta', async () => {
   const { pcm } = readWav(await ttsWav('Bom dia a todos, vamos começar a reunião de planejamento.', await makeTmpDir()));
   const probs = await probabilities(new SileroVad(session), new Int16Array(pcm.buffer, pcm.byteOffset, pcm.length / 2));
   expect(Math.max(...probs)).toBeGreaterThan(0.8);

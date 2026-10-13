@@ -1,7 +1,7 @@
 // Sobe uma instância ISOLADA e invisível do Rice (RICE_BENCH=1, --user-data-dir temporário) e devolve um controle por CDP:
 // eval, screenshot (com tema claro/escuro) e encerramento só do PID iniciado aqui.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -19,7 +19,7 @@ export async function launch({ settings = {}, env = {}, size = [1180, 760], seed
   const port = 9200 + Math.floor(Math.random() * 90);
   const child = spawn(join(repo, 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'), [repo, "--use-mock-keychain", `--user-data-dir=${userData}`, `--remote-debugging-port=${port}`], {
     env: { ...process.env, RICE_BENCH: '1', RICE_DETECTOR_BIN: join(repo, 'tests/fixtures/fake-rice-detector.mjs'), ...env },
-    stdio: 'ignore',
+    stdio: process.env.RICE_E2E_LOG ? ['ignore', openSync(process.env.RICE_E2E_LOG, 'a'), openSync(process.env.RICE_E2E_LOG, 'a')] : 'ignore', // RICE_E2E_LOG: guarda a saída do app para depurar
   });
   for (let i = 0; i < 60; i++) { try { await fetch(`http://127.0.0.1:${port}/json`); break; } catch { await sleep(500); } }
   await sleep(3000);

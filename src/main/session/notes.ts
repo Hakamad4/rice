@@ -10,6 +10,7 @@ import type { MeetingMeta, NotesStatus, NoteTemplate, TranscriptionLanguage } fr
 import type { UiLanguage } from '../i18n';
 import { digestText, emitProgress, extractParts, longNotesConfig, splitTranscript } from './long-notes';
 import { attachmentsContext } from '../attachments/store';
+import { sanitizeShotMarkers, shotsForNotes } from '../screenshots/notes-context';
 import { readAnnotations } from '../store/annotations';
 import { archiveNotes } from '../store/notes-versions';
 import { MEETING_FILES, readMeetingText, readMeta, updateMeta, writeNotes } from '../store/meeting-files';
@@ -95,8 +96,9 @@ async function run(dir: string, runner: Pick<AiRunner, 'run'>, resolve: Template
       body = digestText(digest);
       emitProgress({ dir, phase: 'write' });
     }
+    const shots = await shotsForNotes(dir);
     const prompt = buildNotesPrompt(
-      { title: meta.title, startedAt: meta.startedAt, transcript: body, annotations: await readMeetingText(dir, 'annotations'), annotationItems, vocabulary, ...(long ? { digest: true } : {}), attachments: await attachmentsContext(dir) },
+      { ...(shots.length ? { screenshots: shots } : {}), title: meta.title, startedAt: meta.startedAt, transcript: body, annotations: await readMeetingText(dir, 'annotations'), annotationItems, vocabulary, ...(long ? { digest: true } : {}), attachments: await attachmentsContext(dir) },
       template,
       language,
     );
@@ -105,7 +107,7 @@ async function run(dir: string, runner: Pick<AiRunner, 'run'>, resolve: Template
     while (!step.done) step = await gen.next();
     const text = step.value.trim();
     if (!text) throw new AiError('other', t('ai.err.empty-notes')); // resposta vazia/cortada: conta como falha (e como transitória)
-    const next = keepAnnotations(text + '\n', annotationItems, language);
+    const next = keepAnnotations(sanitizeShotMarkers(text, new Set(shots.map((x) => x.id))) + '\n', annotationItems, language);
     await writeNotes(dir, next);
     if (oldNotes !== next) await archiveOld().catch(() => {}); // o histórico nunca derruba a geração
   }

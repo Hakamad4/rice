@@ -1,5 +1,6 @@
 import { t, type UiLanguage } from '../i18n';
-import type { AiRunner, AiRunOptions, ToolCall } from './types';
+import type { AiRunner, AiRunOptions, ToolCall, WebSource } from './types';
+import { cleanSources, linksInText } from './web-search';
 
 const SAFE = /[^A-Za-z0-9_.:-]/g;
 
@@ -19,9 +20,12 @@ export function toolLine(call: ToolCall, language: UiLanguage): string {
 export async function runChat(
   runner: Pick<AiRunner, 'run'>,
   options: Omit<AiRunOptions, 'tools'>,
-  chat: { useTools: boolean; /** War room: fontes liberadas para este chat (substitui `useTools`). */ access?: { mcp: boolean; web: boolean; folder?: string }; language: UiLanguage; onDelta: (text: string) => void; prefix?: string },
+  chat: { useTools: boolean; /** War room: fontes liberadas para este chat (substitui `useTools`). */ access?: { mcp: boolean; web: boolean; folder?: string }; language: UiLanguage; onDelta: (text: string) => void; prefix?: string;
+    /** "Buscar na web" ligado para ESTA pergunta (o chamador já conferiu que o provedor suporta). */ web?: boolean;
+    /** Fontes da busca (https, sem repetir, as citadas primeiro), entregues uma vez ao fim da resposta. */ onSources?: (sources: WebSource[]) => void },
 ): Promise<string> {
   const lines: string[] = [];
+  const found: WebSource[] = [];
   let streamed = chat.prefix ?? '';
   const emit = (text: string) => {
     streamed += text;
@@ -29,10 +33,14 @@ export async function runChat(
   };
   const run = runner.run({
     ...options,
-    ...(chat.useTools || chat.access
+    // o Rice mostra as fontes embaixo da resposta: sem endereços nem links em Markdown no texto
+    ...(chat.web ? { system: `${options.system}\n\n${t('chat.web.system', undefined, chat.language)}` } : {}),
+    ...(chat.useTools || chat.access || chat.web
       ? {
           tools: {
-            ...(chat.access ? { mcp: chat.access.mcp, web: chat.access.web, ...(chat.access.folder ? { folder: chat.access.folder } : {}) } : {}),
+            // MCP só com a opção do chat ou o War room; a busca sozinha NÃO carrega MCPs
+            ...(chat.access ? { mcp: chat.access.mcp, web: chat.access.web || chat.web === true, ...(chat.access.folder ? { folder: chat.access.folder } : {}) } : { mcp: chat.useTools, ...(chat.web ? { web: true } : {}) }),
+            onSources: (sources: WebSource[]) => found.push(...sources),
             onCall: (call) => {
               const line = toolLine(call, chat.language);
               lines.push(line);
@@ -45,8 +53,10 @@ export async function runChat(
   for (;;) {
     const step = await run.next();
     if (step.done) {
+      const answer = lines.length > 0 ? streamed : (chat.prefix ?? '') + step.value;
+      if (chat.web) chat.onSources?.(cleanSources(found.length > 0 ? found : linksInText(step.value), step.value));
       // com chamadas de ferramenta a resposta guardada é o que o usuário viu, na ordem; sem elas, o texto final do runner
-      return lines.length > 0 ? streamed : (chat.prefix ?? '') + step.value;
+      return answer;
     }
     emit(step.value);
   }
