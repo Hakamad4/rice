@@ -86,6 +86,13 @@
         "LSUIElement": false
       },
       "files": [
+        "package.json",
+        "out/**",
+        "src/renderer/**",
+        "assets/icon/**",
+        "resources/models/**",
+        "native-bin/**",
+        "node_modules/**",
         "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
         "!node_modules/onnxruntime-node/bin/napi-v6/win32/**",
         "!node_modules/onnxruntime-node/bin/napi-v6/darwin/x64/**",
@@ -121,6 +128,13 @@
       ],
       "icon": "assets/icon/icon.ico",
       "files": [
+        "package.json",
+        "out/**",
+        "src/renderer/**",
+        "assets/icon/**",
+        "resources/models/**",
+        "native-bin/**",
+        "node_modules/**",
         "resources/win/**",
         "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
         "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
