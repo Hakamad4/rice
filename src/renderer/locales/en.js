@@ -919,6 +919,8 @@
     'update.run-help': 'Opens Terminal and runs ./update.sh in the folder you installed Rice from. Rice quits, is rebuilt and opens again; if it is recording, stop the recording first.',
     'update.download': 'Download from GitHub',
     'update.download-help': 'This copy of Rice did not come from a clone of the repository. Download the new version from the releases page.',
+    'update.about': 'Version {version} · commit {commit} · {path}',
+    'update.about.nocommit': 'Version {version} · {path}',
     'update.dot': 'New version available',
     'chat.prompts.label': 'Saved questions',
     'chat.prompts.yours': 'Your questions',

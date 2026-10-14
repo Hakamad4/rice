@@ -113,6 +113,7 @@ contextBridge.exposeInMainWorld('rice', {
   setPrivacy: (input) => ipcRenderer.invoke('settings:set-privacy', input),
   setFolderPrivacy: (id, patch) => ipcRenderer.invoke('folders:set-privacy', id, patch),
   updateStatus: () => ipcRenderer.invoke('update:status'),
+  updateAbout: () => ipcRenderer.invoke('update:about'),
   updateRun: () => ipcRenderer.invoke('update:run'),
   setCheckUpdates: (on) => ipcRenderer.invoke('settings:set-check-updates', on === true),
   setWarRoomMaxCycles: (value) => ipcRenderer.invoke('settings:set-warroom-max-cycles', value),

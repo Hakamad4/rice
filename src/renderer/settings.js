@@ -136,6 +136,9 @@
     const updateBox = window.RiceUpdate.box(null, () => rice.updateRun());
     const paintUpdate = (status) => window.RiceUpdate.paint(updateBox, status, () => rice.updateRun());
     if (rice.updateStatus) rice.updateStatus().then(paintUpdate).catch(() => {});
+    // qual cópia está aberta: a versão, o commit do build e o caminho do app (para conferir depois de atualizar)
+    const aboutLine = el('p', { className: 'set-help update-about' }, []);
+    if (rice.updateAbout) rice.updateAbout().then((about) => { aboutLine.textContent = window.RiceUpdate.aboutText(about); }).catch(() => {});
     const onUpdateChanged = (e) => {
       if (!updateBox.isConnected) return window.removeEventListener('rice:update-changed', onUpdateChanged); // a tela foi refeita: este ouvinte sai
       paintUpdate(e.detail);
@@ -324,7 +327,7 @@
       section(t('settings.audio'), null, [row(t('settings.audio.keep'), t('settings.audio.help'), keep)], 'audio'),
       section(t('settings.privacy'), t('settings.privacy.text'), [row(t('settings.localmode.label'), t('settings.localmode.help'), localMode), localExplain, localNote, localGo, row(t('settings.consent.label'), t('settings.consent.help'), consent), row(t('settings.redact.label'), t('settings.redact.help'), redact), el('div', { className: 'retention-default' }, [el('div', { className: 'set-label', textContent: t('settings.retention.title') }, []), el('p', { className: 'set-help', textContent: t('settings.retention.help') }, []), row(t('retention.audio'), null, retentionAudio.root), row(t('retention.meeting'), null, retentionMeeting.root)]), el('div', { className: 'consent-edit-block' }, [el('div', { className: 'set-label', textContent: t('settings.consent.text') }, []), el('p', { className: 'set-help', textContent: t('settings.consent.text-help') }, []), consentText, consentReset]), privBox], 'privacy'),
       section(t('settings.shortcuts'), null, [shortcutBox], 'shortcuts'),
-      section(t('settings.updates'), null, [updateBox, row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates)], 'updates'),
+      section(t('settings.updates'), null, [updateBox, aboutLine, row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates)], 'updates'),
     ];
     const initial = [ctx && ctx.section, ctx && ctx.focus, remembered()].find((id) => IDS.includes(id)) || 'language';
     const buttons = new Map();

@@ -93,3 +93,19 @@ it('sha malformado vindo do main não vira texto no aviso', async () => {
   expect(notice().hidden).toBe(true);
   expect(g.document.querySelector('#set-updates img')).toBeNull();
 });
+
+it('Configurações › Atualizações mostra qual cópia está aberta: versão, commit e caminho do app (pt e en, com e sem commit)', async () => {
+  boot({ enabled: true, available: false, fromClone: true }, { updateAbout: vi.fn(async () => ({ version: '0.4.0', commit: 'abc1234', appPath: '/Applications/Rice.app' })) });
+  await openUpdates();
+  await vi.waitFor(() => expect(g.document.querySelector('.update-about').textContent).toBe('Versão 0.4.0 · commit abc1234 · /Applications/Rice.app'));
+  boot({ enabled: true, available: false, fromClone: true }, { updateAbout: async () => ({ version: '0.4.0', commit: null, appPath: '/Users/x/Downloads/Rice.app' }) }, 'en');
+  await openUpdates();
+  await vi.waitFor(() => expect(g.document.querySelector('.update-about').textContent).toBe('Version 0.4.0 · /Users/x/Downloads/Rice.app'));
+});
+
+it('o texto da cópia aberta nunca vira HTML', async () => {
+  boot({ enabled: true, available: false, fromClone: true }, { updateAbout: async () => ({ version: '<b>1</b>', commit: 'abc1234', appPath: '<img src=x>' }) });
+  await openUpdates();
+  await vi.waitFor(() => expect(g.document.querySelector('.update-about').textContent).toContain('<img src=x>'));
+  expect(g.document.querySelector('.update-about img')).toBeNull();
+});

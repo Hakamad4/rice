@@ -42,6 +42,7 @@ import { discardEmptyDraft, findEmptyDraft, reuseDraft } from '../store/drafts';
 import { normalizeMaxCycles } from '../warroom/engine';
 import { checkWorkFolder } from '../warroom/folder';
 import { runChat } from '../ai/chat-run';
+import { appAbout } from '../update/about';
 import { readBuildInfo, type BuildInfo } from '../update/build-info';
 import { createUpdateChecker, RELEASES_URL, type UpdateState } from '../update/check';
 import { openUpdateInTerminal } from '../update/terminal';
@@ -1506,6 +1507,8 @@ function registerIpc(runner: AiRunner): void {
     if (fake === 'clone' || fake === 'release') return { enabled: true, available: true, from: 'a1b2c3d', to: 'e4f5a6b', fromClone: fake === 'clone' };
     return updateChecker.status();
   });
+  // qual cópia do Rice está aberta (versão, commit do build e caminho do app): ajuda a ver se o que roda é o que acabou de ser instalado
+  handle('update:about', async () => appAbout({ version: app.getVersion(), commit: buildInfo?.commit, exePath: app.getPath('exe') }));
   handle('settings:set-check-updates', async (_e, on: unknown) => {
     await saveSettings({ ...(await loadSettings()), checkUpdates: on !== false });
     const status = await updateChecker.maybeCheck();

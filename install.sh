@@ -14,6 +14,7 @@ CHECK_ONLY=0
 case "${LC_ALL:-${LANG:-}}" in pt*) LANG_UI=pt ;; *) LANG_UI=en ;; esac
 say() { if [ "$LANG_UI" = pt ]; then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi; }          # progresso: no idioma do sistema
 die() { printf 'ERRO: %s\nERROR: %s\n' "$1" "$2" >&2; exit 1; }                                    # erros: sempre em pt e en
+. ./scripts/install-lib.sh                                                                          # detecção de cópias abertas / outras cópias e conferência do que foi instalado
 
 # 1) macOS em Apple Silicon
 [ "$(uname -s)" = "Darwin" ] || die "o Rice só roda no macOS." "Rice only runs on macOS."
@@ -76,10 +77,24 @@ rm -rf "$STAGE"
 ditto "$APP" "$STAGE" || { rm -rf "$STAGE"; die "não consegui copiar para /Applications (o Rice antigo continua lá)." "could not copy to /Applications (the old Rice is still there)."; }
 xattr -dr com.apple.quarantine "$STAGE" 2>/dev/null || true
 if [ -d "$DEST" ]; then
-  say "substituindo $DEST…" "replacing $DEST…"
+  say "substituindo ${DEST}…" "replacing ${DEST}…"
   rm -rf "$DEST" || { rm -rf "$STAGE"; die "não consegui apagar $DEST (feche o Rice e tente de novo)." "could not remove $DEST (quit Rice and try again)."; }
 fi
 mv "$STAGE" "$DEST" || die "não consegui concluir a troca de $DEST." "could not complete the swap of $DEST."
 
-say "pronto: abra o Rice em /Applications (ou: open -a Rice)." "done: open Rice from /Applications (or: open -a Rice)."
+rice_register # o Dock e o Spotlight passam a apontar para esta cópia
+
+# 8) resumo na tela: o que ficou instalado, se há outras cópias e se o Rice que está aberto é o antigo.
+# (quando o update.sh chama o install.sh, é ele quem fecha, reabre e confere; aqui só o caso de rodar o install.sh sozinho)
+if [ "${RICE_FROM_UPDATE:-0}" != 1 ]; then
+  rice_verify_installed "$(git rev-parse --short=7 HEAD 2>/dev/null || true)" instalado || exit 1
+  rice_warn_other_copies "$PWD/dist" || true
+  OPEN_NOW="$(rice_running_paths)"
+  if [ -n "$OPEN_NOW" ]; then
+    say "AVISO: o Rice está aberto agora (a versão antiga continua na tela até fechar):" "WARNING: Rice is open right now (the old version stays on screen until you quit it):"
+    printf '%s\n' "$OPEN_NOW" | sed 's/^/  - /'
+    say "  Feche-o e abra $RICE_APP." "  Quit it and open $RICE_APP."
+  fi
+fi
+say "pronto: abra o Rice em /Applications (open /Applications/Rice.app)." "done: open Rice from /Applications (open /Applications/Rice.app)."
 say "o app não é assinado pela Apple: o macOS pode pedir de novo as permissões (microfone, áudio do sistema, Calendário) após atualizar." "the app is not signed by Apple: macOS may ask for the permissions again (microphone, system audio, Calendar) after an update."

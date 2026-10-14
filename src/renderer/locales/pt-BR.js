@@ -919,6 +919,8 @@
     'update.run-help': 'Abre o Terminal e roda ./update.sh na pasta onde você instalou o Rice. O Rice fecha, é refeito e abre de novo; se estiver gravando, pare a gravação antes.',
     'update.download': 'Baixar no GitHub',
     'update.download-help': 'Esta cópia do Rice não veio de um clone do repositório. Baixe a versão nova na página de releases.',
+    'update.about': 'Versão {version} · commit {commit} · {path}',
+    'update.about.nocommit': 'Versão {version} · {path}',
     'update.dot': 'Nova versão disponível',
     'chat.prompts.label': 'Perguntas prontas',
     'chat.prompts.yours': 'Suas perguntas',

@@ -47,5 +47,13 @@
     );
   }
 
-  window.RiceUpdate = { applyDot, box, paint };
+  /** "Versão 0.4.0 · commit abc1234 · /Applications/Rice.app" (sem commit, quando o app não tem build-info). */
+  function aboutText(about) {
+    if (!about || !about.version) return '';
+    return about.commit
+      ? t('update.about', { version: about.version, commit: about.commit, path: about.appPath })
+      : t('update.about.nocommit', { version: about.version, path: about.appPath });
+  }
+
+  window.RiceUpdate = { applyDot, box, paint, aboutText };
 })();
