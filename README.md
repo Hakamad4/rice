@@ -139,6 +139,8 @@ Open **How to use Rice** in the sidebar. It is a checklist that updates live.
 
 ![The "How to use Rice" guide](docs/images/en/11-guide.png)
 
+![The How to use Rice guide, at the Calendar step](docs/images/en/48-guide.png)
+
 ### 1. Choose where meetings are saved
 
 Each meeting becomes a folder with the transcript, notes and chat. Pick the place under **Settings › Meetings folder** or in the guide (**Change folder…**). The files are plain Markdown, so you can open them with any app.
@@ -232,6 +234,8 @@ Rice also notices meetings (Zoom, Meet, Teams) and calendar events and offers to
 
 ![Home with the meeting happening now and Record now](docs/images/en/31-record-now.png)
 
+![The notice when a call app starts using the microphone: Record?](docs/images/en/46-record-prompt.png)
+
 ### Pause recording
 
 For a side conversation that should not be recorded, use **Pause** (next to **Stop**, the **Pause** item in the tray or the Mini Rice button). While paused, Rice releases the microphone: audio is neither recorded nor transcribed, the clock stops, the button becomes **Resume · 00:42** (the paused time, in discreet amber) and the recording dot in the sidebar, the meeting item and the tray turns amber and still. Live ideas, the War room and screenshots stop too. **Resume** continues in the same meeting, and the transcript gets a discreet marker, for example “recording paused from 14:03 to 14:07”; times after the pause stay correct. While paused, Rice does not ask “still recording?” and does not stop by itself; after 30 minutes it only asks whether you want to stop. If the app crashes during a pause, “Recover meeting” works as usual.
@@ -249,6 +253,10 @@ Generating the notes again (another template, or a new transcript) no longer los
 ![Home with the calendar](docs/images/en/24-calendar.png)
 
 ![Home with today's reminders above the calendar](docs/images/en/25-home.png)
+
+![The “meeting is about to start” notice: Join and record, or just record](docs/images/en/45-meeting-alert.png)
+
+![Settings › Calendar: macOS Calendar (recommended) and connecting directly to Google](docs/images/en/47-calendar-connect.png)
 
 ### Live transcript
 

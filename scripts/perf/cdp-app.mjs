@@ -37,6 +37,13 @@ export async function launch({ settings = {}, env = {}, size = [1180, 760], seed
     eval: async (expression) => (await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }))?.result?.value,
     setSize: (w, h) => send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 2, mobile: false }),
     theme: (scheme) => send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] }),
+    /** Abre outra página do app NESTA mesma janela invisível (ex.: alert.html), com um script que roda antes dos da página (para simular o preload). */
+    navigate: async (url, beforeScript) => {
+      await send('Page.enable');
+      if (beforeScript) await send('Page.addScriptToEvaluateOnNewDocument', { source: beforeScript });
+      await send('Page.navigate', { url });
+      await sleep(1500);
+    },
     shot: async (file, clip) => {
       const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
       writeFileSync(file, Buffer.from(r.data, 'base64'));

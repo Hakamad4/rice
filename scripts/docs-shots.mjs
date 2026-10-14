@@ -1,5 +1,5 @@
 // Gera os prints da documentação (docs/images/<idioma>/NN-nome.png) numa instância ISOLADA e invisível do Rice.
-// Dados 100% fictícios (pasta em /tmp, nomes genéricos: Ana, Carlos, Acme), janela 1200x760 capturada em 2x (2400x1520, retina), tema escuro.
+// Dados 100% fictícios (pasta em /tmp, nomes genéricos: Ana, Carlos, Acme), janela 1200x880 capturada em 2x (2400x1760, retina), tema escuro.
 // Uso: node scripts/docs-shots.mjs [pt-BR|en]   (sem argumento: os dois idiomas)
 // Site: DOCS_RAW=1 DOCS_OUT=/pasta node scripts/docs-shots.mjs (PNG 2x originais, sem reduzir a paleta, fora do repositório).
 // Reproduzível: a mesma pasta de dados fictícios é montada a cada execução. Datas da agenda e dos lembretes são
@@ -10,13 +10,14 @@ import { homedir } from 'node:os';
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import { launch } from './perf/cdp-app.mjs';
 
 const repo = resolve(import.meta.dirname, '..');
 const langs = process.argv[2] ? [process.argv[2]] : ['pt-BR', 'en'];
 const W = 1200;
-const H = 760;
+const H = 880; // alto o bastante para o menu lateral caber inteiro (sem rolagem nem fade nos prints)
 
 const T = {
   'pt-BR': { plan: 'Planejamento do trimestre', kick: 'Kickoff da campanha', contract: 'Revisão do contrato Acme', oneone: '1:1 com Ana', weekly: 'Weekly Produto', nego: 'Negociação Acme', folders: ['Produto', 'Roadmap', 'Clientes', 'Acme', 'Pessoas'], home: 'Início' },
@@ -414,6 +415,57 @@ const scenes = (lang) => {
       if (!(await app.eval(`!!document.querySelector('.mem-card') && !document.querySelector('.mem-card').hidden`))) throw new Error('o cartão O que lembrar não apareceu');
     }],
     ['44-follow-ups', async (app) => { await app.eval(`document.getElementById('followups-link').click()`); await app.sleep(1200); }],
+    ['45-meeting-alert', async (app) => {
+      // O aviso "a reunião vai começar" é uma BrowserWindow própria (alert.html). Aqui a MESMA página é carregada nesta janela invisível de teste
+      // (nenhuma janela real é aberta) e um stub faz o papel do preload (alertApi). O fundo neutro é só para a composição da imagem.
+      const stub = `window.alertApi = { uiLanguage: ${JSON.stringify(lang)}, onLanguage() {}, onData(cb) { window.__pushAlert = cb; }, act() {} };`;
+      await app.setSize(760, 250);
+      await app.navigate(pathToFileURL(join(repo, 'src/renderer/alert.html')).href, stub);
+      const hm = (d) => d.toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' });
+      const time = `${hm(ahead(0.1))} – ${hm(ahead(0.85))}`;
+      await app.eval(`(() => {
+        document.documentElement.style.background = 'linear-gradient(135deg, #4a4f5c 0%, #2b2f3a 100%)';
+        Object.assign(document.body.style, { position: 'absolute', right: '56px', top: '40px', width: '420px', height: '116px' });
+        window.__pushAlert({ title: ${JSON.stringify(K.liveEvent)}, time: ${JSON.stringify(time)}, color: '#2a9d8f', hasLink: true });
+        return true;
+      })()`);
+      await app.sleep(600);
+      return { width: 760, height: 250 };
+    }, 'alert'],
+    ['46-record-prompt', async (app) => {
+      // Notificação NATIVA do macOS (main.ts notify): nada é disparado de verdade. Recriação em HTML do banner, com os textos reais das chaves
+      // notify.record.title / .action / .mute, sobre um fundo neutro que cobre a janela só durante a captura.
+      const icon = `data:image/png;base64,${readFileSync(join(repo, 'assets/icon/icon.png')).toString('base64')}`;
+      await app.setSize(760, 300);
+      await app.eval(`(() => {
+        const t = (k, v) => window.RiceI18n.t(k, v);
+        const el = (tag, css, text) => { const n = document.createElement(tag); n.style.cssText = css; if (text) n.textContent = text; return n; };
+        const root = el('div', 'position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#4a4f5c 0%,#2b2f3a 100%);font:13px/1.35 -apple-system,"SF Pro Text",system-ui,sans-serif;color:#fff');
+        root.id = 'docs-overlay';
+        const card = el('div', 'position:absolute;right:56px;top:40px;width:360px;padding:14px 16px;border-radius:22px;background:rgba(58,58,60,.86);box-shadow:0 8px 30px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,255,255,.08)');
+        const head = el('div', 'display:flex;gap:12px;align-items:center');
+        const img = document.createElement('img'); img.src = ${JSON.stringify(icon)}; img.style.cssText = 'width:38px;height:38px;border-radius:9px';
+        const texts = el('div', 'min-width:0');
+        texts.append(el('div', 'font-weight:600;font-size:13px', t('notify.record.title', { title: ${JSON.stringify(K.liveEvent)} })), el('div', 'opacity:.6;font-size:12px;margin-top:2px', 'Rice'));
+        head.append(img, texts);
+        const actions = el('div', 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end');
+        const btn = (text, strong) => el('div', 'padding:5px 12px;border-radius:8px;font-size:12px;background:' + (strong ? 'rgba(255,255,255,.92)' : 'rgba(255,255,255,.16)') + ';color:' + (strong ? '#1c1c1e' : '#fff') + (strong ? ';font-weight:600' : ''), text);
+        actions.append(btn(t('notify.record.mute', { app: 'Zoom' }), false), btn(t('notify.record.action'), true));
+        card.append(head, actions);
+        root.append(card);
+        document.body.append(root);
+        return true;
+      })()`);
+      await app.sleep(500);
+      return { width: 760, height: 300 };
+    }],
+    ['47-calendar-connect', async (app) => {
+      await settingsNav(app, K.agendaNav);
+      // abre o "Conectar direto ao Google (avançado)": o que é lido (só os eventos) e o passo a passo ficam visíveis ao lado do Calendário do macOS
+      await app.eval(`(() => { const h = [...document.querySelectorAll('*')].filter((x) => x.children.length === 0 && /Conectar direto ao Google|Connect directly to Google/.test(x.textContent)).pop(); if (!h) throw new Error('card do Google não achado'); (h.closest('button, [role=button], .ai-head, .cal-head') || h).click(); return true; })()`);
+      await app.sleep(900);
+    }],
+    ['48-guide', async (app) => { await app.eval(`showGuide('calendar'); 0`); await app.sleep(1000); }],
   ];
 };
 
@@ -439,6 +491,7 @@ const GROUPS = {
   live: { liveEvent: true, fakeAudio: true },
   local: { fakeOllama: true },
   'fully-local': { fakeOllama: true, fullyLocal: true },
+  alert: {}, // 45: abre alert.html NESTA janela invisível (só a página do aviso, nada na tela)
 };
 const sceneGroup = ([name, , group]) => group ?? (name === '25-home' ? 'reminders' : 'main');
 /** Semeadores extras (root, lang) chamados depois do seed(); o Uirapuru acrescenta aqui os dados fictícios de memória/pendências. */
@@ -583,11 +636,12 @@ async function runLang(lang, groupName) {
     for (const [name, step] of todo) {
       try {
         // cada cena começa limpa: sem busca digitada, sem menu aberto, sem aviso de consentimento
-        await app.eval(`(() => { document.getElementById('search-clear')?.click(); window.RiceActionMenu?.close(); window.RiceConsent?.hide?.(); [...document.querySelectorAll('[role=dialog] button')].find((b) => /^(Cancelar|Cancel|Fechar|Close)$/.test(b.textContent.trim()))?.click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true; })()`);
+        await app.eval(`(() => { document.getElementById('search-clear')?.click(); window.RiceActionMenu?.close(); window.RiceConsent?.hide?.(); document.getElementById('docs-overlay')?.remove(); [...document.querySelectorAll('[role=dialog] button')].find((b) => /^(Cancelar|Cancel|Fechar|Close)$/.test(b.textContent.trim()))?.click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true; })()`);
         await app.sleep(300);
-        await step(app);
+        const dims = (await step(app)) || {}; // a cena pode capturar uma área menor (aviso, notificação)
         const file = join(out, `${name}.png`);
-        await app.shot(file, { x: 0, y: 0, width: W, height: H });
+        await app.shot(file, { x: 0, y: 0, width: dims.width ?? W, height: dims.height ?? H });
+        if (dims.width) await app.setSize(W, H);
         // retina (2400x1520) por padrão: nítido no README e no site; DOCS_SCALE=1 reduz para 1200x760
         if (process.env.DOCS_SCALE === '1') execFileSync('sips', ['-z', String(H), String(W), file], { stdio: 'ignore' });
         shrink(file);

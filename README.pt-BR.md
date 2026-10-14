@@ -139,6 +139,8 @@ Abra **Como usar o Rice** na barra lateral. É uma lista de passos que se atuali
 
 ![O guia "Como usar o Rice"](docs/images/pt-BR/11-guide.png)
 
+![O guia Como usar o Rice, no passo da Agenda](docs/images/pt-BR/48-guide.png)
+
 ### 1. Escolha onde salvar as reuniões
 
 Cada reunião vira uma pasta com a transcrição, as notas e o chat. Escolha o lugar em **Configurações › Pasta das reuniões** ou no guia (**Trocar pasta…**). Os arquivos são Markdown simples, então qualquer app abre.
@@ -232,6 +234,8 @@ O Rice também percebe reuniões (Zoom, Meet, Teams) e eventos da agenda e suger
 
 ![Início com a reunião acontecendo agora e Gravar agora](docs/images/pt-BR/31-record-now.png)
 
+![O aviso quando um app de chamada começa a usar o microfone: Gravar?](docs/images/pt-BR/46-record-prompt.png)
+
 ### Pausar a gravação
 
 Para uma conversa paralela que não deve ser gravada, use **Pausar** (ao lado de **Parar**, no item **Pausar** da bandeja ou no botão do Mini Rice). Pausado, o Rice solta o microfone: o áudio não é gravado nem transcrito, o relógio para, o botão vira **Continuar · 00:42** (o tempo parado, em âmbar discreto) e o ponto de gravação da barra lateral, do item da reunião e da bandeja fica âmbar e parado. As ideias ao vivo, a War room e as capturas de tela também param. **Continuar** retoma na mesma reunião, e a transcrição ganha um marcador discreto, por exemplo “gravação pausada de 14:03 a 14:07”; os horários depois da pausa continuam certos. Pausado, o Rice não pergunta “ainda gravando?” nem para sozinho; depois de 30 minutos ele só pergunta se você quer parar. Se o app cair durante a pausa, “Recuperar reunião” funciona como sempre.
@@ -249,6 +253,10 @@ O **Início** mostra os próximos 7 dias agrupados por dia (Hoje, Amanhã, "sex.
 ![Início com a agenda](docs/images/pt-BR/24-calendar.png)
 
 ![Início com os lembretes de hoje acima da agenda](docs/images/pt-BR/25-home.png)
+
+![O aviso “a reunião vai começar”: Entrar e gravar, ou só gravar](docs/images/pt-BR/45-meeting-alert.png)
+
+![Configurações › Agenda: Calendário do macOS (recomendado) e conexão direta ao Google](docs/images/pt-BR/47-calendar-connect.png)
 
 ### Transcrição ao vivo
 
