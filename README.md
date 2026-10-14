@@ -8,7 +8,7 @@
 
 Rice is a Mac app that records your meetings, transcribes them on your machine and writes the notes for you.
 
-![Rice: meeting notes next to the chat](docs/images/en/02-chat.png)
+![Rice: meeting notes next to the chat](docs/images/en/02-chat.webp)
 
 - **Local transcription.** Records your microphone and the system audio (the other participants) and transcribes with [whisper.cpp](https://github.com/ggml-org/whisper.cpp). The audio never leaves your Mac.
 - **Notes written by an AI, from templates.** When the recording ends, Rice fills in the sections of a template (Summary, Decisions, Next actions…). You choose the AI: Claude, ChatGPT, Gemini or OpenCode.
@@ -137,17 +137,17 @@ Good to know:
 
 Open **How to use Rice** in the sidebar. It is a checklist that updates live.
 
-![The "How to use Rice" guide](docs/images/en/11-guide.png)
+![The "How to use Rice" guide](docs/images/en/11-guide.webp)
 
-![The How to use Rice guide, at the Calendar step](docs/images/en/48-guide.png)
+![The How to use Rice guide, at the Calendar step](docs/images/en/48-guide.webp)
 
 ### 1. Choose where meetings are saved
 
 Each meeting becomes a folder with the transcript, notes and chat. Pick the place under **Settings › Meetings folder** or in the guide (**Change folder…**). The files are plain Markdown, so you can open them with any app.
 
-![Meetings folder](docs/images/en/13-meetings-folder.png)
+![Meetings folder](docs/images/en/13-meetings-folder.webp)
 
-![Settings in sections: General, AI, Meetings and Privacy](docs/images/en/29-settings-sections.png)
+![Settings in sections: General, AI, Meetings and Privacy](docs/images/en/29-settings-sections.webp)
 
 ### 2. Allow the macOS permissions
 
@@ -160,7 +160,7 @@ On your first recording macOS asks for two things:
 
 The guide has an **Open Privacy Settings** button. Enable **Rice** (while you run it from source it may be listed as **Electron**), then reopen the app if macOS asks you to.
 
-![macOS permissions step](docs/images/en/12-permissions.png)
+![macOS permissions step](docs/images/en/12-permissions.webp)
 
 ### 3. Let the model download
 
@@ -170,9 +170,9 @@ The guide shows the progress of the transcription model. When it says **Model lo
 
 Open **Settings › Artificial intelligence** (the same list appears in the **How to use Rice** guide). Each provider is one line (Claude, ChatGPT, Gemini, OpenCode, Antigravity and **Local model**), with the active AI on top; click a line to open its steps. You can connect more than one provider and switch at any time with **Use this one**.
 
-![AI providers](docs/images/en/10-ai-providers.png)
+![AI providers](docs/images/en/10-ai-providers.webp)
 
-![Recording model and cycle limit in Artificial intelligence](docs/images/en/30-light-model.png)
+![Recording model and cycle limit in Artificial intelligence](docs/images/en/30-light-model.webp)
 
 | Provider | Option | What you need |
 | --- | --- | --- |
@@ -222,7 +222,7 @@ Each option fills in the default port above (checked in each project's official 
 
 **Fully local mode** (Settings › Privacy, off by default) is the trust seal: it only accepts the Local model provider and blocks everything that uses the network: web search, tools and MCPs, the war room with the internet, Google Calendar sync (the macOS Calendar keeps working), update checks and downloads of transcription models (the model must already be downloaded). Blocked controls stay on screen, disabled, with the reason, and a discreet **100% local** badge appears at the bottom of the sidebar. Underneath, the app's network layer itself refuses any destination that is not localhost while the mode is on.
 
-![Local model card with the server found](docs/images/en/37-local-model.png)
+![Local model card with the server found](docs/images/en/37-local-model.webp)
 
 ## Everyday use
 
@@ -232,15 +232,15 @@ Click **New meeting**, then **Record**. When you stop, Rice writes the notes. If
 
 Rice also notices meetings (Zoom, Meet, Teams) and calendar events and offers to record.
 
-![Home with the meeting happening now and Record now](docs/images/en/31-record-now.png)
+![Home with the meeting happening now and Record now](docs/images/en/31-record-now.webp)
 
-![The notice when a call app starts using the microphone: Record?](docs/images/en/46-record-prompt.png)
+![The notice when a call app starts using the microphone: Record?](docs/images/en/46-record-prompt.webp)
 
 ### Pause recording
 
 For a side conversation that should not be recorded, use **Pause** (next to **Stop**, the **Pause** item in the tray or the Mini Rice button). While paused, Rice releases the microphone: audio is neither recorded nor transcribed, the clock stops, the button becomes **Resume · 00:42** (the paused time, in discreet amber) and the recording dot in the sidebar, the meeting item and the tray turns amber and still. Live ideas, the War room and screenshots stop too. **Resume** continues in the same meeting, and the transcript gets a discreet marker, for example “recording paused from 14:03 to 14:07”; times after the pause stay correct. While paused, Rice does not ask “still recording?” and does not stop by itself; after 30 minutes it only asks whether you want to stop. If the app crashes during a pause, “Recover meeting” works as usual.
 
-![Paused recording: Resume · 00:12 and the marker in the transcript](docs/images/en/32-pause.png)
+![Paused recording: Resume · 00:12 and the marker in the transcript](docs/images/en/32-pause.webp)
 
 ### Notes versions
 
@@ -250,39 +250,39 @@ Generating the notes again (another template, or a new transcript) no longer los
 
 **Home** shows your next 7 days grouped by day (Today, Tomorrow, "Fri, Oct 17"). All-day events sit in one discreet line per day; timed events show their range ("09:00–09:30") and **Join** / **Take notes** only when they are meetings (a call link or attendees). Connect the **macOS Calendar** (recommended: add your Google account in System Settings › Internet Accounts) or Google directly in **Settings › Calendar**. Event titles stay on your Mac: only the title of a meeting you record is used, and all-day events never trigger a recording prompt.
 
-![Home with the calendar](docs/images/en/24-calendar.png)
+![Home with the calendar](docs/images/en/24-calendar.webp)
 
-![Home with today's reminders above the calendar](docs/images/en/25-home.png)
+![Home with today's reminders above the calendar](docs/images/en/25-home.webp)
 
-![The “meeting is about to start” notice: Join and record, or just record](docs/images/en/45-meeting-alert.png)
+![The “meeting is about to start” notice: Join and record, or just record](docs/images/en/45-meeting-alert.webp)
 
-![Settings › Calendar: macOS Calendar (recommended) and connecting directly to Google](docs/images/en/47-calendar-connect.png)
+![Settings › Calendar: macOS Calendar (recommended) and connecting directly to Google](docs/images/en/47-calendar-connect.webp)
 
 ### Live transcript
 
 The transcript appears while you talk. Grey text is still being refined and becomes final in a moment. Your voice is shown as **Me** and the other participants as **Others** (in the transcript file they are saved as `Eu` and `Outros`, and the app translates them when showing). You can write your own notes in **Annotations** at any time.
 
-![Transcript of a meeting](docs/images/en/03-transcript.png)
+![Transcript of a meeting](docs/images/en/03-transcript.webp)
 
 ### Generate notes and change the template
 
 Notes are written as soon as you stop. If they are missing or failed (for example, no AI connected yet), a **Generate notes** button appears. The chip above the notes (for example **General meeting**) switches the template, and the right side previews its sections.
 
-![Template picker](docs/images/en/04-template-picker.png)
+![Template picker](docs/images/en/04-template-picker.webp)
 
 ### Notes with your own jottings
 
 What you type in **Annotations** during the meeting becomes a key point in the notes: Rice stores the time of each line, expands every note in the right section using the transcript, and highlights your text (what the AI added appears in a softer tone). Nothing you wrote is dropped: whatever fits no section goes to "Other notes".
 
-![Notes with the user's annotations highlighted](docs/images/en/21-notes-annotations.png)
+![Notes with the user's annotations highlighted](docs/images/en/21-notes-annotations.webp)
 
-![Attachments on a meeting: images and files](docs/images/en/28-attachments.png)
+![Attachments on a meeting: images and files](docs/images/en/28-attachments.webp)
 
 ### Vocabulary
 
 In **Settings › Vocabulary**, add names, clients and acronyms as chips: type one and press **Enter** (or a comma); **×** removes it, **Backspace** on the empty field removes the last one, and pasting several lines adds several chips (repeats are ignored). They help the transcript (they go in the whisper prompt) and the notes get the spelling right. Calendar event attendees are added automatically (you can turn this off).
 
-![Vocabulary and participants in Settings](docs/images/en/22-vocabulary-participants.png)
+![Vocabulary and participants in Settings](docs/images/en/22-vocabulary-participants.webp)
 
 ### Long meetings
 
@@ -292,7 +292,7 @@ Meetings of 1 to 2 hours are summarized in ~15-minute parts and then combined in
 
 In **Settings › Participants**, Rice tells the voices on the computer audio apart as Person 1, Person 2… Click the label to name them (applies to the whole meeting; calendar attendees show up as shortcuts and the AI can suggest from context, always as a suggestion). Everything runs on your Mac: it downloads a 27 MB model the first time and uses about 100 MB of memory while recording. The names are used in the notes, the chat, the search and the exported PDF; the transcript file keeps "Person N".
 
-![Naming a participant](docs/images/en/23-speakers.png)
+![Naming a participant](docs/images/en/23-speakers.webp)
 
 ### Screenshots (optional)
 
@@ -300,7 +300,7 @@ Off by default. Turn it on in **Settings › Screenshots**, after a notice. Whil
 
 How it works: a local filter, in Portuguese and English, picks the sentences worth a question; only then does Rice send the last ~60 s of the transcript (text) to the AI you configured to confirm. This works with any provider, including CLI subscriptions. With an API key (Claude, OpenAI or Gemini) the image also goes to the AI, only to refine the caption; with CLI subscriptions images stay on your computer. At most one question every ~15 s and one screenshot every ~10 s; screenshots equal to the previous one are dropped. Which screen: Rice uses the app the detector saw using the microphone (Zoom, Teams, Meet in a browser…) and captures the screen where its window is; when someone else is speaking (computer audio), it captures only the call window. If it cannot find the app, it uses the screen under the cursor (on Windows, always that one). Needs the macOS Screen Recording permission. You can turn it off at any time, even while recording.
 
-![Transcript with the screenshot right after the trigger sentence](docs/images/en/35-screenshots.png)
+![Transcript with the screenshot right after the trigger sentence](docs/images/en/35-screenshots.webp)
 
 ### Memory across meetings
 
@@ -312,22 +312,22 @@ Instead of every meeting being an island, Rice remembers what each person and co
 - **Memory page (sidebar, right below Follow-ups):** People and Companies tabs with search; each one opens a detail with open follow-ups first, then decisions, context and the latest meetings (with links), plus edit, mark as resolved, delete and “Forget this person/company”. The person/company name in the “What to remember” card and on Home links straight to that detail. An empty memory explains what will show up.
 - **Settings › Memory:** the on/off option (on by default), a link to the page, **Erase memory** (with confirmation, hidden while empty) and **Build memory from older meetings** runs in the background, one meeting at a time, with progress and a cancel button, and only after your click (it uses the AI once per meeting). Deleting a meeting removes its facts.
 
-![Memory page with people and companies](docs/images/en/42-memory.png)
+![Memory page with people and companies](docs/images/en/42-memory.webp)
 
-![What to remember card in the Notes tab](docs/images/en/43-what-to-remember.png)
+![What to remember card in the Notes tab](docs/images/en/43-what-to-remember.webp)
 
 ### Follow-ups
 
 The **Follow-ups** item in the sidebar (with a counter of your overdue ones) gathers what you promised and what others promised you, from all meetings, in Overdue, Today, This week, Later, No due date and Done, with **Mine**, **From others** and **All** filters. Each row has a checkbox, text, owner, due date (one click to change) and a link to the source meeting; the **Add a follow-up** field creates your own, linked to a meeting or not. Relative dates (“until Friday”, “next week”) are converted to a date by the AI using the meeting’s date; with no clear date, the field stays empty. Checking a follow-up checks the matching `- [ ]` in the notes, and checking the task in the notes checks the follow-up. A **local notification** reminds you at 9 am on the due date (or when the app opens), grouping the day’s items into one; you can turn it off in Settings › Follow-ups. With the Reminders integration on, **Send to Reminders** takes one follow-up (or all of yours) to the macOS Reminders app.
 
-![Follow-ups page with groups](docs/images/en/44-follow-ups.png)
+![Follow-ups page with groups](docs/images/en/44-follow-ups.webp)
 
 ### Edit and create templates
 
 Open **Templates** in the sidebar. Built-in templates can be edited (and restored later); **Duplicate** creates your own. A template is just a title, a short description and the list of sections Rice should fill in.
 
-![Templates](docs/images/en/05-templates.png)
-![Editing a template](docs/images/en/06-template-editor.png)
+![Templates](docs/images/en/05-templates.webp)
+![Editing a template](docs/images/en/06-template-editor.webp)
 
 ### Ask the AI
 
@@ -336,9 +336,9 @@ Click **Ask Rice** (top right) and ask anything about the open meeting: decision
 
 **Switching the AI and model in the chat.** In the chat header, the chip with the AI name (for example "Claude · Sonnet") opens a menu with the providers you have already set up and each one's models; the current one shows a ✓. The choice applies to the whole app (it is the same as Settings > AI): the next question and the next notes already use the chosen model. Providers not set up yet appear at the end, with "Set up…". The chip is disabled while an answer is being written. In OpenCode, the free model is an explicit option and warns that it may use your transcripts to improve models.
 
-![Saved questions menu in the chat](docs/images/en/33-saved-questions.png)
+![Saved questions menu in the chat](docs/images/en/33-saved-questions.webp)
 
-![Chat with web search on and the sources of the answer](docs/images/en/34-web-search.png)
+![Chat with web search on and the sources of the answer](docs/images/en/34-web-search.webp)
 
 ### Ask across your meetings
 
@@ -346,20 +346,20 @@ Open **Home** (first item of the sidebar): the **Ask about your meetings** field
 
 The chip at the top of the panel switches between **This meeting**, **All meetings** and a single folder (with its subfolders). The conversation is saved in `.rice/chat-global.jsonl`; **New conversation** starts over.
 
-![Chat across all meetings, with sources](docs/images/en/17-global-chat.png)
+![Chat across all meetings, with sources](docs/images/en/17-global-chat.webp)
 
 ### Record and stop from anywhere
 
 Press **⌥⌘R** (Ctrl+Alt+R on Windows) in any app, with Rice in the background: it starts a meeting, using the note of the calendar meeting that is happening or starts within 10 minutes (like **Record now** on Home), and stops when pressed again. A discreet notification says "Recording" or "Recording stopped". Change the keys or choose **None** in **Settings > Shortcuts**; if another app already uses them, Settings shows a warning so you can pick another.
 
-![Settings › Shortcuts](docs/images/en/36-shortcuts.png)
+![Settings › Shortcuts](docs/images/en/36-shortcuts.webp)
 
 ### Mini Rice
 
 While recording, a small pill floats on your screen, so you can leave the Rice window. Move the mouse over it and **Ask** and **Stop** appear. Click the logo to bring Rice back, and drag the pill by the logo column to move it.
 
-![Mini Rice at rest](docs/images/en/15-mini-rice-rest.png)
-![Mini Rice on hover](docs/images/en/16-mini-rice-hover.png)
+![Mini Rice at rest](docs/images/en/15-mini-rice-rest.webp)
+![Mini Rice on hover](docs/images/en/16-mini-rice-hover.webp)
 
 *These two images are the real Mini Rice window rendered on a neutral background, with the hover state forced.*
 
@@ -369,13 +369,13 @@ Click the folder icon next to **Folders** in the sidebar to create one. Folders 
 
 Folders are only labels: the meeting stays where it is on disk. Deleting a folder deletes nothing: its subfolders and meetings move up to the parent folder.
 
-![Nested folders](docs/images/en/20-nested-folders.png)
+![Nested folders](docs/images/en/20-nested-folders.webp)
 
 ### Search
 
 Press **⌘K** and type. Rice searches inside your meetings: titles, notes, annotations and transcripts, ignoring accents and capitals, and also folder names. Each result shows the date, a one-line snippet with your words in bold and where it was found (in notes, in transcript…). Use **↑ ↓** and **Enter** to move through the results, or click one: the meeting opens already scrolled to the passage, which flashes for a moment. **Esc** clears the search.
 
-![Search](docs/images/en/08-search.png)
+![Search](docs/images/en/08-search.webp)
 
 ### Share
 
@@ -388,8 +388,8 @@ The **⋯** menu of a meeting has **Share**:
 
 There is no Notion integration, so no extra credentials: use **Copy notes** and paste into Notion, which converts it by itself.
 
-![Share menu](docs/images/en/18-share-menu.png)
-![Follow-up email draft](docs/images/en/19-email-draft.png)
+![Share menu](docs/images/en/18-share-menu.webp)
+![Follow-up email draft](docs/images/en/19-email-draft.webp)
 
 ### Languages
 
@@ -398,22 +398,22 @@ The **globe chip** (PT/EN) at the top of every screen opens a small tree: **App 
 - **App language**: the texts of Rice (Português or English).
 - **Meetings language**: the language spoken in your meetings (Portuguese, English or Automatic). A fixed language gives the best quality. You can also change it for a single meeting with the chip at the top of the meeting. It cannot be changed while recording. Notes are written in the language of the meeting.
 
-![Settings](docs/images/en/09-settings.png)
+![Settings](docs/images/en/09-settings.webp)
 
 ### Delete a meeting
 
 **⋯ › Delete meeting** asks for confirmation, then moves the whole meeting folder to the **macOS Trash**, so you can recover it from there.
 
-![Delete confirmation](docs/images/en/14-delete.png)
+![Delete confirmation](docs/images/en/14-delete.webp)
 
 ### Live ideas and War room
 **Idea types.** On the Ideas tab, *Type: General ▾* chooses what the AI suggests: General (ideas, questions and risks), Brainstorm, Questions to ask now, Risks and objections, Sales, Interview or Technical. Each is an editable template (instruction + optional categories) and you can create your own in **Templates > Ideas** (stored in `.rice/idea-templates/`). The choice is per meeting (the last one chosen is the default for new ones), and switching mid-meeting applies from the next cycle.
 
 **New war room** (sidebar or Home) creates a meeting already in War room mode and opens the Investigation tab; any meeting can be turned into one from that tab, and a small **War room** badge next to the date turns it back. The Ideas and Investigation tabs sit on the meeting page next to Notes and Transcript, each with a short explanation. While recording, the Ideas tab suggests 1 to 3 ideas, questions or risks every 2, 5, 10 or 15 minutes (your choice), only when there is new speech. Pin the good ones to your notes. In War room meetings, the Investigation tab runs cycles (with its own interval, independent of the ideas) and lists **Findings** as they arrive, newest first, each with its source (a clickable URL, or a file inside the work folder revealed in Finder) and time. **Pin** the ones that matter (they go to the top and always stay in the context of later cycles; the most recent ones follow) and **Dismiss** the rest (with a few seconds to **Undo**). The tab counter shows findings that are new since you last looked. *Stop* aborts the running cycle and *Investigation on* pauses the investigation without losing the sources. Optional sources, each with a warning and off by default: Internet (search and page reading), MCPs, and a read-only work folder. Works with Claude and Codex subscriptions. Notes and e-mails never use tools.
 
-![Ideas tab with the AI suggestions](docs/images/en/26-ideas.png)
+![Ideas tab with the AI suggestions](docs/images/en/26-ideas.webp)
 
-![Investigation tab with findings and sources](docs/images/en/27-warroom.png)
+![Investigation tab with findings and sources](docs/images/en/27-warroom.webp)
 
 **Continue in your own Claude/Codex.** On the Investigation tab, *Continue in terminal* opens your own CLI (Claude Code, Codex, Gemini CLI, Antigravity or OpenCode — only the ones found on your Mac) in Terminal, in the work folder (you pick it first; home, `/` and credential folders are refused), with a prompt to follow the live `transcricao.md` and investigate. The prompt carries only file paths and the findings you confirmed, never the transcript itself. *Copy prompt* is there for any other harness or IDE. Rice keeps recording and updating the file; the other harness uses its own permissions and account, and Rice does not control what it does.
 
@@ -523,13 +523,13 @@ What stays, what leaves, and how to check it:
 - Screenshots (optional, off by default): they stay in the meeting folder. To decide when to take one, recent parts of the transcript (text) go to the AI you chose; the image only goes if it is an API key.
 - Deleting a meeting moves it to the Trash; nothing is kept elsewhere.
 
-![What left this computer: the receipt of a meeting](docs/images/en/39-privacy-receipt.png)
+![What left this computer: the receipt of a meeting](docs/images/en/39-privacy-receipt.webp)
 
-![Consent notice toast](docs/images/en/40-consent.png)
+![Consent notice toast](docs/images/en/40-consent.webp)
 
-![Fully local mode in Settings › Privacy, with the badge in the sidebar](docs/images/en/38-fully-local.png)
+![Fully local mode in Settings › Privacy, with the badge in the sidebar](docs/images/en/38-fully-local.webp)
 
-![Folder retention](docs/images/en/41-retention.png)
+![Folder retention](docs/images/en/41-retention.webp)
 
 ## License
 

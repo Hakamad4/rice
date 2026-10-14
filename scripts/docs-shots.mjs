@@ -7,7 +7,7 @@
 // Cada cena que não consegue capturar é reportada no final (não some em silêncio).
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { appendFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -469,14 +469,26 @@ const scenes = (lang) => {
   ];
 };
 
-/** Cada imagem da documentação precisa ter menos de 300 KB (tests/docs.test.ts). Telas com muito texto passam disso: reduz a paleta (UI escura, sem degradê), se o Pillow existir. */
-function shrink(file) {
-  if (process.env.DOCS_RAW === '1' || statSync(file).size < 280 * 1024) return; // DOCS_RAW=1: originais sem redução (site)
+/**
+ * README: PNG 2x → WebP com 1600 px de largura (nítido na coluna do GitHub, ~80 KB em vez de ~280 KB; o repositório não incha a cada rodada).
+ * DOCS_RAW=1 mantém o PNG original (prints do site). Usa o cwebp se existir; senão, o Pillow.
+ */
+function toReadmeImage(file) {
+  if (process.env.DOCS_RAW === '1') return file;
+  const webp = file.replace(/\.png$/, '.webp');
+  const width = Math.min(1600, imageWidth(file));
   try {
-    execFileSync('python3', ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert("RGB")\nim.quantize(256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(sys.argv[1], optimize=True)', file], { stdio: 'ignore' });
+    execFileSync('cwebp', ['-quiet', '-q', '90', '-m', '6', '-sharp_yuv', '-resize', String(width), '0', file, '-o', webp], { stdio: 'ignore' });
   } catch {
-    console.log(`aviso: ${file} passa de 280 KB e o Pillow não está disponível para reduzir`);
+    execFileSync('python3', ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]).convert("RGB")\nw = int(sys.argv[3])\nim = im.resize((w, round(im.height * w / im.width)), Image.LANCZOS) if im.width > w else im\nim.save(sys.argv[2], "WEBP", quality=90, method=6)', file, webp, String(width)], { stdio: 'ignore' });
   }
+  rmSync(file, { force: true });
+  return webp;
+}
+
+function imageWidth(file) {
+  const out = execFileSync('sips', ['-g', 'pixelWidth', file], { encoding: 'utf8' });
+  return Number(/pixelWidth: (\d+)/.exec(out)?.[1] ?? 1600);
 }
 
 /**
@@ -644,7 +656,7 @@ async function runLang(lang, groupName) {
         if (dims.width) await app.setSize(W, H);
         // retina (2400x1520) por padrão: nítido no README e no site; DOCS_SCALE=1 reduz para 1200x760
         if (process.env.DOCS_SCALE === '1') execFileSync('sips', ['-z', String(H), String(W), file], { stdio: 'ignore' });
-        shrink(file);
+        toReadmeImage(file);
         console.log(`ok ${lang} ${name}`);
       } catch (err) {
         failed.push(`${lang} ${name}: ${err.message}`);

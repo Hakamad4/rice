@@ -20,12 +20,13 @@ describe('documentação', () => {
     expect(imgs(READMES[1])).toEqual(imgs(READMES[0]));
   });
 
-  it('cada imagem existe nos dois idiomas e tem menos de 300 KB', () => {
+  it('cada imagem existe nos dois idiomas, é WebP e tem menos de 150 KB (o repositório não incha)', () => {
     for (const dir of ['en', 'pt-BR']) {
       for (const m of read('README.md').matchAll(/docs\/images\/en\/([^)]+)/g)) {
         const path = join('docs/images', dir, m[1] as string);
         expect(existsSync(path), path).toBe(true);
-        expect(readFileSync(path).length, path).toBeLessThan(300 * 1024);
+        expect(path, path).toMatch(/\.webp$/);
+        expect(readFileSync(path).length, path).toBeLessThan(150 * 1024);
       }
     }
   });
