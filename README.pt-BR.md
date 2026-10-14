@@ -4,7 +4,7 @@
 
 <h1 align="center">Rice</h1>
 
-<p align="center"><a href="README.md">English</a> · <b>Português</b></p>
+<p align="center"><a href="README.md">English</a> · <b>Português</b> · <a href="https://ricenotes.app/pt/">ricenotes.app</a></p>
 
 O Rice é um app para Mac que grava suas reuniões, transcreve no seu computador e escreve as notas para você.
 
@@ -51,8 +51,10 @@ Precisa de um Mac com Apple Silicon (arm64) e macOS 14 ou mais novo. A transcri�
 Uma linha só. Ela baixa o código em `~/rice`, compila e coloca o **Rice.app** em `/Applications`. Como o app é gerado no seu Mac, o macOS não bloqueia a abertura (sem `xattr` nem "Abrir Mesmo Assim"). Rodar de novo atualiza.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WalissonCF/rice/main/get.sh | bash
+curl -fsSL https://ricenotes.app/install | bash
 ```
+
+Ou direto do GitHub: `curl -fsSL https://raw.githubusercontent.com/WalissonCF/rice/main/get.sh | bash`
 
 Ou, passo a passo:
 

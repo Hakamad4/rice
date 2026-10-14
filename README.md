@@ -4,7 +4,7 @@
 
 <h1 align="center">Rice</h1>
 
-<p align="center"><b>English</b> · <a href="README.pt-BR.md">Português</a></p>
+<p align="center"><b>English</b> · <a href="README.pt-BR.md">Português</a> · <a href="https://ricenotes.app">ricenotes.app</a></p>
 
 Rice is a Mac app that records your meetings, transcribes them on your machine and writes the notes for you.
 
@@ -51,8 +51,10 @@ Requires a Mac with Apple Silicon (arm64) and macOS 14 or newer. Transcription u
 One line. It downloads the source into `~/rice`, builds it and puts **Rice.app** in `/Applications`. Because the app is built on your Mac, macOS does not block it (no `xattr` or "Open Anyway"). Running it again updates Rice.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/WalissonCF/rice/main/get.sh | bash
+curl -fsSL https://ricenotes.app/install | bash
 ```
+
+Or directly from GitHub: `curl -fsSL https://raw.githubusercontent.com/WalissonCF/rice/main/get.sh | bash`
 
 Or, step by step:
 

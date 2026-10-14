@@ -1,7 +1,8 @@
 #!/bin/bash
 # Instalação em uma linha: baixa o código do Rice e roda o ./install.sh (ou atualiza, se já foi baixado antes).
 # One-line install: fetches Rice's source and runs ./install.sh (or updates it if it is already there).
-#   curl -fsSL https://raw.githubusercontent.com/WalissonCF/rice/main/get.sh | bash
+#   curl -fsSL https://ricenotes.app/install | bash
+#   (ou / or: curl -fsSL https://raw.githubusercontent.com/WalissonCF/rice/main/get.sh | bash)
 # Pasta / folder: ~/rice (mude com / override with RICE_DIR=/caminho).
 set -euo pipefail
 
