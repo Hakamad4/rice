@@ -1,5 +1,6 @@
-import { t } from '../i18n';
+import { t, tn } from '../i18n';
 import { existsSync } from 'node:fs';
+import { totalmem } from 'node:os';
 import { delimiter, isAbsolute } from 'node:path';
 import { listAgyModels } from './agy-cli';
 import { aiError } from './errors';
@@ -8,6 +9,7 @@ import { isFreeTierModel, listOpenCodeModels, openCodeLoggedIn } from './opencod
 import { listClaudeModels } from './claude-api';
 import { listGeminiModels } from './gemini-api';
 import { listOpenAiModels } from './openai-api';
+import { friendlyModelName, largestFittingModel, resolveLocalServer, DEFAULT_NUM_CTX, isNumCtx, type LocalConfig, type LocalModel } from './local-model';
 import { agySupported, findCli, isWindows } from '../platform';
 import { describeSecret } from './secrets';
 import { AI_PROVIDERS, AiError, hasKeyField, type AiProvider } from './types';
@@ -25,6 +27,8 @@ export type ProviderStatus = {
   unavailable?: boolean;
   /** Só OpenCode: há pelo menos um provedor autenticado na CLI. */
   loggedIn?: boolean;
+  /** Só Modelo local: o que o servidor respondeu (nada disso é segredo). */
+  local?: { url: string; /** servidor escolhido no seletor ('auto' = detecta) */ server: string; /** nome do servidor encontrado ('LM Studio') */ serverName?: string; /** o modelo que o "Automático" escolhe (o maior de texto que cabe na RAM) */ autoModel?: { id: string; label: string }; /** o que o usuário digitou (vazio = detecção automática) */ configuredUrl: string; kind: 'ollama' | 'openai' | null; models: LocalModel[]; numCtx: number; error?: string };
 };
 
 export type AiStatus = { active: AiProvider; models: AiSettings['models']; providers: Record<AiProvider, ProviderStatus> };
@@ -35,12 +39,28 @@ const cliInstalled = (binary: string): boolean => {
   return (process.env.PATH ?? '').split(delimiter).some((dir) => dir && existsSync(`${dir}/${binary}`));
 };
 
+/** Sondagem do servidor local (rápida, só localhost); vale por poucos segundos para a tela de configurações não sondar a cada desenho. */
+export const LOCAL_PROBE_CACHE_MS = 6_000;
+const localCache = new Map<string, { at: number; value: Promise<Awaited<ReturnType<typeof resolveLocalServer>>> }>();
+export function cachedLocalServer(cfg: LocalConfig, fetchImpl: NonNullable<RunnerDeps['fetch']>, now: number) {
+  const key = cfg.url?.trim() ?? '';
+  const hit = localCache.get(key);
+  if (hit && now - hit.at < LOCAL_PROBE_CACHE_MS) return hit.value;
+  const value = resolveLocalServer(cfg, fetchImpl);
+  localCache.set(key, { at: now, value });
+  value.catch(() => localCache.delete(key));
+  return value;
+}
+
 /** `opencode auth list` leva ~0,3 s: o resultado vale por alguns minutos (e some quando o usuário testa, troca ou salva algo). */
 export const LOGIN_CACHE_MS = 5 * 60_000;
 /** "Não logado" vale só alguns segundos: quem acabou de fazer o login no terminal não espera minutos. */
 export const NO_LOGIN_CACHE_MS = 20_000;
 const loginCache = new Map<string, { at: number; value: Promise<boolean>; ok?: boolean }>();
-export const invalidateAiStatus = (): void => loginCache.clear();
+export const invalidateAiStatus = (): void => {
+  loginCache.clear();
+  localCache.clear();
+};
 
 function cachedOpenCodeLogin(binary: string, run: () => Promise<boolean>, now: number): Promise<boolean> {
   const hit = loginCache.get(binary);
@@ -91,6 +111,25 @@ export async function aiStatus(settings: AiSettings, deps: RunnerDeps, now: numb
         connected: installed && (loggedIn || freeOk),
         detail: !installed ? t('ai.status.cli-missing', { name: 'OpenCode' }) : loggedIn ? (verified === true ? t('ai.status.connected') : t('ai.status.opencode-logged-in')) : freeOk ? t('ai.status.opencode-free') : t('ai.status.opencode-no-login'),
       };
+    } else if (id === 'local-model') {
+      const cfg = (await deps.local?.()) ?? {};
+      const numCtx = isNumCtx(cfg.numCtx) ? cfg.numCtx : DEFAULT_NUM_CTX;
+      let server: Awaited<ReturnType<typeof resolveLocalServer>> = null;
+      let error: string | undefined;
+      try {
+        server = await cachedLocalServer(cfg, deps.fetch ?? ((url, init) => fetch(url, init)), now);
+      } catch (err) {
+        error = err instanceof AiError ? err.message : (err as Error).message; // endereço que não é localhost
+      }
+      const auto = server ? largestFittingModel(server.models, (deps.totalRam ?? totalmem)()) : undefined;
+      const name = server?.name ?? t('ai.local.server-generic');
+      providers[id] = {
+        ...base,
+        installed: server !== null,
+        connected: server !== null && server.models.length > 0,
+        detail: error ?? (!server ? t('ai.local.status.none') : server.models.length === 0 ? t('ai.local.status.no-models', { server: name }) : tn('ai.local.status.ready', server.models.length, { server: name })),
+        local: { ...(auto ? { autoModel: { id: auto, label: friendlyModelName(auto) } } : {}), server: cfg.server ?? 'auto', ...(server ? { serverName: server.name } : {}), url: server?.url ?? cfg.url ?? '', configuredUrl: cfg.url ?? '', kind: server?.kind ?? null, models: server?.models ?? [], numCtx, ...(error ? { error } : {}) },
+      };
     } else if (id === 'claude-sub') {
       providers[id] = {
         ...base,
@@ -120,6 +159,14 @@ export async function listModels(provider: AiProvider, deps: RunnerDeps): Promis
   if (provider === 'opencode-sub') {
     const models = await listOpenCodeModels({ binary: deps.binaries.opencode, cwd: `${deps.workDir}/opencode-cwd`, ...(deps.env ? { env: deps.env } : {}) });
     return { ok: true, models };
+  }
+  if (provider === 'local-model') {
+    try {
+      const server = await cachedLocalServer((await deps.local?.()) ?? {}, deps.fetch ?? ((url, init) => fetch(url, init)), Date.now());
+      return server ? { ok: true, models: server.models.map((m) => m.id) } : { ok: false, message: t('ai.local.status.none') };
+    } catch (err) {
+      return { ok: false, message: (err as Error).message };
+    }
   }
   if (provider !== 'claude-api' && provider !== 'openai-api' && provider !== 'gemini-api') return { ok: false, message: t('ai.models.unsupported') };
   const key = await deps.getSecret(provider);

@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { MEETING_FILES, writeAtomic } from '../store/meeting-files';
-import { OnlineSpeakerClusterer, type ClusterState } from './speaker-cluster';
+import { OnlineSpeakerClusterer } from './speaker-cluster';
 import type { SpeakerEmbedder } from './speaker-embedder';
 
 /** Identifica "quem é" cada trecho do canal do sistema. Qualquer falha vira `null` (o trecho fica só como "Outros"). */
@@ -20,7 +19,6 @@ export class ClusteringIdentifier implements SpeakerIdentifier {
   constructor(
     private readonly embedder: SpeakerEmbedder,
     private readonly clusterer: OnlineSpeakerClusterer,
-    private readonly persist: (state: ClusterState) => Promise<void> = async () => {},
   ) {}
 
   async identify(pcm: Buffer): Promise<number | null> {
@@ -38,19 +36,30 @@ export class ClusteringIdentifier implements SpeakerIdentifier {
   }
 
   async close(): Promise<void> {
-    await this.persist(this.clusterer.snapshot()).catch(() => {});
-    await this.embedder.close();
+    await this.embedder.close(); // os grupos (vozes) morrem junto com este objeto: nada é gravado
   }
 }
 
-/** Estado dos grupos de uma reunião (para "continuar gravação" manter "Pessoa 2" como a mesma pessoa). */
-export async function loadClusterState(dir: string): Promise<ClusterState | undefined> {
-  try {
-    const raw = JSON.parse(await readFile(join(dir, MEETING_FILES.speakers), 'utf8')) as ClusterState;
-    return Array.isArray(raw.clusters) ? raw : undefined;
-  } catch {
-    return undefined;
-  }
-}
+/**
+ * A "assinatura de voz" (os vetores de embedding e os centroides dos grupos) existe SÓ EM MEMÓRIA durante a sessão e some quando ela
+ * termina: nada vai para o disco (nem `falantes.json`, nem o meta, nem o spool). O que fica na reunião é só o texto: "Pessoa 2"
+ * e o nome que o usuário deu. Ao continuar uma gravação os grupos recomeçam do zero.
+ */
+export const createClusteringIdentifier = (embedder: SpeakerEmbedder): SpeakerIdentifier => new ClusteringIdentifier(embedder, new OnlineSpeakerClusterer({}));
 
-export const saveClusterState = (dir: string, state: ClusterState): Promise<void> => writeAtomic(join(dir, MEETING_FILES.speakers), `${JSON.stringify(state)}\n`);
+/** Arquivo que versões antigas deixavam em cada reunião com os centroides das vozes; hoje é apagado. */
+export const LEGACY_VOICE_FILE = 'falantes.json';
+
+/** Apaga o `falantes.json` legado (só ele) das reuniões; devolve quantos removeu. Nunca mexe em mais nada. */
+export async function removeLegacyVoiceFiles(dirs: readonly string[]): Promise<number> {
+  let removed = 0;
+  for (const dir of dirs) {
+    try {
+      await rm(join(dir, LEGACY_VOICE_FILE));
+      removed++;
+    } catch {
+      // não existe (o normal) ou não deu: segue
+    }
+  }
+  return removed;
+}

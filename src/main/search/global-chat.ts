@@ -26,6 +26,10 @@ export type GlobalChatDeps = {
   useTools?: () => Promise<boolean>;
   /** "Buscar na web" pedido para esta pergunta (já conferido contra o provedor ativo; lança se não suportar). */
   web?: () => Promise<boolean>;
+  /** Memória entre reuniões relevante para a pergunta (fatos das pessoas/empresas citadas); '' = nada. */
+  memory?: (question: string) => Promise<{ text: string; dirs: readonly string[] }>;
+  /** Orçamento de caracteres do contexto (modelo local: depende do `num_ctx`); sem isso vale o padrão. */
+  contextBudget?: () => Promise<number | undefined>;
   now?: () => Date;
 };
 
@@ -55,9 +59,11 @@ export async function askAcrossMeetings(deps: GlobalChatDeps, rawQuestion: unkno
     const found = retrieve(deps.index, question, { folders, scopeFolderId: scope.kind === 'folder' ? scope.folderId : null, now: deps.now?.() ?? new Date() });
     const citations: Citation[] = found.meetings.map((m) => ({ n: m.n, dir: m.entry.dir, title: m.entry.title, date: m.entry.startedAt }));
     const web = (await deps.web?.()) === true;
+    const mem = (await deps.memory?.(question).catch(() => null)) ?? { text: '', dirs: [] as readonly string[] };
+    const memory = mem.text;
     let sources: WebSource[] = [];
     let answer: string;
-    if (found.meetings.length === 0) {
+    if (found.meetings.length === 0 && !memory) {
       answer = found.emptyPeriod && deps.noMeetingsInPeriod ? deps.noMeetingsInPeriod(lang) : deps.noMeetings(lang);
       onDelta(answer);
     } else {
@@ -65,8 +71,9 @@ export async function askAcrossMeetings(deps: GlobalChatDeps, rawQuestion: unkno
       const notice = found.fallback && deps.fallbackNotice ? `${deps.fallbackNotice(lang)}\n\n` : '';
       if (notice) onDelta(notice);
       const history = await readGlobalConversation(root);
-      const context = buildContext(found.meetings, found.terms, globalContextLabels(lang), formatDate);
-      answer = await runChat(deps.runner, { system: globalChatSystemPrompt(lang), prompt: buildGlobalPrompt(context, history, question, lang), signal }, { useTools: (await deps.useTools?.()) === true, language: lang === 'en' ? 'en' : 'pt-BR', onDelta, prefix: notice, ...(web ? { web: true, onSources: (list: WebSource[]) => (sources = list) } : {}) });
+      const budget = await deps.contextBudget?.();
+      const context = buildContext(found.meetings, found.terms, globalContextLabels(lang), formatDate, ...(budget ? [budget] : []));
+      answer = await runChat(deps.runner, { system: globalChatSystemPrompt(lang), prompt: buildGlobalPrompt(context, history, question, lang, '', memory), signal, egress: { kind: 'chat', dirs: [...new Set([...found.meetings.map((m) => m.entry.dir), ...mem.dirs])] } }, { useTools: (await deps.useTools?.()) === true, language: lang === 'en' ? 'en' : 'pt-BR', onDelta, prefix: notice, ...(web ? { web: true, onSources: (list: WebSource[]) => (sources = list) } : {}) });
     }
     await appendGlobalTurn(root, { question, answer, scope, citations, terms: found.terms, ...(sources.length > 0 ? { sources } : {}) }, deps.now?.());
     return { ok: true, answer, citations, terms: found.terms, sources };

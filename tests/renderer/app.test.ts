@@ -41,7 +41,7 @@ it('renderer: lista agrupada por dia, abre reunião e renomeia pelo título', as
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
 
   await vi.waitFor(() => expect(g.document.querySelectorAll('.group-label').length).toBe(2));
   expect([...g.document.querySelectorAll('.group-label')].map((n: any) => n.textContent)).toEqual(['Hoje', 'Ontem']);
@@ -80,7 +80,7 @@ it('renderer: painel "Pergunte ao Rice" recolhido sem reunião, lembra a escolha
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   const body = g.document.body;
   const toggle = g.document.getElementById('chat-toggle');
 
@@ -128,7 +128,7 @@ it('renderer: sem localStorage o painel ainda funciona', async () => {
     g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
       .replace(/<script[^>]*><\/script>/g, '')
       .replace(/^[\s\S]*?<html[^>]*>/, '');
-    for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+    for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
     await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
     g.document.querySelector('.meeting').click();
     await vi.waitFor(() => expect(g.document.body.classList.contains('chat-open')).toBe(true));
@@ -159,7 +159,7 @@ function bootDraft(state: string, startRecording: (input: unknown) => Promise<un
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
 }
 
 it('renderer: Gravar numa reunião draft aberta passa o dir dela (sem criar outra)', async () => {
@@ -217,7 +217,7 @@ async function boot(extra: Record<string, unknown> = {}, meetings = [{ dir: '/R/
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelectorAll('.meeting').length).toBe(meetings.length));
   return { rice, handlers };
 }
@@ -392,7 +392,7 @@ it('renderer: seletor de template na reunião; trocar numa reunião resumida ofe
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.querySelector('.tpl-picker .tpl-chip')).not.toBeNull());
@@ -424,7 +424,7 @@ it('renderer: tela Templates abre pela barra lateral', async () => {
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   g.document.getElementById('templates-link').click();
   await vi.waitFor(() => expect(g.document.querySelector('.tpl-block')).not.toBeNull());
   expect(g.document.querySelector('h1').textContent).toBe('Templates');
@@ -455,7 +455,7 @@ async function bootMeeting(notes: string, extra: Record<string, any> = {}) {
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.getElementById('page-title')).not.toBeNull());
@@ -476,7 +476,9 @@ it('renderer: sem notas, estado vazio compacto: uma linha, seções em chips peq
   // o rótulo "Notas" só existe na aba (nenhum <h2> "Notas" dentro do conteúdo); "Anotações" fica logo abaixo
   expect([...g.document.querySelectorAll('.mt-body .anot-head h2')].map((h: any) => h.textContent)).toEqual(['Suas anotações']);
   // template à esquerda, numa linha de 32px
-  expect(g.document.querySelector('.mt-body').firstElementChild.className).toBe('tpl-picker');
+  expect(g.document.querySelector('.mt-body').firstElementChild.className).toBe('mem-card'); // "O que lembrar": escondido sem fatos
+  expect(g.document.querySelector('.mem-card').hidden).toBe(true);
+  expect(g.document.querySelector('.mt-body').children[1].className).toBe('tpl-picker');
   expect(g.document.querySelector('.tpl-picker').firstElementChild.className).toBe('tpl-picker-root');
 });
 
@@ -531,7 +533,7 @@ it('renderer: após gravar a partir de um draft, o rótulo fica "Continuar grava
     on: (c: string, fn: any) => (handlers[c] = fn),
   };
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.getElementById('page-title')).not.toBeNull());
@@ -685,7 +687,7 @@ async function bootLang(uiLanguage: string, extra: Record<string, any> = {}, met
   g.window.rice = rice;
   g.localStorage.clear();
   g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'share', 'onboarding', 'home', 'ai-providers', 'chat-tools', 'calendar-connect', 'menu-select', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'attachments', 'screenshots', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'ai-providers', 'chat-tools', 'calendar-connect', 'menu-select', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'retention-dialog', 'consent-toast', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   return { rice, handlers };
 }
@@ -871,7 +873,7 @@ it('Configurações: seção Vocabulário salva os termos e a opção dos partic
   expect(text).not.toContain('Uirapuru');
   const input = g.document.getElementById('vocab-input');
   expect(input.placeholder).toBe('Adicionar termo e Enter');
-  expect(g.document.querySelector('#detail textarea')).toBeNull(); // sem textarea: é um campo de chips
+  expect(g.document.querySelector('#set-vocabulary textarea')).toBeNull(); // sem textarea: é um campo de chips (o texto do aviso de consentimento mora em Privacidade)
   for (const term of ['Uirapuru Tecnologia', 'OKR']) {
     input.value = term;
     input.dispatchEvent(new g.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
@@ -1061,12 +1063,12 @@ it('lista lateral: o ⋯ abre o menu sem abrir a reunião; Apagar usa o dir cert
   expect(g.document.querySelector('h1').textContent).toBe('Configurações'); // continua em Configurações
   expect(g.document.getElementById('page-title')).toBeNull();
   const items = [...g.document.querySelectorAll('.action-menu .action-item')] as any[];
-  expect(items.map((i) => i.textContent.trim())).toEqual(['Renomear', 'Abrir pasta no Finder', 'Mover para pasta', 'Compartilhar', 'Apagar reunião']);
-  expect(items[4].classList.contains('danger')).toBe(true);
+  expect(items.map((i) => i.textContent.trim())).toEqual(['Renomear', 'Abrir pasta no Finder', 'Mover para pasta', 'Compartilhar', 'O que saiu deste computador', 'Apagar reunião']);
+  expect(items[5].classList.contains('danger')).toBe(true);
   items[1].click();
   expect(reveal).toHaveBeenCalledWith('/R/a');
   g.document.querySelector('.meeting .m-more').click();
-  [...g.document.querySelectorAll('.action-menu .action-item')][4].click();
+  [...g.document.querySelectorAll('.action-menu .action-item')][5].click();
   const dialog = g.document.querySelector('[role=dialog]');
   expect(dialog.textContent).toContain('Apagar “Daily”?');
   [...dialog.querySelectorAll('button')].find((b: any) => b.textContent === 'Apagar').click();
@@ -1323,7 +1325,7 @@ function describe_folders() {
     await boot2(meetings({ folderId: 'f1' }), api);
     const openMenu = () => g.document.querySelector('.folder-row .f-more').click();
     openMenu();
-    expect([...g.document.querySelectorAll('.action-item')].map((i: any) => i.textContent.trim())).toEqual(['Renomear', 'Nova reunião nesta pasta', 'Nova subpasta', 'Mover para', 'Apagar pasta']);
+    expect([...g.document.querySelectorAll('.action-item')].map((i: any) => i.textContent.trim())).toEqual(['Renomear', 'Nova reunião nesta pasta', 'Nova subpasta', 'Mover para', 'Pasta sensível', 'Tempo de guarda…', 'Apagar pasta']);
     [...g.document.querySelectorAll('.action-item')][1].click();
     await vi.waitFor(() => expect(api.createMeeting).toHaveBeenCalledWith('', undefined, 'f1'));
     openMenu();
@@ -1334,7 +1336,7 @@ function describe_folders() {
     await vi.waitFor(() => expect(api.renameFolder).toHaveBeenCalledWith('f1', 'Clientes VIP'));
     await vi.waitFor(() => expect(g.document.querySelector('.folder-row .f-more')).not.toBeNull());
     openMenu();
-    [...g.document.querySelectorAll('.action-item')][4].click(); // Apagar pasta
+    [...g.document.querySelectorAll('.action-item')][6].click(); // Apagar pasta
     const dialog = g.document.querySelector('[role=dialog]');
     expect(dialog.textContent).toContain('As reuniões dela não são apagadas');
     expect(dialog.querySelector('input')).toBeNull(); // confirmação simples, sem digitar
@@ -1382,7 +1384,7 @@ function describe_folders() {
     expect(g.document.getElementById('folder-new').title).toBe('New folder');
     expect(g.document.querySelector('.folder-count').title).toBe('1 meeting');
     g.document.querySelector('.folder-row .f-more').click();
-    expect([...g.document.querySelectorAll('.action-item')].map((i: any) => i.textContent.trim())).toEqual(['Rename', 'New meeting in this folder', 'New subfolder', 'Move to', 'Delete folder']);
+    expect([...g.document.querySelectorAll('.action-item')].map((i: any) => i.textContent.trim())).toEqual(['Rename', 'New meeting in this folder', 'New subfolder', 'Move to', 'Sensitive folder', 'Retention…', 'Delete folder']);
     g.window.RiceActionMenu.close();
     void out;
   });

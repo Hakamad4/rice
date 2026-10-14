@@ -44,6 +44,8 @@
       item('globe', t('privacy.calendar.title'), t('privacy.calendar.text')),
       item('download', t('privacy.downloads.title'), t('privacy.downloads.text')),
       item('shield', t('privacy.none.title'), t('privacy.none.text')),
+      item('mic', t('privacy.voice.title'), t('privacy.voice.text')),
+      item('file-text', t('privacy.receipt.title'), t('privacy.receipt.text')),
       item('paperclip', t('privacy.attach.title'), t('privacy.attach.text'), [], true),
       item('image', t('privacy.shots.title'), t('privacy.shots.text'), [], true),
     ];

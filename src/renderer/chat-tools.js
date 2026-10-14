@@ -25,7 +25,12 @@
         input.checked = false;
         return;
       }
-      await rice.setChatTools(input.checked);
+      const saved = await rice.setChatTools(input.checked);
+      if (saved && saved.ok === false) {
+        input.checked = false; // Modo 100% local: o main recusa
+        if (onStatus) onStatus({ on: false, text: '', hint: saved.message });
+        return;
+      }
       if (onChange) onChange();
       if (onStatus) onStatus(await status());
     };

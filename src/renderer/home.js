@@ -171,6 +171,8 @@
   const isMeeting = (e) => Boolean(e.joinUrl) || e.attendees > 0;
 
   const SOON_MS = 10 * 60_000;
+  /** "O que lembrar" no Início: eventos de reunião que começam em até 15 min (ou já estão rolando). */
+  const MEMORY_MS = 15 * 60_000;
 
   /** Dia inteiro: uma linha discreta de texto corrido ("Dia inteiro: Treinar, Ler livro, Leetcode +1"), sem cores nem chips. */
   function allDayRow(events) {
@@ -187,7 +189,7 @@
     return b;
   }
 
-  function render(container, { events, now, google, connected, loading, onJoin, onNotes, onRecord, recording, onConnect, onAsk, onNewWarRoom }) {
+  function render(container, { events, now, google, connected, loading, onJoin, onNotes, onRecord, recording, onConnect, onAsk, onNewWarRoom, onMemory, onPerson }) {
     const anySource = connected !== undefined ? connected : Boolean(google && google.connected); // Google OU Calendário do macOS
     container.classList.toggle('h12', uses12h()); // "4:14 PM–4:44 PM" precisa de coluna de hora mais larga
     const nodes = [el('div', { className: 'ai-notice-slot' }, [])]; // o aviso de IA entra aqui quando o status chega, sem atrasar a página
@@ -226,14 +228,22 @@
           actions.push(e.joinUrl && soon ? action(t('home.join'), 'video', () => onJoin(e), 'ev-join') : el('span', {}, []));
           actions.push(soon && onRecord && !recording ? action(t('home.record-now'), 'record', () => onRecord(e), 'ev-rec hot') : action(t('home.prepare-notes'), 'file-text', () => onNotes(e)));
         }
-        nodes.push(
-          el('div', { className: 'event' + (soon && isMeeting(e) ? ' soon' : '') + (happening ? ' now' : '') }, [
+        const eventNode = el('div', { className: 'event' + (soon && isMeeting(e) ? ' soon' : '') + (happening ? ' now' : '') }, [
             el('span', { className: 'ev-time', textContent: range(e) }, []),
             el('span', { className: 'ev-main' }, [el('span', { className: 'ev-title', textContent: e.title }, []), ...(happening ? [el('span', { className: 'now-tag', textContent: t('home.now') }, [])] : [])]),
             el('span', { className: 'ev-meta', textContent: e.attendees > 0 ? window.RiceI18n.tn('home.attendees', e.attendees) : '' }, []),
             el('span', { className: 'ev-actions' }, actions),
-          ]),
-        );
+        ]);
+        nodes.push(eventNode);
+        // "O que lembrar": uma linha secundária com o primeiro ponto e "ver mais"; sem fatos, nada aparece
+        if (onMemory && isMeeting(e) && !e.allDay && (happening || (start > now && start - now <= MEMORY_MS))) {
+          const slot = el('div', { className: 'ev-memory-slot' }, []);
+          nodes.push(slot);
+          Promise.resolve(onMemory(e)).then((brief) => {
+            const line = window.RiceMemory ? window.RiceMemory.homeLine(brief, () => onNotes(e), onPerson) : null;
+            if (line && slot.isConnected) slot.replaceChildren(line);
+          }).catch(() => {});
+        }
       }
     }
     container.replaceChildren(...nodes);

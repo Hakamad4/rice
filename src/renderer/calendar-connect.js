@@ -151,6 +151,11 @@
       field(t('guide.cal.google.secret'), gSecret),
       feedback,
     ];
+    if (google.blocked) {
+      connect.disabled = true; // Modo 100% local: o Google Agenda usa a internet
+      connect.title = google.blocked;
+      gBlocks.splice(gBlocks.length - 1, 0, el('p', { className: 'ai-note-line' }, [el('span', { className: 'ico' }, [window.RiceIcons.icon('info')]), el('span', { textContent: google.blocked }, [])]));
+    }
     if (google.error) gBlocks.push(el('p', { className: 'hint', textContent: t('guide.gcal.last-error', { error: google.error }) }, []));
     gBlocks.push(el('div', { className: 'ai-foot' }, [status(google.connected ? 'ok' : google.hasClient ? 'warn' : 'none', statusText), el('div', { className: 'ai-actions' }, [disconnect, connect])]));
     const direct = card('google', t('guide.cal.google.title'), google.connected ? t('guide.cal.on') : '', Boolean(google.connected), gBlocks);

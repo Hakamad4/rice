@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { isInsideRoot } from '../app/paths';
-import type { Folder } from '../../shared/types';
+import type { Folder, FolderRetention } from '../../shared/types';
 import { t } from '../i18n';
 import { listMeetingDirs, readMeta, updateMeta, writeAtomic } from './meeting-files';
 
@@ -72,6 +72,16 @@ function withoutParent(f: Folder): Folder {
   return rest;
 }
 
+const AUDIO_DAYS = [0, 7, 30, 90];
+const MEETING_MONTHS = [0, 6, 12];
+/** Regra de guarda lida com tolerância: só os valores oferecidos na tela; qualquer outra coisa é ignorada. */
+export function parseRetention(raw: unknown): FolderRetention | undefined {
+  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const audioDays = AUDIO_DAYS.includes(o.audioDays as number) ? (o.audioDays as FolderRetention['audioDays']) : undefined;
+  const meetingMonths = MEETING_MONTHS.includes(o.meetingMonths as number) ? (o.meetingMonths as FolderRetention['meetingMonths']) : undefined;
+  return audioDays === undefined && meetingMonths === undefined ? undefined : { ...(audioDays !== undefined ? { audioDays } : {}), ...(meetingMonths !== undefined ? { meetingMonths } : {}) };
+}
+
 export const foldersFile = (root: string): string => join(root, '.rice', 'folders.json');
 
 /** Pastas, da primeira à última. Arquivo ausente ou ilegível = nenhuma pasta (nunca lança por conteúdo). */
@@ -89,6 +99,8 @@ export async function readFolders(root: string): Promise<Folder[]> {
           createdAt: typeof o.createdAt === 'string' ? o.createdAt : '',
           order: typeof o.order === 'number' ? o.order : folders.length,
           ...(typeof o.parentId === 'string' && o.parentId ? { parentId: o.parentId } : {}),
+          ...(o.sensitive === true ? { sensitive: true } : {}),
+          ...(parseRetention(o.retention) ? { retention: parseRetention(o.retention)! } : {}),
         });
       }
     }
@@ -186,6 +198,19 @@ export async function moveFolder(root: string, id: string, parentId: unknown): P
     const { parentId: _old, ...rest } = found;
     const moved: Folder = { ...rest, order: siblings.reduce((m, f) => Math.max(m, f.order), -1) + 1, ...(parent ? { parentId: parent } : {}) };
     return { folders: folders.map((f) => (f.id === id ? moved : f)), result: moved };
+  });
+}
+
+/** "Pasta sensível" e regras de guarda de uma pasta. `retention: null` volta a herdar tudo; `sensitive: false` desliga (as subpastas continuam herdando da mãe). */
+export async function setFolderPrivacy(root: string, id: string, patch: { sensitive?: unknown; retention?: unknown }): Promise<Folder> {
+  return mutate(root, (folders) => {
+    const found = folders.find((f) => f.id === id);
+    if (!found) throw new Error(t('folder.err.not-found'));
+    const { sensitive: _s, retention: _r, ...base } = found;
+    const sensitive = patch.sensitive === undefined ? found.sensitive === true : patch.sensitive === true;
+    const retention = patch.retention === undefined ? found.retention : patch.retention === null ? undefined : parseRetention(patch.retention);
+    const next: Folder = { ...base, ...(sensitive ? { sensitive: true } : {}), ...(retention ? { retention } : {}) };
+    return { folders: folders.map((f) => (f.id === id ? next : f)), result: next };
   });
 }
 

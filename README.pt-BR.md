@@ -46,7 +46,15 @@ O Rice é um app para Mac que grava suas reuniões, transcreve no seu computador
 
 Precisa de um Mac com Apple Silicon (arm64) e macOS 14 ou mais novo. A transcrição usa o `whisper-server` do Homebrew (`brew install whisper.cpp`).
 
-### Opção 1 — para devs: compilar e instalar a partir do código
+### Opção 1 — recomendada: instalar pelo Terminal
+
+Uma linha só. Ela baixa o código em `~/rice`, compila e coloca o **Rice.app** em `/Applications`. Como o app é gerado no seu Mac, o macOS não bloqueia a abertura (sem `xattr` nem "Abrir Mesmo Assim"). Rodar de novo atualiza.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WalissonCF/rice/main/get.sh | bash
+```
+
+Ou, passo a passo:
 
 ```bash
 git clone https://github.com/WalissonCF/rice.git
@@ -156,7 +164,7 @@ O guia mostra o progresso do modelo de transcrição. Quando aparecer **Modelo c
 
 ## Conectar uma IA
 
-Abra **Configurações › Inteligência artificial** (a mesma lista aparece no guia **Como usar o Rice**). Cada provedor é uma linha, com a IA ativa no topo; clique numa linha para abrir os passos dela. Dá para conectar mais de um provedor e trocar quando quiser com **Usar este**.
+Abra **Configurações › Inteligência artificial** (a mesma lista aparece no guia **Como usar o Rice**). Cada provedor é uma linha (Claude, ChatGPT, Gemini, OpenCode, Antigravity e **Modelo local**), com a IA ativa no topo; clique numa linha para abrir os passos dela. Dá para conectar mais de um provedor e trocar quando quiser com **Usar este**.
 
 ![Provedores de IA](docs/images/pt-BR/10-ai-providers.png)
 
@@ -185,6 +193,33 @@ O Rice usa a CLI do OpenCode já logada no seu Mac, igual ao Claude e ao ChatGPT
 
 Você pode usar a assinatura do Antigravity como IA (Configurações > Inteligência artificial > Antigravity). Como o `agy` é um agente com acesso a arquivos e terminal, o Rice o roda dentro de um sandbox do macOS: ele só gera texto, não consegue gravar em lugar nenhum além de uma pasta temporária vazia, não executa comandos e não lê a sua pasta pessoal. A conversa criada a cada uso é apagada do estado do agy. O prompt entra pelo stdin, então não aparece na lista de processos. No Rice, clique em Testar conexão e escolha um modelo (a lista vem de `agy models`; no modo Automático o modelo leve das etapas simples é o menor Flash). O agente ainda tem acesso à web, por isso o Antigravity não fica disponível no War room nem no chat com ferramentas. As respostas demoram alguns segundos a mais que os outros provedores (o agy leva ~4 s para iniciar).
 
+### Modelo local (sem internet)
+
+Para jurídico, saúde, governo e bancos, onde as reuniões não podem ir para a nuvem: a transcrição já é local e, com o provedor **Modelo local**, a IA também é, então o Rice funciona sem internet de ponta a ponta.
+
+1. Instale o [Ollama](https://ollama.com) e abra o app (o Rice nunca instala nada por conta própria).
+2. Baixe um modelo: `ollama pull qwen3:8b` (5,2 GB, uma boa escolha para português em Macs com **16 GB**) ou um menor para **8 GB**: `ollama pull qwen3:4b` (2,5 GB) ou `ollama pull llama3.2:3b` (2,0 GB).
+3. Em **Configurações › Inteligência artificial › Modelo local** escolha o **Servidor**: **Automático** (o Rice testa todas as portas padrão ao mesmo tempo, com tempo curto, e mostra o que achou, por exemplo "Encontrado: LM Studio em :1234") ou um da lista. Qualquer servidor local serve, não só o Ollama. O campo **Endereço do servidor** é editável, mas **só 127.0.0.1, localhost ou ::1** são aceitos: qualquer outro é recusado, e é isso que garante que "local" é local de verdade. Escolha o modelo (o tamanho aparece) ou digite o nome em **Nome do modelo** (para servidores que não listam modelos), clique em **Testar conexão** (uma geração curtinha) e **Usar este**.
+
+| Servidor | Porta padrão | API | Como ligar |
+| --- | --- | --- | --- |
+| Ollama | 11434 | Ollama (`/api/chat`) | abra o app e `ollama pull qwen3:8b` |
+| LM Studio | 1234 | compatível com OpenAI | carregue um modelo e ligue o Local Server (ou `lms server start`) |
+| llama.cpp (`llama-server`) | 9931 (versões antigas: 8080) | compatível com OpenAI | `llama-server -m modelo.gguf --port 9931` |
+| MLX (`mlx_lm.server`) | 8080 | compatível com OpenAI | `mlx_lm.server --model mlx-community/Qwen3-8B-4bit` |
+| Jan | 1337 | compatível com OpenAI | Configurações › Local API Server › Start Server |
+| Outro | qualquer, em localhost | compatível com OpenAI (`/v1/chat/completions`) | vLLM, KoboldCpp, text-generation-webui… |
+
+Cada opção preenche a porta padrão acima (conferida na documentação oficial de cada projeto) e mostra os seus próprios passos curtos, com botão de copiar nos comandos.
+
+**Tamanho do contexto** (8k / 16k / 32k, padrão 16k) é quanto texto o modelo lê de uma vez; ele vai para o Ollama como `num_ctx`, e o Rice dimensiona a extração de reuniões longas e o contexto do chat a partir dele. Mais contexto comporta reuniões maiores, mas usa mais RAM e é mais lento. O **modelo leve** (Automático) é o menor modelo instalado. Imagens só vão para modelos de visão (por exemplo `llava` ou `qwen2.5vl`). Busca na web, ferramentas e MCPs não existem com o modelo local.
+
+**Limites:** as notas ficam um pouco mais simples que as dos modelos grandes e a geração é mais lenta.
+
+**Modo 100% local** (Configurações › Privacidade, desligado por padrão) é o selo de confiança: só aceita o provedor Modelo local e bloqueia tudo o que usa a rede: busca na web, ferramentas e MCPs, war room com internet, sincronização com o Google Agenda (o Calendário do macOS continua), verificação de atualizações e download de modelos de transcrição (o modelo precisa já estar baixado). Os controles bloqueados ficam na tela, desabilitados, com o motivo, e um selo discreto **100% local** aparece no rodapé da barra lateral. Por baixo, a própria camada de rede do app recusa qualquer destino que não seja localhost enquanto o modo estiver ligado.
+
+![Card Modelo local com o servidor encontrado](docs/images/pt-BR/37-local-model.png)
+
 ## Uso no dia a dia
 
 ### Gravar, parar e continuar
@@ -193,9 +228,13 @@ Clique em **Nova reunião** e depois em **Gravar**. Ao parar, o Rice escreve as 
 
 O Rice também percebe reuniões (Zoom, Meet, Teams) e eventos da agenda e sugere gravar.
 
+![Início com a reunião acontecendo agora e Gravar agora](docs/images/pt-BR/31-record-now.png)
+
 ### Pausar a gravação
 
 Para uma conversa paralela que não deve ser gravada, use **Pausar** (ao lado de **Parar**, no item **Pausar** da bandeja ou no botão do Mini Rice). Pausado, o Rice solta o microfone: o áudio não é gravado nem transcrito, o relógio para, o botão vira **Continuar · 00:42** (o tempo parado, em âmbar discreto) e o ponto de gravação da barra lateral, do item da reunião e da bandeja fica âmbar e parado. As ideias ao vivo, a War room e as capturas de tela também param. **Continuar** retoma na mesma reunião, e a transcrição ganha um marcador discreto, por exemplo “gravação pausada de 14:03 a 14:07”; os horários depois da pausa continuam certos. Pausado, o Rice não pergunta “ainda gravando?” nem para sozinho; depois de 30 minutos ele só pergunta se você quer parar. Se o app cair durante a pausa, “Recuperar reunião” funciona como sempre.
+
+![Gravação pausada: Continuar · 00:12 e o marcador na transcrição](docs/images/pt-BR/32-pause.png)
 
 ### Versões das notas
 
@@ -251,6 +290,28 @@ Desligadas por padrão. Em **Configurações › Capturas de tela** você liga, 
 
 Como funciona: um filtro local, em português e inglês, escolhe as falas que valem uma pergunta; só então o Rice envia à IA que você configurou os últimos ~60 s da transcrição (texto) para confirmar. Isso funciona com qualquer provedor, inclusive as assinaturas por CLI. Com uma chave de API (Claude, OpenAI ou Gemini) a imagem também vai para a IA, só para refinar a legenda; nas assinaturas por CLI as imagens ficam só no seu computador. No máximo uma pergunta a cada ~15 s e um print a cada ~10 s; prints iguais ao anterior são descartados. Qual tela: o Rice usa o app que o detector viu usando o microfone (Zoom, Teams, Meet no navegador…) e captura a tela onde está a janela dele; quando é outra pessoa falando (áudio do computador), captura só a janela da chamada. Sem encontrar o app, usa a tela do cursor (no Windows, sempre a do cursor). Exige a permissão de Gravação de Tela do macOS. Dá para desligar a qualquer momento, até gravando.
 
+![Transcrição com a captura logo depois da frase que a motivou](docs/images/pt-BR/35-screenshots.png)
+
+### Memória entre reuniões
+
+Em vez de cada reunião ser uma ilha, o Rice lembra o que cada pessoa e cada empresa **pediu, prometeu e decidiu**, e o que ficou pendente. Quando as notas de uma reunião ficam prontas, uma chamada ao **modelo leve** da IA (uma por reunião, só com o texto das notas, das anotações e dos participantes) extrai esses fatos. Tudo fica **neste Mac**, em `<pasta das reuniões>/.rice/memory.jsonl`; as pessoas vêm dos participantes da agenda e dos nomes que você deu, e a empresa vem do domínio do e-mail (ignorando Gmail, Outlook, iCloud e afins e o seu próprio domínio).
+
+- **Antes da call:** na aba **Notas** da reunião de um evento da agenda aparece o cartão recolhível **O que lembrar**, com 3 a 6 pontos (pendências em aberto primeiro, as vencidas em âmbar) e um link para a reunião de origem de cada um. No **Início**, o evento que começa em até 15 minutos ganha uma linha com o primeiro ponto e “ver mais”. Sem fatos, nada aparece.
+- **Pendências que se fecham:** se na reunião seguinte alguém diz “mandei a proposta”, a IA marca a pendência como feita, com a fonte (“concluída em …”). Ela nunca apaga: dá para reabrir com um clique.
+- **No chat:** o chat da reunião e o de todas as reuniões ganham os fatos das pessoas e empresas envolvidas como contexto extra (“o que a Acme pediu antes?”).
+- **Página Memória (barra lateral, logo abaixo de Pendências):** abas Pessoas e Empresas com busca; cada uma abre um detalhe com as pendências em aberto primeiro, depois decisões, contexto e as últimas reuniões (com links), além de editar, marcar como resolvido, apagar e “Esquecer esta pessoa/empresa”. O nome da pessoa/empresa no cartão “O que lembrar” e no Início leva direto a esse detalhe. A memória vazia explica o que vai aparecer.
+- **Configurações › Memória:** a opção de ligar/desligar (ligada por padrão), um link para a página, **Apagar memória** (com confirmação, escondida quando vazia) e **Montar memória das reuniões antigas** roda em segundo plano, uma reunião por vez, com progresso e botão de cancelar, e só depois do seu clique (usa a IA uma vez para cada reunião). Apagar uma reunião remove os fatos dela.
+
+![Página Memória com pessoas e empresas](docs/images/pt-BR/42-memory.png)
+
+![Cartão O que lembrar na aba Notas](docs/images/pt-BR/43-what-to-remember.png)
+
+### Pendências
+
+O item **Pendências** da barra lateral (com um contador das suas pendências vencidas) reúne o que você prometeu e o que prometeram a você, de todas as reuniões, em Vencidas, Hoje, Esta semana, Depois, Sem prazo e Feitas, com filtros **Minhas**, **Dos outros** e **Todas**. Cada linha tem checkbox, texto, responsável, prazo (um clique para mudar) e o link da reunião de origem; o campo **Adicionar pendência** cria as suas, ligadas ou não a uma reunião. Os prazos relativos (“até sexta”, “semana que vem”) são convertidos em data pela IA com a data da reunião; sem prazo claro, o campo fica vazio. Marcar uma pendência marca o `- [ ]` correspondente das notas, e marcar a tarefa nas notas marca a pendência. Uma **notificação local** avisa às 9h do dia do prazo (ou ao abrir o app), juntando as do dia em uma só; dá para desligar em Configurações › Pendências. Com a integração de Lembretes ligada, **Enviar para Lembretes** leva uma pendência (ou todas as suas) ao app Lembretes do macOS.
+
+![Página Pendências com grupos](docs/images/pt-BR/44-follow-ups.png)
+
 ### Editar e criar templates
 
 Abra **Templates** na barra lateral. Os templates embutidos podem ser editados (e restaurados depois); **Duplicar** cria o seu. Um template é só um título, uma descrição curta e a lista de seções que o Rice deve preencher.
@@ -265,6 +326,10 @@ Clique em **Pergunte ao Rice** (canto superior direito) e pergunte qualquer cois
 
 **Trocar a IA e o modelo no chat.** No cabeçalho do chat, o chip com o nome da IA (por exemplo "Claude · Sonnet") abre um menu com os provedores que você já configurou e os modelos de cada um; o atual aparece com ✓. A escolha vale para o app inteiro (é a mesma de Configurações > IA): a próxima pergunta e as próximas notas já usam o modelo escolhido. Provedores ainda não configurados aparecem no fim, com "Configurar…". Durante uma resposta o chip fica desabilitado. No OpenCode, o modelo gratuito é uma opção explícita e avisa que pode usar suas transcrições para melhorar modelos.
 
+![Menu de perguntas prontas no chat](docs/images/pt-BR/33-saved-questions.png)
+
+![Chat com a busca na web ligada e as fontes da resposta](docs/images/pt-BR/34-web-search.png)
+
 ### Perguntar entre reuniões
 
 Abra o **Início** (primeiro item da barra lateral): o campo **Pergunte sobre suas reuniões** fica no topo da página. Também dá para apertar **⌘J** de qualquer lugar. O Rice abre o painel de chat no modo **Todas as reuniões**: escolhe as reuniões mais relevantes pela sua pergunta (as palavras dela, um período como "último mês" ou "semana passada", o nome de uma pasta ou de um cliente), envia as notas delas e os trechos da transcrição que combinam para a sua IA e responde citando as reuniões. Os números pequenos na resposta, e a linha **Fontes**, abrem a reunião naquele trecho.
@@ -276,6 +341,8 @@ O chip no topo do painel troca entre **Esta reunião**, **Todas as reuniões** e
 ### Gravar e parar de qualquer lugar
 
 Aperte **⌥⌘R** (Ctrl+Alt+R no Windows) em qualquer app, com o Rice em segundo plano: ele começa uma reunião, usando a nota da reunião da agenda que está acontecendo ou começa em até 10 minutos (como o **Gravar agora** do Início), e para quando você aperta de novo. Uma notificação discreta diz "Gravando" ou "Gravação parada". Troque as teclas ou escolha **Nenhum** em **Configurações > Atalhos**; se outro app já usa essas teclas, as Configurações mostram um aviso para você escolher outro atalho.
+
+![Configurações › Atalhos](docs/images/pt-BR/36-shortcuts.png)
 
 ### Mini Rice
 
@@ -428,16 +495,31 @@ Em Configurações > Ferramentas e MCPs no chat você pode deixar o chat usar os
 
 ## Privacidade
 
-- O áudio é gravado e transcrito no seu Mac e nunca sai dele.
-- Só texto sai do seu Mac: a transcrição e as suas perguntas vão para o provedor de IA que **você** escolheu, e só quando o Rice gera notas ou responde. O Rice não tem servidores, conta, telemetria nem relatório de erros. O código é aberto (MIT).
-- Perguntas entre reuniões e rascunhos de e-mail enviam, para o provedor que **você** escolheu, só as notas e alguns trechos da transcrição das reuniões de que precisam (no máximo 8, com limite de tamanho). A busca roda inteira no seu Mac.
-- Tudo o que o Rice cria (áudio, transcrições, notas, conversas, configurações) fica em pastas e arquivos só do seu usuário (permissões 0700/0600). Chaves e tokens ficam no Keychain do macOS.
-- Os CLIs de IA rodam sem ferramentas que mexam nos seus arquivos (Claude sem ferramentas; Codex com shell, navegador, computador e plugins desligados; OpenCode com todas as permissões negadas; Antigravity dentro de um sandbox do macOS que só deixa gravar numa pasta temporária vazia, bloqueia comandos e bloqueia a leitura da sua pasta pessoal). O modelo gratuito do OpenCode Zen pode usar suas transcrições para melhorar modelos.
-- Os modelos de transcrição e de vozes são baixados uma vez e conferidos por SHA-256. O Google Agenda (opcional) é só leitura; dá para usar a Agenda do macOS no lugar.
+O que fica, o que sai e como conferir:
+
+- **O áudio nunca sai do seu Mac.** Ele é gravado e transcrito localmente. Só texto pode sair: a transcrição e as suas perguntas vão para o provedor de IA que **você** escolheu, e só quando o Rice gera notas ou responde. O Rice não tem servidores, conta, telemetria nem relatório de erros. O código é aberto (MIT).
+- **Recibo por reunião.** No **⋯ da reunião › O que saiu deste computador** você vê, linha a linha, o que foi enviado à IA, quantas vezes, quando e para qual provedor ("Notas: Claude (assinatura) · 1 envio · 14:31", "Capturas: 0 enviadas", "Busca na web: não usada"), ou "Nada desta reunião saiu do seu computador". Ele vem de um registro só de metadados, guardado na pasta da reunião (`.rice-egress.jsonl`: hora, tipo, provedor, tamanhos; nunca o conteúdo), e dá para copiar como texto ou salvar em PDF para a área de compliance. Toda chamada à IA é registrada num ponto central, então nenhum recurso esquece; o Modelo local conta como "não saiu".
+- **Aviso de consentimento.** Ao começar a gravar (botão, Gravar agora, aviso de reunião ou o atalho ⌥⌘R) aparece um toast discreto, que nunca bloqueia a gravação, sugerindo avisar os participantes, com o botão **Copiar aviso** e uma frase pronta no idioma da reunião ("Aviso: estou usando o Rice para transcrever esta reunião localmente no meu computador, para minhas anotações…"). Edite o texto ou desligue o lembrete em **Configurações › Privacidade**. A hora em que o aviso foi copiado aparece no recibo. As leis de gravação variam: em muitos lugares é preciso avisar os participantes.
+- **A sua voz nunca é salva.** Na identificação de participantes (beta) as vozes são comparadas **só na memória** durante a gravação e descartadas no fim: nenhuma assinatura de voz (embedding) vai para o disco, para a reunião ou para a rede. Versões anteriores guardavam os grupos de falantes em `falantes.json` por reunião; o Rice agora apaga esse arquivo e nunca mais o grava (um teste grava uma reunião simulada e confere que nenhum arquivo tem vetores de voz).
+- **Ocultar dados pessoais.** Com **Configurações › Privacidade › Ocultar dados pessoais ao enviar para a IA**, ou numa pasta marcada como **Sensível** (⋯ da pasta; as subpastas herdam), CPF, CNPJ, cartão (com Luhn), e-mail, telefone (BR/internacional), RG e CEP viram marcadores como `[CPF 1]` e `[EMAIL 2]` antes de o texto sair do Mac, e a resposta é restaurada localmente antes de ser salva ou mostrada. O mapa dos marcadores vive só na memória, por chamada, e nunca é gravado. Falsos positivos comuns (números de pedido, datas, valores) ficam como estão. Imagens não dá para ocultar, então não são enviadas enquanto a ocultação está ligada. O recibo mostra "12 dados pessoais ocultados". Com o Modelo local não faz diferença.
+- **Guarda por pasta.** ⋯ da pasta › **Tempo de guarda…** define duas regras independentes: **áudio** (manter sempre, ou apagar depois de 7, 30 ou 90 dias) e **reunião inteira** (manter sempre, ou depois de 6 meses ou 1 ano); as subpastas herdam da pasta-mãe, e **Configurações › Privacidade** tem um padrão. Uma varredura diária (ao abrir e a cada 24 h) manda só o que venceu para a **Lixeira** do sistema (nunca apaga em definitivo), nunca toca numa reunião gravando ou finalizando e avisa uma vez ("3 áudios antigos foram para a Lixeira pela regra da pasta Jurídico").
+- **Modo 100% local** (Configurações › Privacidade, desligado por padrão): só o provedor Modelo local; busca na web, ferramentas e MCPs, war room com internet, Google Agenda, verificação de atualizações e download de modelos de transcrição ficam bloqueados, e a própria camada de rede do app recusa qualquer destino que não seja localhost (veja [Modelo local](#modelo-local-sem-internet)).
+- As perguntas entre reuniões e os rascunhos de e-mail enviam, ao provedor que **você** escolheu, só as notas e alguns trechos da transcrição das reuniões de que precisam (no máximo 8, com limite de tamanho). A busca roda inteira no seu Mac.
+- Tudo o que o Rice cria (áudio, transcrições, notas, conversas, configurações) fica em pastas e arquivos que só o seu usuário lê (permissões 0700/0600). Chaves e tokens ficam no Keychain do macOS.
+- As CLIs de IA rodam sem ferramentas que toquem nos seus arquivos (Claude sem ferramentas; Codex com shell, navegador, computador e plugins desligados; OpenCode com todas as permissões negadas; Antigravity dentro de um sandbox do macOS que só permite escrever numa pasta temporária vazia).
+- Memória entre reuniões (ligada por padrão, dá para desligar): os fatos ficam só neste Mac, em `.rice/memory.jsonl`; o que sai é o texto das notas de cada reunião para o provedor de IA que você escolheu (uma chamada do modelo leve por reunião), e os fatos relevantes junto das perguntas do chat e do "O que lembrar". Essas chamadas entram no recibo por reunião (tipo "memória") e respeitam a ocultação de dados pessoais, as pastas sensíveis e o Modo 100% local (com o Modelo local nada sai do computador).
+- Os modelos de transcrição e de voz são baixados uma vez e conferidos por SHA-256. O Google Agenda (opcional) é só leitura; dá para usar o Calendário do macOS no lugar.
 - O app só carrega as próprias páginas locais: não navega para sites, não abre janelas nem pede permissões de página.
-- Capturas de tela (opcionais, desligadas por padrão): ficam na pasta da reunião. Para decidir quando tirar o print, trechos recentes da transcrição (texto) vão para a IA que você escolheu; a imagem só vai se for uma chave de API.
-- Apagar uma reunião a move para a Lixeira; nada fica guardado em outro lugar.
-- As leis variam: em muitos lugares é preciso avisar os participantes de que a reunião está sendo gravada.
+- Capturas de tela (opcional, desligado por padrão): ficam na pasta da reunião. Para decidir quando tirar uma, trechos recentes da transcrição (texto) vão para a IA que você escolheu; a imagem só vai se for uma chave de API.
+- Apagar uma reunião a manda para a Lixeira; nada fica em outro lugar.
+
+![O que saiu deste computador: o recibo de uma reunião](docs/images/pt-BR/39-privacy-receipt.png)
+
+![Aviso de consentimento](docs/images/pt-BR/40-consent.png)
+
+![Modo 100% local em Configurações › Privacidade, com o selo na barra lateral](docs/images/pt-BR/38-fully-local.png)
+
+![Tempo de guarda da pasta](docs/images/pt-BR/41-retention.png)
 
 ## Licença
 

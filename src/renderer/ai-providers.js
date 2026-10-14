@@ -27,6 +27,7 @@
     { id: 'gemini', name: 'Google Gemini', sub: null, api: 'gemini-api' },
     { id: 'opencode', name: 'OpenCode', sub: 'opencode-sub', api: null },
     { id: 'agy', name: 'Antigravity', sub: 'agy-sub', api: null },
+    { id: 'local', get name() { return t('ai.local.name'); }, sub: 'local-model', api: null },
   ];
 
   /** Passo a passo de cada aba: texto + comandos (em `code`, com botão de copiar). Os comandos não se traduzem. */
@@ -37,6 +38,13 @@
     'openai-api': [['openai-api.1'], ['openai-api.2']],
     'gemini-api': [['gemini-api.1'], ['gemini-api.2']],
     'agy-sub': [['agy-sub.1'], ['agy-sub.2', ['agy']], ['agy-sub.3']],
+    // Modelo local: os passos mudam conforme o servidor escolhido (o Automático mostra os do Ollama, o mais comum)
+    'local-model:ollama': [['local-model.1', ['https://ollama.com']], ['local-model.2', ['ollama pull qwen3:8b']], ['local-model.3', ['ollama pull qwen3:4b', 'ollama pull llama3.2:3b']], ['local-model.4']],
+    'local-model:lmstudio': [['local-lmstudio.1', ['https://lmstudio.ai']], ['local-lmstudio.2', ['lms server start']], ['local-lmstudio.3']],
+    'local-model:llamacpp': [['local-llamacpp.1', ['brew install llama.cpp']], ['local-llamacpp.2', ['llama-server -m modelo.gguf --port 9931']], ['local-llamacpp.3']],
+    'local-model:mlx': [['local-mlx.1', ['pip install mlx-lm']], ['local-mlx.2', ['mlx_lm.server --model mlx-community/Qwen3-8B-4bit']], ['local-mlx.3']],
+    'local-model:jan': [['local-jan.1', ['https://jan.ai']], ['local-jan.2'], ['local-jan.3']],
+    'local-model:other': [['local-other.1'], ['local-other.2'], ['local-other.3']],
     'opencode-sub': [['opencode-sub.1', ['curl -fsSL https://opencode.ai/install | bash']], ['opencode-sub.2', ['opencode auth login']], ['opencode-sub.3']],
   };
 
@@ -62,8 +70,8 @@
     return el('div', { className: 'cmd-line' }, [el('code', { textContent: command }, []), copy]); // o botão fica DENTRO do bloco, à direita
   }
 
-  function howTo(provider) {
-    return (STEPS[provider] || STEPS['gemini-api']).map(([key, commands], i) =>
+  function howTo(provider, serverKey) {
+    return (STEPS[serverKey ? `${provider}:${serverKey}` : provider] || STEPS['gemini-api']).map(([key, commands], i) =>
       el('li', { className: 'ai-step' }, [
         el('span', { className: 'ai-step-n', textContent: String(i + 1) }, []),
         el('div', { className: 'ai-step-body' }, [el('p', { textContent: t(`ai.howto.${key}`) }, []), ...(commands || []).map(commandLine)]),
@@ -127,6 +135,96 @@
     return [field(t('ai.model-title'), picker.root), warn];
   }
 
+  const fmtSize = (bytes) => (bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`);
+
+  /** Servidores do seletor: id, nome, porta padrão e como aparece no menu. A porta é a documentada por cada servidor (ver local-model.ts). */
+  const LOCAL_SERVERS = [
+    { id: 'auto', label: () => t('ai.local.server-auto'), url: 'http://127.0.0.1:11434' },
+    { id: 'ollama', label: () => 'Ollama', url: 'http://127.0.0.1:11434' },
+    { id: 'lmstudio', label: () => 'LM Studio', url: 'http://127.0.0.1:1234' },
+    { id: 'llamacpp', label: () => 'llama.cpp (llama-server)', url: 'http://127.0.0.1:9931' },
+    { id: 'mlx', label: () => 'MLX (mlx_lm.server)', url: 'http://127.0.0.1:8080' },
+    { id: 'jan', label: () => 'Jan', url: 'http://127.0.0.1:1337' },
+    { id: 'other', label: () => t('ai.local.server-other'), url: 'http://127.0.0.1:PORT' },
+  ];
+  const serverKeyOf = (info) => {
+    const server = (info.local && info.local.server) || 'auto';
+    return server === 'auto' ? 'ollama' : server;
+  };
+
+  /** Seletor "Servidor" (vai ACIMA dos passos, que mudam conforme a escolha). */
+  function localServerField(info, rice, changed) {
+    const local = info.local || { server: 'auto', numCtx: 16384 };
+    const current = local.server || 'auto';
+    const picker = window.RiceMenuSelect.create({
+      items: LOCAL_SERVERS.map((s) => ({ value: s.id, label: s.label() })),
+      value: current,
+      ariaLabel: t('ai.local.server'),
+      onChoose: async (id) => {
+        await rice.setAiLocal({ server: id, url: '', numCtx: local.numCtx }); // cada servidor traz a sua porta padrão: o endereço digitado antes sai
+        await changed();
+      },
+    });
+    const blocks = [field(t('ai.local.server'), picker.root)];
+    if (current === 'auto') blocks.push(p(t('ai.local.auto-hint'), 'hint'));
+    return blocks;
+  }
+
+  /**
+   * Modelo local: endereço (só localhost; o main recusa o resto), o servidor encontrado, o modelo (com o tamanho), o nome do modelo
+   * para servidores que não listam e o contexto. Sem servidor ou sem modelo os passos (com botão de copiar) já aparecem acima.
+   */
+  function localField(info, status, rice, { changed, say }) {
+    const local = info.local || { url: '', kind: null, models: [], numCtx: 16384, server: 'auto' };
+    const chosen = LOCAL_SERVERS.find((s) => s.id === (local.server || 'auto')) || LOCAL_SERVERS[0];
+    const blocks = [];
+    const input = el('input', { type: 'text', value: local.configuredUrl || '', placeholder: chosen.url, autocomplete: 'off', spellcheck: false, className: 'ai-key' }, []);
+    input.setAttribute('aria-label', t('ai.local.address'));
+    const saveAddress = button(t('ai.save'), async () => {
+      const result = await rice.setAiLocal({ url: input.value, server: local.server || 'auto', numCtx: local.numCtx });
+      if (!result.ok) return say(result.message, false);
+      await changed();
+    }, 'primary');
+    blocks.push(field(t('ai.local.address'), el('div', { className: 'ai-input-row' }, [input, saveAddress])));
+    blocks.push(p(t('ai.local.address-help'), 'hint'));
+    if (local.kind) blocks.push(note(t('ai.local.detected', { server: local.serverName || t('ai.local.server-generic'), url: local.url })));
+    const current = status.models['local-model'] || '';
+    const items = [{ value: '', label: local.autoModel ? t('ai.local.model-auto', { name: local.autoModel.label }) : t('ai.local.model-ph') }, ...(current && !local.models.some((m) => m.id === current) ? [{ value: current, label: current }] : []), ...local.models.map((m) => ({ value: m.id, label: m.size ? t('ai.local.model-size', { id: m.id, size: fmtSize(m.size) }) : m.id }))];
+    const name = el('input', { type: 'text', value: current, placeholder: t('ai.local.model-name-ph'), autocomplete: 'off', spellcheck: false, className: 'ai-key', maxLength: 120 }, []);
+    name.setAttribute('aria-label', t('ai.local.model-name'));
+    const picker = window.RiceMenuSelect.create({
+      items,
+      value: current,
+      ariaLabel: t('ai.model-label', { name: t('ai.local.name') }),
+      onChoose: async (id) => {
+        name.value = id;
+        return rice.setAiModel('local-model', id);
+      },
+    });
+    blocks.push(field(t('ai.model-title'), picker.root));
+    // servidores que não listam modelos (ou o nome exato): o mesmo ajuste do seletor, digitado
+    name.onchange = async () => {
+      const result = await rice.setAiModel('local-model', name.value.trim());
+      if (result && result.ok === false) say(result.message, false);
+    };
+    blocks.push(field(t('ai.local.model-name'), name));
+    blocks.push(p(t('ai.local.model-name-help'), 'hint'));
+    const ctx = window.RiceMenuSelect.create({
+      items: [8192, 16384, 32768].map((n) => ({ value: n, label: t('ai.local.ctx-option', { n: n / 1024 }) })),
+      value: local.numCtx,
+      ariaLabel: t('ai.local.ctx'),
+      onChoose: async (n) => {
+        await rice.setAiLocal({ url: local.configuredUrl || '', server: local.server || 'auto', numCtx: Number(n) });
+        window.dispatchEvent(new CustomEvent('rice:ai-changed'));
+      },
+    });
+    blocks.push(field(t('ai.local.ctx'), ctx.root));
+    blocks.push(p(t('ai.local.ctx-help'), 'hint'));
+    blocks.push(note(t('ai.local.note')));
+    blocks.push(note(t('ai.local.no-web')));
+    return blocks;
+  }
+
   const trimDot = (text) => String(text || '').replace(/[.\s]+$/, '');
 
   /** Estado do provedor para o rodapé: { tone: ok | warn | bad, text }. */
@@ -136,6 +234,7 @@
       if (info.loggedIn) return { tone: info.verified === false ? 'bad' : 'ok', text: t('ai.st.connected-model', { model: model || t('ai.opencode.auto') }) };
       return { tone: 'warn', text: isFreeModel(model) ? t('ai.st.opencode-free') : t('ai.st.no-login') };
     }
+    if (provider === 'local-model') return { tone: info.connected ? 'ok' : 'warn', text: trimDot(info.detail) };
     const api = provider.endsWith('-api');
     if (info.verified === false && !info.connected) return { tone: 'bad', text: t(api ? 'ai.state.rejected' : 'ai.state.expired') };
     if (info.connected) return { tone: 'ok', text: trimDot(info.detail) || t('ai.state.connected') };
@@ -224,7 +323,8 @@
           inner.replaceChildren(el('div', { className: 'ai-pad' }, [note(info.detail)])); // Antigravity no Windows: só o motivo
           return;
         }
-        const hasField = provider !== 'chatgpt-sub' && provider !== 'opencode-sub' && provider !== 'agy-sub';
+        const hasField = provider !== 'chatgpt-sub' && provider !== 'opencode-sub' && provider !== 'agy-sub' && provider !== 'local-model';
+        const blocked = Boolean(status.fullyLocal) && provider !== 'local-model'; // Modo 100% local: só o Modelo local
         let model = status.models[provider] || '';
         const configured = provider === 'opencode-sub' ? Boolean(info.loggedIn) : Boolean(info.connected);
 
@@ -245,8 +345,10 @@
           })));
         }
 
+        if (provider === 'local-model') blocks.push(...localServerField(info, rice, changed)); // o seletor vem antes: os passos abaixo mudam com ele
+
         // 1) passos: inteiros enquanto falta configurar; depois, uma linha discreta "Como configurar" que expande
-        const steps = el('ol', { className: 'ai-steps' }, howTo(provider));
+        const steps = el('ol', { className: 'ai-steps' }, howTo(provider, provider === 'local-model' ? serverKeyOf(info) : undefined));
         if (configured) {
           blocks.push(el('details', { className: 'ai-fold' }, [el('summary', { textContent: t('ai.howto-title') }, []), steps]));
         } else {
@@ -269,6 +371,7 @@
           const input = el('input', { type: 'password', placeholder: PLACEHOLDER[provider], autocomplete: 'off', spellcheck: false, className: 'ai-key' }, []);
           input.setAttribute('aria-label', t('ai.key-label', { name: vendor.name }));
           const save = button(t('ai.save'), async () => {
+            if (blocked) return say(t('local.mode.only-local'), false);
             const result = await rice.saveAiKey(provider, input.value);
             input.value = ''; // o valor digitado não fica no renderer
             if (!result.ok) return say(result.message, false);
@@ -289,6 +392,8 @@
           blocks.push(field(t('ai.model-title'), picker.root));
           blocks.push(note(t('ai.cost-warning')));
         }
+        if (blocked) blocks.push(note(t('local.mode.only-local')));
+        if (provider === 'local-model') blocks.push(...localField(info, status, rice, { changed, say }));
         if (provider === 'agy-sub') {
           blocks.push(...agyField(info, status, rice));
           blocks.push(note(t('ai.agy.sandbox-note')));
@@ -309,6 +414,7 @@
           }, 'ghost'));
         }
         const test = button(t('ai.test'), async () => {
+          if (blocked) return say(t('local.mode.only-local'), false);
           test.disabled = true;
           say(t('ai.testing'), true);
           const result = await rice.testAi(provider);
@@ -318,10 +424,17 @@
         }, 'secondary');
         actions.push(test);
         if (!isActive) {
-          actions.push(button(t('ai.use'), async () => {
-            await rice.setAiProvider(provider);
+          const use = button(t('ai.use'), async () => {
+            const result = await rice.setAiProvider(provider);
+            if (result && result.ok === false) return say(result.message, false);
             await changed();
-          }, 'primary ai-use'));
+          }, 'primary ai-use');
+          if (blocked) {
+            use.disabled = true;
+            test.disabled = true;
+            use.title = t('local.mode.only-local');
+          }
+          actions.push(use);
         }
         blocks.push(el('div', { className: 'ai-foot' }, [feedback, el('div', { className: 'ai-actions' }, actions)]));
         inner.replaceChildren(el('div', { className: 'ai-pad' }, blocks));
@@ -338,16 +451,16 @@
     return el('div', { className: 'ai-cards' }, [...notice, ...cards.map((c) => c.root), p(t('ai.keychain-note'), 'hint ai-note')]);
   }
 
-  const VIA = { 'claude-sub': ['claude', 'Claude'], 'claude-api': ['claude', 'Claude (API)'], 'chatgpt-sub': ['chatgpt', 'ChatGPT'], 'openai-api': ['chatgpt', 'ChatGPT (API)'], 'gemini-api': ['gemini', 'Gemini (API)'], 'opencode-sub': ['opencode', 'OpenCode'], 'agy-sub': ['agy', 'Antigravity'] };
+  const VIA = { 'claude-sub': ['claude', 'Claude'], 'claude-api': ['claude', 'Claude (API)'], 'chatgpt-sub': ['chatgpt', 'ChatGPT'], 'openai-api': ['chatgpt', 'ChatGPT (API)'], 'gemini-api': ['gemini', 'Gemini (API)'], 'opencode-sub': ['opencode', 'OpenCode'], 'agy-sub': ['agy', 'Antigravity'], 'local-model': ['local', 'Local model'] };
 
   /** Indicador discreto “via ChatGPT” (com o logo pequeno) para perto do chat. */
   function updateVia(node, active) {
-    const [vendor, label] = VIA[active] || VIA['claude-sub'];
-    node.replaceChildren(el('span', { className: `provider-logo small logo-${vendor}`, ariaHidden: 'true' }, []), document.createTextNode(t('ai.via', { label })));
+    const [vendor] = VIA[active] || VIA['claude-sub'];
+    node.replaceChildren(el('span', { className: `provider-logo small logo-${vendor}`, ariaHidden: 'true' }, []), document.createTextNode(t('ai.via', { label: label(active) })));
     node.dataset.provider = active;
   }
 
-  const label = (active) => (VIA[active] || VIA['claude-sub'])[1];
+  const label = (active) => (active === 'local-model' ? t('ai.local.name') : (VIA[active] || VIA['claude-sub'])[1]);
 
   window.RiceAiProviders = { commandLine, render, updateVia, label, markLoginError, VENDORS };
 })();

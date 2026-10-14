@@ -191,9 +191,9 @@ it('quatro cartões (Claude, ChatGPT, Google Gemini, OpenCode) com logo; só o O
   const box = g.document.createElement('div');
   await g.window.RiceGuide.render(box, { onClose: () => {} });
   const cards = [...box.querySelectorAll('[data-step="ai"] .ai-card')] as any[];
-  expect(cards.map((c) => c.dataset.vendor)).toEqual(['claude', 'chatgpt', 'gemini', 'opencode', 'agy']);
-  expect(cards.map((c) => c.querySelector('strong').textContent)).toEqual(['Claude', 'ChatGPT', 'Google Gemini', 'OpenCode', 'Antigravity']);
-  expect(cards.map((c) => c.querySelector('.provider-logo').className)).toEqual(['provider-logo logo-claude', 'provider-logo logo-chatgpt', 'provider-logo logo-gemini', 'provider-logo logo-opencode', 'provider-logo logo-agy']);
+  expect(cards.map((c) => c.dataset.vendor)).toEqual(['claude', 'chatgpt', 'gemini', 'opencode', 'agy', 'local']);
+  expect(cards.map((c) => c.querySelector('strong').textContent)).toEqual(['Claude', 'ChatGPT', 'Google Gemini', 'OpenCode', 'Antigravity', 'Modelo local']);
+  expect(cards.map((c) => c.querySelector('.provider-logo').className)).toEqual(['provider-logo logo-claude', 'provider-logo logo-chatgpt', 'provider-logo logo-gemini', 'provider-logo logo-opencode', 'provider-logo logo-agy', 'provider-logo logo-local']);
   for (const c of cards.slice(0, 2)) expect([...c.querySelectorAll('[role=tab]')].map((t: any) => t.textContent)).toEqual(['Assinatura', 'Chave de API']);
   expect(cards[2].querySelectorAll('[role=tab]')).toHaveLength(0); // Google Gemini: só a chave de API
   expect(card(box, 'claude').querySelector('.ai-card-state').textContent).toContain('Ativo');
@@ -450,7 +450,7 @@ describe('Conectar a IA: lista compacta com acordeão', () => {
   it('uma linha por provedor com logo, nome, estado e chevron; a ativa fica no topo', async () => {
     const box = await guide({ aiStatus: async () => aiStatus('chatgpt-sub', { 'chatgpt-sub': provider({ installed: true, connected: true, verified: true, detail: 'Conectado.' }), 'claude-sub': provider({ connected: true, hasKey: true, last4: 'wxyz' }) }) });
     const cards = [...box.querySelectorAll('[data-step="ai"] .ai-card')] as any[];
-    expect(cards.map((c) => c.dataset.vendor)).toEqual(['chatgpt', 'claude', 'gemini', 'opencode', 'agy']); // ChatGPT ativo sobe; os outros mantêm a ordem
+    expect(cards.map((c) => c.dataset.vendor)).toEqual(['chatgpt', 'claude', 'gemini', 'opencode', 'agy', 'local']); // ChatGPT ativo sobe; os outros mantêm a ordem
     for (const c of cards) {
       const head = c.querySelector('.ai-head');
       expect(head.querySelector('.provider-logo')).not.toBeNull();
@@ -459,7 +459,7 @@ describe('Conectar a IA: lista compacta com acordeão', () => {
       expect(head.querySelector('.ai-chevron svg')).not.toBeNull();
       expect(head.getAttribute('aria-expanded')).toBeDefined();
     }
-    expect(cards.map((c) => c.querySelector('.ai-card-state').textContent)).toEqual(['Ativo', 'Conectado', 'Não configurado', 'Não configurado', 'Não configurado']);
+    expect(cards.map((c) => c.querySelector('.ai-card-state').textContent)).toEqual(['Ativo', 'Conectado', 'Não configurado', 'Não configurado', 'Não configurado', 'Não configurado']);
     expect(cards[0].querySelector('.state-dot')).not.toBeNull();
   });
 

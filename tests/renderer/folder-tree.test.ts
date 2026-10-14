@@ -77,7 +77,7 @@ it('⋯ da pasta: Nova subpasta pede o nome e cria dentro dela', async () => {
   await ready();
   rowOf('Clientes').querySelector('.f-more').click();
   const items = [...g.document.querySelectorAll('.action-item')] as any[];
-  expect(items.map((i) => i.textContent.trim())).toEqual(['Renomear', 'Nova reunião nesta pasta', 'Nova subpasta', 'Mover para', 'Apagar pasta']);
+  expect(items.map((i) => i.textContent.trim())).toEqual(['Renomear', 'Nova reunião nesta pasta', 'Nova subpasta', 'Mover para', 'Pasta sensível', 'Tempo de guarda…', 'Apagar pasta']);
   items[2].click();
   const dialog = g.document.querySelector('[role=dialog]');
   const input = dialog.querySelector('input');

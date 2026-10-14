@@ -52,7 +52,7 @@
   const NAV = [
     { group: 'settings.group.general', items: [['language', 'globe', 'settings.language'], ['audio', 'mic', 'settings.audio'], ['folder', 'folder', 'settings.folder'], ['updates', 'download', 'settings.updates'], ['shortcuts', 'keyboard', 'settings.shortcuts']] },
     { group: 'settings.group.ai', items: [['ai', 'sparkles', 'settings.ai'], ['tools', 'plug', 'settings.nav.tools']] },
-    { group: 'settings.group.meetings', items: [['calendar', 'calendar', 'settings.calendar'], ['vocabulary', 'file-text', 'settings.vocabulary'], ['speakers', 'users', 'settings.speakers'], ['screenshots', 'image', 'settings.screenshots']] },
+    { group: 'settings.group.meetings', items: [['calendar', 'calendar', 'settings.calendar'], ['vocabulary', 'file-text', 'settings.vocabulary'], ['speakers', 'users', 'settings.speakers'], ['screenshots', 'image', 'settings.screenshots'], ['memory', 'history', 'settings.memory'], ['followups', 'check-circle', 'settings.followups']] },
     { group: null, items: [['privacy', 'shield', 'settings.nav.privacy']] },
   ];
   const IDS = NAV.flatMap((g) => g.items.map((i) => i[0]));
@@ -83,6 +83,46 @@
     keep.onchange = () => rice.setKeepAudio(keep.checked);
     const identify = toggle('identify-speakers', settings.identifySpeakers === true, t('settings.speakers.label'));
     identify.onchange = () => rice.setIdentifySpeakers(identify.checked);
+    // Modo 100% local (Privacidade): só liga com o provedor Modelo local ativo; o main bloqueia tudo o que usa a rede
+    const localMode = toggle('local-mode', settings.fullyLocal === true, t('settings.localmode.label'));
+    const localNote = el('p', { className: 'set-help warn', hidden: true }, []);
+    const localGo = button(t('settings.localmode.switch'), () => show('ai'), 'ghost');
+    localGo.hidden = true;
+    localMode.onchange = async () => {
+      const result = await rice.setLocalMode(localMode.checked);
+      if (!result.ok) {
+        localMode.checked = false;
+        localNote.textContent = result.message;
+        localNote.hidden = false;
+        localGo.hidden = !result.needsProvider;
+        return;
+      }
+      window.dispatchEvent(new CustomEvent('rice:local-mode', { detail: { fullyLocal: result.fullyLocal } }));
+      await again();
+    };
+    // aviso de consentimento ao gravar: ligado por padrão; o texto é editável (vazio = o padrão, no idioma de cada reunião)
+    const consent = toggle('consent-remind', settings.consentRemind !== false, t('settings.consent.label'));
+    const consentText = el('textarea', { id: 'consent-text', rows: 3, maxLength: 600, placeholder: t('consent.default-text'), value: settings.consentText || '', className: 'consent-edit' }, []);
+    consentText.setAttribute('aria-label', t('settings.consent.text'));
+    let consentTimer = null;
+    const saveConsent = () => {
+      clearTimeout(consentTimer);
+      consentTimer = setTimeout(() => rice.setConsent(consent.checked, consentText.value), 500);
+    };
+    consent.onchange = () => rice.setConsent(consent.checked, consentText.value);
+    consentText.addEventListener('input', saveConsent);
+    const consentReset = button(t('settings.consent.reset'), () => {
+      consentText.value = '';
+      rice.setConsent(consent.checked, '');
+    }, 'ghost');
+    // ocultar dados pessoais ao enviar para a IA e a guarda padrão (as pastas podem ter a própria)
+    const redact = toggle('redact-pii', settings.redactPii === true, t('settings.redact.label'));
+    let retentionDefault = { ...(settings.retentionDefault || {}) };
+    const saveRetention = () => rice.setPrivacy({ retentionDefault });
+    redact.onchange = () => rice.setPrivacy({ redactPii: redact.checked });
+    const retentionAudio = window.RiceMenuSelect.create({ items: window.RiceRetention.items('audio', false), value: window.RiceRetention.valueOf(retentionDefault.audioDays ?? 0), ariaLabel: t('retention.audio'), onChoose: (v) => { retentionDefault = { ...retentionDefault, audioDays: Number(v) }; saveRetention(); } });
+    const retentionMeeting = window.RiceMenuSelect.create({ items: window.RiceRetention.items('meeting', false), value: window.RiceRetention.valueOf(retentionDefault.meetingMonths ?? 0), ariaLabel: t('retention.meeting'), onChoose: (v) => { retentionDefault = { ...retentionDefault, meetingMonths: Number(v) }; saveRetention(); } });
+    const localExplain = el('p', { className: 'set-desc', textContent: t('settings.localmode.explain') }, []);
     // atalho global de gravar e parar: o estado (registrado, sem atalho ou em conflito com outro app) vem do main
     const shortcutBox = el('div', { className: 'shortcut-box' }, []);
     if (rice.shortcutStatus) {
@@ -101,6 +141,10 @@
       paintUpdate(e.detail);
     };
     window.addEventListener('rice:update-changed', onUpdateChanged);
+    if (settings.fullyLocal) {
+      checkUpdates.disabled = true; // Modo 100% local: nenhuma consulta à internet
+      checkUpdates.title = t('local.mode.blocked.updates');
+    }
     checkUpdates.onchange = async () => {
       const status = await rice.setCheckUpdates(checkUpdates.checked);
       window.dispatchEvent(new CustomEvent('rice:update-changed', { detail: status }));
@@ -113,7 +157,8 @@
     };
     const chatTools = window.RiceChatTools.create({ settings, confirm: ctx.confirm, onChange: ctx.onChatToolsChange, onStatus: showHint });
     const tools = chatTools.input;
-    chatTools.status().then(showHint);
+    chatTools.status().then((st) => showHint(settings.fullyLocal ? { hint: t('local.mode.blocked.tools') } : st));
+    if (settings.fullyLocal) tools.disabled = true; // Modo 100% local: sem ferramentas nem MCPs (o motivo aparece embaixo)
     let saveTimer = null;
     const vocabulary = window.RiceChips.create({
       value: window.RiceChips.parse(settings.vocabulary || '', 60),
@@ -225,6 +270,10 @@
       }
       window.dispatchEvent(new CustomEvent('rice:shots-changed'));
     };
+    // memória entre reuniões e pendências
+    const memoryNodes = window.RiceMemory && rice.memoryStatus ? window.RiceMemory.settingsNodes({ rice, settings, row, toggle, button, confirm: ctx.confirm, onOpen: ctx.onOpenMeeting, onOpenMemory: ctx.onOpenMemory }) : [];
+    const notify = toggle('followup-notify', settings.followupNotify !== false, t('settings.followups.notify'));
+    notify.onchange = () => rice.memorySetNotify && rice.memorySetNotify(notify.checked);
     const calBox = el('div', { className: 'cal-box' }, []);
     const loadCalendar = async () => {
       if (!rice.eventKitStatus) return;
@@ -269,9 +318,11 @@
       section(t('settings.vocabulary'), t('settings.vocabulary.help'), [vocabulary.root, row(t('settings.vocabulary.attendees'), null, attendees)], 'vocabulary'),
       section(t('settings.speakers'), null, [row(t('settings.speakers.label'), t('settings.speakers.help'), identify)], 'speakers'),
       section(t('settings.screenshots'), t('settings.screenshots.text'), [row(t('settings.screenshots.label'), t('settings.screenshots.help'), shots), shotsNote, shotsOpen], 'screenshots'),
+      section(t('settings.memory'), t('settings.memory.text'), memoryNodes, 'memory'),
+      section(t('settings.followups'), t('settings.followups.text'), [row(t('settings.followups.notify'), t('settings.followups.notify-help'), notify)], 'followups'),
       section(t('chat-tools.title'), null, [row(t('chat-tools.label'), t('chat-tools.help'), tools), toolsHint], 'tools'),
       section(t('settings.audio'), null, [row(t('settings.audio.keep'), t('settings.audio.help'), keep)], 'audio'),
-      section(t('settings.privacy'), t('settings.privacy.text'), [privBox], 'privacy'),
+      section(t('settings.privacy'), t('settings.privacy.text'), [row(t('settings.localmode.label'), t('settings.localmode.help'), localMode), localExplain, localNote, localGo, row(t('settings.consent.label'), t('settings.consent.help'), consent), row(t('settings.redact.label'), t('settings.redact.help'), redact), el('div', { className: 'retention-default' }, [el('div', { className: 'set-label', textContent: t('settings.retention.title') }, []), el('p', { className: 'set-help', textContent: t('settings.retention.help') }, []), row(t('retention.audio'), null, retentionAudio.root), row(t('retention.meeting'), null, retentionMeeting.root)]), el('div', { className: 'consent-edit-block' }, [el('div', { className: 'set-label', textContent: t('settings.consent.text') }, []), el('p', { className: 'set-help', textContent: t('settings.consent.text-help') }, []), consentText, consentReset]), privBox], 'privacy'),
       section(t('settings.shortcuts'), null, [shortcutBox], 'shortcuts'),
       section(t('settings.updates'), null, [updateBox, row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates)], 'updates'),
     ];

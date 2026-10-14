@@ -57,8 +57,10 @@ let partialRows = new Map();
 let streamNode = null;
 let streamRaw = '';
 const md = (text) => window.RiceMarkdown.renderMarkdown(text, document);
+const memoryPage = window.RiceMemoryPage.create({ rice: window.rice, onOpenMeeting: (dir) => openMeeting(dir), confirm: (message, label) => confirmDialog(message, label), button: (text, onclick, kind) => { const b = build('button', { type: 'button', className: `btn ${kind || 'ghost'}`, textContent: text }, []); b.onclick = onclick; return b; } });
+const followupsPage = window.RiceFollowups.create({ rice: window.rice, onOpen: (dir) => openMeeting(dir), warn: (message) => setWarning(message) });
 /** Notas: a citação de uma captura vira a miniatura, só para capturas da reunião aberta. */
-const mdNotes = (text) => window.RiceMarkdown.renderMarkdown(text, document, { shot: (id) => screens.noteShot(id) });
+const mdNotes = (text) => window.RiceMarkdown.renderMarkdown(text, document, { shot: (id) => screens.noteShot(id), onTask: (label, checked) => current && window.rice.followupsToggleNoteTask && window.rice.followupsToggleNoteTask(current, label, checked) }); // marcar uma tarefa nas notas reflete nas Pendências
 const notesPending = new Set();
 /** Progresso das notas em geração por reunião: { phase: 'extract' | 'write', part, total } (reuniões longas mostram a parte). */
 const notesProgress = new Map();
@@ -272,6 +274,20 @@ function folderMenuItems(folder, rename) {
       onSelect: () => askFolderName((name) => createFolderNamed(name, null, folder.id), t('folder.menu.new-sub')),
     },
     { icon: 'move', label: t('folder.menu.move'), submenu: folderMoveItems(folder) },
+    { separator: true },
+    // privacidade da pasta: ocultar dados pessoais ao enviar para a IA (as subpastas herdam) e o tempo de guarda (vai para a Lixeira)
+    {
+      icon: 'shield',
+      label: t('folder.sensitive'),
+      title: t('folder.sensitive.title'),
+      checked: folder.sensitive === true,
+      onSelect: async () => {
+        const result = await window.rice.setFolderPrivacy(folder.id, { sensitive: folder.sensitive !== true });
+        if (result && result.ok === false) setWarning(t('common.error', { message: result.message }));
+        await refreshList();
+      },
+    },
+    { icon: 'history', label: t('folder.retention'), onSelect: () => window.RiceRetention.open(folder, () => refreshList()) },
     { separator: true },
     {
       icon: 'trash',
@@ -524,6 +540,7 @@ function meetingMenuItems(dir, title, rename, folderId) {
     { icon: 'folder', label: t('menu.reveal'), onSelect: () => window.rice.reveal(dir) },
     { icon: 'move', label: t('menu.move'), submenu: moveToFolderItems(dir, folderId) },
     { icon: 'share', label: t('share.menu'), submenu: window.RiceShare.items({ dir, hasNotes: (lastMeetings.find((m) => m.dir === dir) || {}).notesStatus === 'done', isDraft: (lastMeetings.find((m) => m.dir === dir) || {}).state === 'draft' }) },
+    { icon: 'shield', label: t('receipt.menu'), onSelect: () => window.RiceReceipt.open(dir) },
     { separator: true },
     { icon: 'trash', label: t('menu.delete'), danger: true, disabled: recording, ...(recording ? { title: t('menu.delete-disabled') } : {}), onSelect: () => openDeleteDialog(dir, title) },
   ];
@@ -867,6 +884,8 @@ function setNav(active) {
   $('settings-link').classList.toggle('active', active === 'settings');
   $('guide-link').classList.toggle('active', active === 'guide');
   $('templates-link').classList.toggle('active', active === 'templates');
+  $('followups-link').classList.toggle('active', active === 'followups');
+  $('memory-link').classList.toggle('active', active === 'memory');
 }
 
 /** Aba escolhida por reunião (Notas · Transcrição · Ideias · Investigação), lembrada em localStorage (com try/catch). */
@@ -1017,8 +1036,11 @@ async function openMeeting(dir, opts = {}) {
   };
   document.body.dataset.attachDrop = t('attach.drop');
   attachments.setDir(dir);
+  const memoryCard = window.RiceMemory.card({ rice: window.rice, dir, onOpen: (d) => openMeeting(d), onPerson: (kind, name) => showMemory({ kind, name }) }); // "O que lembrar": só aparece se houver fatos
+  openMemoryCard = memoryCard;
+  memoryCard.load();
   const tabs = meetingTabs(dir, {
-    notes: [...notesArea(dir, data, templateList, generateAction), annotations.heading, annotations.body, ...section(t('attach.title'), attachments.node)], // sem o rótulo "Notas" repetido: a aba já se chama assim
+    notes: [memoryCard.node, ...notesArea(dir, data, templateList, generateAction), annotations.heading, annotations.body, ...section(t('attach.title'), attachments.node)], // sem o rótulo "Notas" repetido: a aba já se chama assim
     transcript: transcriptNode,
     recording: recState !== 'idle' && recDir === dir,
     hasNotes: Boolean(data.notes),
@@ -1163,6 +1185,8 @@ async function showHome() {
     recording: recState !== 'idle',
     onConnect: () => showSettings('calendar'),
     onNewWarRoom: newWarRoom,
+    onPerson: (kind, name) => showMemory({ kind, name }),
+    onMemory: (ev) => (rice.memoryBriefEvent ? rice.memoryBriefEvent(ev.id).catch(() => null) : Promise.resolve(null)),
     onAsk: (question) => {
       setScope({ kind: 'all' }, true);
       askGlobal(question);
@@ -1242,6 +1266,73 @@ async function openAiSettings(provider) {
 function closeGuide() {
   return showHome();
 }
+
+/** Página "Pendências": o que prometi e o que prometeram a mim, de todas as reuniões. */
+function showFollowups() {
+  leaveMeeting(null);
+  current = null;
+  if (webSearch) webSearch.paint();
+  warRoom.setDir(null);
+  attachments.setDir(null);
+  view = 'followups';
+  openIsDraft = false;
+  openIsRecorded = false;
+  renderRecLabel();
+  setNav('followups');
+  $('messages').replaceChildren(build('p', { className: 'empty', textContent: t('chat.open-first') }, []));
+  $('question').disabled = true;
+  $('send').disabled = true;
+  applyChat();
+  const box = build('div', { className: 'page' }, []);
+  $('detail').replaceChildren(box);
+  refreshList();
+  return followupsPage.render(box);
+}
+$('followups-link').onclick = () => showFollowups();
+
+/** Página "Memória": pessoas e empresas que o Rice lembra; `target` ({ kind, name }) abre direto o detalhe. */
+function showMemory(target) {
+  leaveMeeting(null);
+  current = null;
+  if (webSearch) webSearch.paint();
+  warRoom.setDir(null);
+  attachments.setDir(null);
+  view = 'memory';
+  openIsDraft = false;
+  openIsRecorded = false;
+  renderRecLabel();
+  setNav('memory');
+  $('messages').replaceChildren(build('p', { className: 'empty', textContent: t('chat.open-first') }, []));
+  $('question').disabled = true;
+  $('send').disabled = true;
+  applyChat();
+  const box = build('div', { className: 'page' }, []);
+  $('detail').replaceChildren(box);
+  refreshList();
+  return memoryPage.render(box, target);
+}
+$('memory-link').onclick = () => showMemory();
+
+/** Contador discreto das minhas pendências vencidas, ao lado de "Pendências" na barra lateral. */
+async function refreshFollowupsBadge() {
+  const badge = $('followups-badge');
+  if (!window.rice.followupsCount) return;
+  const r = await window.rice.followupsCount().catch(() => null);
+  const n = r ? r.overdue : 0;
+  badge.hidden = !n;
+  badge.textContent = n ? String(n) : '';
+  badge.title = n ? window.RiceI18n.tn('followups.badge.title', n) : '';
+}
+let openMemoryCard = null; // cartão "O que lembrar" da reunião aberta
+window.rice.on('memory:changed', () => {
+  refreshFollowupsBadge();
+  if (view === 'followups') followupsPage.refresh();
+  if (view === 'memory') memoryPage.refresh();
+  if (openMemoryCard) openMemoryCard.refresh();
+});
+window.rice.on('app:open-followups', () => showFollowups());
+refreshFollowupsBadge();
+window.addEventListener('rice:memory-changed', refreshFollowupsBadge);
 
 function showGuide(focus) {
   leaveMeeting(null);
@@ -1979,6 +2070,7 @@ window.rice.on('session:state', async (state) => {
   recState = state;
   if (state === 'recording' && !recStartedAt) recStartedAt = Date.now();
   if (state === 'idle') {
+    window.RiceConsent.hide();
     recStartedAt = 0;
     recPaused = false;
     pausedSince = 0;
@@ -1992,6 +2084,7 @@ window.rice.on('session:state', async (state) => {
     recDir = info.dir;
     setPaused(info.paused === true);
     if (info.dir) markRecorded(info.dir);
+    if (state === 'recording' && was === 'idle' && info.dir) window.RiceConsent.offer(info.dir); // por qualquer caminho (botão, Gravar agora, aviso, atalho): só um toast
     if (state === 'finishing' && info.dir) notesPending.add(info.dir);
   }
   syncLiveTimer();
@@ -2137,6 +2230,21 @@ const applyUpdate = (status) => window.dispatchEvent(new CustomEvent('rice:updat
 window.addEventListener('rice:update-changed', (e) => window.RiceUpdate.applyDot($('settings-link'), e.detail));
 if (window.rice.updateStatus) window.rice.updateStatus().then(applyUpdate).catch(() => {});
 window.rice.on('update:changed', applyUpdate);
+// a retenção moveu reuniões para a Lixeira: a lista (e a reunião aberta, se foi ela) se atualizam
+window.rice.on('meetings:changed', async () => {
+  await refreshList();
+  if (current && !lastMeetings.some((m) => m.dir === current)) goHome();
+});
+// Modo 100% local: selo no rodapé da barra lateral; os controles de rede se explicam sozinhos (cada tela lê o estado do main)
+const applyLocalMode = (fullyLocal) => {
+  const badge = $('local-badge');
+  badge.hidden = !fullyLocal;
+  badge.title = t('local.badge.title');
+  refreshAiVia();
+};
+if (window.rice.getSettings) window.rice.getSettings().then((s) => applyLocalMode(s.fullyLocal === true)).catch(() => {});
+window.rice.on('privacy:changed', (p) => applyLocalMode(Boolean(p && p.fullyLocal)));
+window.addEventListener('rice:local-mode', (e) => applyLocalMode(Boolean(e.detail && e.detail.fullyLocal)));
 const refreshAiVia = () => {
   if (webSearch) webSearch.refreshSupport();
   return aiChip && aiChip.refresh();
@@ -2330,7 +2438,7 @@ function showSettings(focus) {
   const box = build('div', { className: 'page settings-page' }, []);
   $('detail').replaceChildren(box);
   const section = typeof focus === 'string' ? focus : undefined; // 'ai' ou 'calendar' abrem essa seção; sem isso vale a última lembrada
-  const rendered = window.RiceSettings.render(box, { onOpenAi: () => showGuide('ai'), section, focus: focus === 'calendar' ? 'calendar' : undefined, confirm: confirmDialog, onChatToolsChange: refreshAiVia });
+  const rendered = window.RiceSettings.render(box, { onOpenMeeting: (dir) => openMeeting(dir), onOpenMemory: () => showMemory(), onOpenAi: () => showGuide('ai'), section, focus: focus === 'calendar' ? 'calendar' : undefined, confirm: confirmDialog, onChatToolsChange: refreshAiVia });
   refreshList();
   return rendered;
 }

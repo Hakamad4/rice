@@ -57,6 +57,12 @@ export type VocabularyResolver = (meta: MeetingMeta) => Promise<string[]> | stri
 
 const inFlight = new Map<string, Promise<void>>();
 
+/** Quem quer saber quando as notas de uma reunião ficam prontas (a memória entre reuniões). Nunca atrapalha a geração. */
+let notesDoneHook: ((dir: string) => void) | null = null;
+export function onNotesDone(fn: ((dir: string) => void) | null): void {
+  notesDoneHook = fn;
+}
+
 /** Relê o meta logo antes de gravar para alterar só notesStatus. */
 async function setNotesStatus(dir: string, notesStatus: NotesStatus): Promise<void> {
   await updateMeta(dir, (meta) => ({ ...meta, notesStatus }));
@@ -86,9 +92,10 @@ async function run(dir: string, runner: Pick<AiRunner, 'run'>, resolve: Template
   async function generate(): Promise<void> {
     // reunião longa: extrai por parte (~15 min) e escreve as notas a partir das extrações
     let body = transcript;
-    const long = transcript.length > longNotesConfig().directMaxChars;
+    const budget = longNotesConfig().budget?.() ?? null;
+    const long = transcript.length > (budget?.directMaxChars ?? longNotesConfig().directMaxChars);
     if (long) {
-      const parts = splitTranscript(transcript);
+      const parts = splitTranscript(transcript, budget ? { maxChars: budget.partMaxChars } : {});
       const digest = await extractParts(dir, longNotesConfig().lightRunner ?? runner, parts, language, {
         system: extractSystemPrompt(language),
         prompt: (part, total) => buildExtractPrompt({ title: meta.title, vocabulary }, part, total, language),
@@ -102,7 +109,7 @@ async function run(dir: string, runner: Pick<AiRunner, 'run'>, resolve: Template
       template,
       language,
     );
-    const gen = runner.run({ system: buildNotesSystemPrompt(template, transcript.length, language), prompt });
+    const gen = runner.run({ system: buildNotesSystemPrompt(template, transcript.length, language), prompt, egress: { kind: 'notes', dir } });
     let step = await gen.next();
     while (!step.done) step = await gen.next();
     const text = step.value.trim();
@@ -123,6 +130,11 @@ async function run(dir: string, runner: Pick<AiRunner, 'run'>, resolve: Template
       }
     }
     await setNotesStatus(dir, 'done');
+    try {
+      notesDoneHook?.(dir);
+    } catch {
+      // a memória nunca derruba as notas
+    }
   } catch (err) {
     await setNotesStatus(dir, 'failed').catch(() => {});
     throw err;

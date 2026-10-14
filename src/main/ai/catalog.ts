@@ -44,7 +44,7 @@ export function opencodeModels(listed: readonly string[]): CatalogModel[] {
   return [...paid, { id: OPENCODE_FREE_MODEL, label: OPENCODE_FREE_MODEL, free: true }];
 }
 
-export type CatalogDeps = { codex?: () => Promise<CatalogModel[]>; opencode?: () => Promise<string[]>; agy?: () => Promise<CatalogModel[]> };
+export type CatalogDeps = { codex?: () => Promise<CatalogModel[]>; opencode?: () => Promise<string[]>; agy?: () => Promise<CatalogModel[]>; local?: () => Promise<CatalogModel[]> };
 
 /**
  * O que o menu de IA do chat mostra para cada provedor. Provedores sem escolha de modelo no CLI recebem o item
@@ -66,5 +66,7 @@ export async function modelCatalog(provider: AiProvider, deps: CatalogDeps = {})
       return [DEFAULT_ENTRY, ...(await (deps.agy?.() ?? Promise.resolve([])))];
     case 'opencode-sub':
       return [DEFAULT_ENTRY, ...opencodeModels(await (deps.opencode?.() ?? Promise.resolve([])))];
+    case 'local-model':
+      return [DEFAULT_ENTRY, ...(await (deps.local?.() ?? Promise.resolve([])))]; // "padrão" = o menor modelo instalado
   }
 }

@@ -26,6 +26,8 @@ type Config = {
   directMaxChars: number;
   onProgress: (p: NotesProgress) => void;
   retryDelayMs: number;
+  /** Orçamento do provedor ativo (modelo local: depende do contexto); null = os limites de sempre. */
+  budget?: () => { directMaxChars: number; partMaxChars: number } | null;
   /** Modelo leve para as extrações por parte (o passo final das notas continua no principal). */
   lightRunner?: Pick<AiRunner, 'run'>;
 };
@@ -147,7 +149,7 @@ export async function extractParts(
       out.push({ ...hit, from: part.from, to: part.to });
       continue;
     }
-    const gen = runner.run({ system: texts.system, prompt: texts.prompt(part, parts.length) });
+    const gen = runner.run({ system: texts.system, prompt: texts.prompt(part, parts.length), egress: { kind: 'notes', dir } });
     let step = await gen.next();
     while (!step.done) step = await gen.next();
     out.push({ hash, from: part.from, to: part.to, text: step.value.trim() });

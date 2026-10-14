@@ -5,7 +5,7 @@ import { AiError, RUN_TIMEOUT_MS, type AiProvider, type AiRunOptions, type WebSo
 
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 
-export type HttpRequest = { url: string; headers: Record<string, string>; body?: unknown; method?: 'GET' | 'POST' };
+export type HttpRequest = { url: string; headers: Record<string, string>; body?: unknown; method?: 'GET' | 'POST'; /** Tempo máximo da resposta inteira (padrão: RUN_TIMEOUT_MS). Modelos locais precisam de mais. */ timeoutMs?: number };
 
 /** O que um provedor extrai de cada evento SSE. */
 export type SseStep = { delta?: string; error?: AiError; done?: boolean; sources?: WebSource[] };
@@ -25,15 +25,15 @@ function messageOf(body: string): string {
 }
 
 /** Sinal que aborta pelo cancelamento do usuário ou pelo tempo máximo. */
-function limits(signal: AbortSignal | undefined): { signal: AbortSignal; timedOut: () => boolean } {
-  const timeout = AbortSignal.timeout(RUN_TIMEOUT_MS);
+function limits(signal: AbortSignal | undefined, timeoutMs = RUN_TIMEOUT_MS): { signal: AbortSignal; timedOut: () => boolean } {
+  const timeout = AbortSignal.timeout(timeoutMs);
   return { signal: signal ? AbortSignal.any([signal, timeout]) : timeout, timedOut: () => timeout.aborted };
 }
 
 /** Faz a requisição e devolve a resposta; erros HTTP viram `AiError` amigável, sem a chave. */
 export async function request(provider: AiProvider, fetchImpl: FetchLike, req: HttpRequest, secret: string, signal?: AbortSignal): Promise<Response> {
   if (signal?.aborted) throw new AiError('cancelled', t('ai.err.cancelled'));
-  const lim = limits(signal);
+  const lim = limits(signal, req.timeoutMs);
   let res: Response;
   try {
     res = await fetchImpl(req.url, {

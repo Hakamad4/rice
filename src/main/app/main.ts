@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -14,14 +14,17 @@ import { createActiveRunner, createLightRunner, lightModelFor, isModelFor, resol
 import { clearSecret, loadSecret, migrateLegacyToken, saveSecret, validateKey, type TokenCrypto } from '../ai/secrets';
 import { aiStatus, invalidateAiStatus, listModels, testProvider } from '../ai/service';
 import { AiError, hasKeyField, isProvider, PROVIDER_LABEL, type AiRunner, type WebSource } from '../ai/types';
-import { isTranscriptionLanguage, type MeetingMeta, type NoteTemplateInput, type TranscriptionLanguage } from '../../shared/types';
+import { toLocalIso } from '../../shared/naming';
+import { isTranscriptionLanguage, type FolderRetention, type MeetingMeta, type NoteTemplateInput, type TranscriptionLanguage } from '../../shared/types';
 import { canDeleteMeeting, deleteMeetingDir } from './delete-meeting';
 import { AsrService } from '../session/asr-service';
 import { AudioCapture } from '../session/audio-capture';
 import { DetectorClient } from '../session/detector-client';
 import { MeetingSession, type SessionState } from '../session/meeting-session';
 import { listVersions, readVersion, restoreVersion } from '../store/notes-versions';
-import { generateNotes, regenerateNotes, type LanguageResolver, type TemplateResolver } from '../session/notes';
+import { generateNotes, onNotesDone, regenerateNotes, type LanguageResolver, type TemplateResolver } from '../session/notes';
+import { registerMemory } from '../memory/ipc';
+import { MemoryService } from '../memory/service';
 import { logError, logWarn } from '../log';
 import { tightenAppData } from '../store/permissions';
 import { probeClaudeMcpServers } from '../claude/runner';
@@ -42,6 +45,16 @@ import { runChat } from '../ai/chat-run';
 import { readBuildInfo, type BuildInfo } from '../update/build-info';
 import { createUpdateChecker, RELEASES_URL, type UpdateState } from '../update/check';
 import { openUpdateInTerminal } from '../update/terminal';
+import { consentOffer, normalizeConsentText } from '../privacy/consent';
+import { isSensitiveFolder } from '../privacy/folder-rules';
+import { planSweep, sweepNotice, type SweepAction, type SweepMeeting } from '../privacy/retention';
+import { appendEgress, buildReceipt, readEgress, receiptText, withEgressContext } from '../privacy/egress';
+import { receiptHtml } from '../privacy/receipt-html';
+import { installNetworkGuard, isLocalMode, setLocalMode } from '../privacy/local-mode';
+import { isLocalServerId, isNumCtx, isVisionModel, type LocalServerId, parseLocalUrl, smallestLocalModel, DEFAULT_NUM_CTX } from '../ai/local-model';
+import { localBudget, type ContextBudget } from '../ai/context-budget';
+import { cachedLocalServer } from '../ai/service';
+import { installedLocalModels } from '../ai/factory';
 import { createShortcutManager, toggleRecording, SHORTCUT_NONE } from './record-shortcut';
 import { normalizeSavedPrompts } from '../../shared/saved-prompts';
 import { webSearchSupported } from '../ai/web-search';
@@ -57,16 +70,16 @@ import { LevelThrottle, NubController, NUB_BAR_WIDTH, NUB_HEIGHT, type Point } f
 import { findAppIcon, findTrayIcons, findWinIcon } from './app-icon';
 import { isMac, isWindows, remindersSupported, systemCalendarSupported } from '../platform';
 import { systemPanelUrl, titleBarOverlay } from '../platform/system';
-import { fromSystemLocale, locale, setLanguage, t, type UiLanguage } from '../i18n';
+import { fromSystemLocale, locale, setLanguage, t, tn, type UiLanguage } from '../i18n';
 import { copyNotes, draftEmail, exportInfo, exportPdf, openMail, type ShareDeps } from '../share/actions';
-import { uniquePath } from '../share/pdf';
+import { pdfFileName, renderPdf, uniquePath } from '../share/pdf';
 import { createNubIpc, lastTranscriptLines } from './nub-ipc';
 import { parseStartInput } from './start-input';
 import { SearchIndex } from '../search/index';
 import { handleSearch } from '../search/handler';
 import { askAcrossMeetings } from '../search/global-chat';
 import { readGlobalConversation, startNewGlobalConversation } from '../store/global-chat';
-import { createFolder, deleteFolder, folderExists, folderPaths, moveFolder, readFolders, renameFolder, reorderFolders, setMeetingFolder } from '../store/folders';
+import { createFolder, deleteFolder, folderExists, folderPaths, moveFolder, parseRetention, readFolders, renameFolder, reorderFolders, setFolderPrivacy, setMeetingFolder } from '../store/folders';
 import { localizeTemplate } from '../templates/builtin';
 import { deleteTemplate, getTemplate, listTemplates, resolveTemplate, restoreBuiltinTemplate, saveTemplate } from '../templates/store';
 import { agyBinary, claudeBinary, codexBinary, opencodeBinary, isInsideRoot, tildify, riceAudioBinary, riceDetectorBinary } from './paths';
@@ -85,7 +98,7 @@ import { modelsDir } from '../asr/config';
 import { ensureModel, SPEAKER_MODEL } from '../asr/model-download';
 import { OnlineSpeakerClusterer } from '../asr/speaker-cluster';
 import { OnnxSpeakerEmbedder } from '../asr/speaker-embedder';
-import { ClusteringIdentifier, loadClusterState, saveClusterState, type SpeakerIdentifier } from '../asr/speaker-identifier';
+import { createClusteringIdentifier, removeLegacyVoiceFiles, type SpeakerIdentifier } from '../asr/speaker-identifier';
 import { mergeVocabulary, parseVocabulary, whisperVocabularyPrompt } from '../asr/vocabulary';
 import { applySpeakerNames, cleanSpeakerName } from '../../shared/speakers';
 import { suggestSpeakerNames } from '../session/speaker-names';
@@ -94,7 +107,10 @@ import { configureLongNotes, type NotesProgress } from '../session/long-notes';
 import type { AlertActionKind } from '../session/alerts';
 import { saveAnnotations } from '../store/annotations';
 
-type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean };
+type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Ocultar dados pessoais ao enviar para a IA (as pastas sensíveis ligam por conta própria). */ redactPii?: boolean; /** Guarda padrão (as pastas podem definir a própria). */ retentionDefault?: FolderRetention; /** Aviso de consentimento ao gravar (padrão: ligado) e o texto próprio (vazio = o padrão no idioma da reunião). */ consentRemind?: boolean; consentText?: string; /** Modo 100% local: nada usa a rede (só localhost); só o provedor Modelo local. */ fullyLocal?: boolean; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean; /** Memória entre reuniões (padrão: ligada). */ memory?: boolean; /** Domínios do próprio usuário (do participante `self` da agenda), para a memória não tratar a própria empresa como cliente. */ memoryOwnDomains?: string[]; /** Aviso local quando uma pendência minha vence (padrão: ligado). */ followupNotify?: boolean; };
+
+// Modo 100% local: o fetch global só fala com localhost enquanto o modo estiver ligado (rede de segurança por baixo dos bloqueios de cada recurso)
+installNetworkGuard();
 
 const tokenCrypto: TokenCrypto = {
   encrypt: (plain) => safeStorage.encryptString(plain),
@@ -106,17 +122,36 @@ const googleAuth = new GoogleAuth({
   fetch: (url, init) => fetch(url, init),
   openExternal: (url) => shell.openExternal(url),
 });
-const calendarFeed = new CalendarFeed(googleAuth, (url, init) => fetch(url, init));
+// Modo 100% local: a agenda do Google fica "desconectada" (as credenciais ficam como estão); o Calendário do macOS segue valendo
+const calendarFeed = new CalendarFeed({ accessToken: () => googleAuth.accessToken(), status: async () => (isLocalMode() ? { connected: false } : googleAuth.status()) }, (url, init) => fetch(url, init));
 const getSecret: RunnerDeps['getSecret'] = (provider) =>
   safeStorage.isEncryptionAvailable() ? loadSecret(app.getPath('userData'), provider, tokenCrypto) : Promise.resolve(null);
 const aiDeps = (): RunnerDeps => ({
   getSecret,
   binaries: { claude: claudeBinary(), codex: codexBinary(), opencode: opencodeBinary(), agy: agyBinary() },
   workDir: app.getPath('userData'),
+  local: async () => (await currentAiSettings()).local ?? {},
+  // ocultar dados pessoais: opção global, ou a reunião (qualquer uma, no chat entre reuniões) está numa pasta sensível
+  shouldRedact: async (ctx) => {
+    const settings = await loadSettings();
+    if (settings.redactPii === true) return true;
+    const dirs = ctx?.dirs ?? (ctx?.dir ? [ctx.dir] : []);
+    if (dirs.length === 0) return false;
+    const folders = await readFolders(settings.root);
+    if (!folders.some((f) => f.sensitive)) return false;
+    for (const dir of dirs) if (isSensitiveFolder(folders, (await readMeta(dir).catch(() => null))?.folderId)) return true;
+    return false;
+  },
+  // recibo de privacidade: cada chamada à IA vira uma linha de metadados na reunião (sem conteúdo); sem reunião, num arquivo do app
+  egress: async (dirs, record) => {
+    if (dirs.length === 0) await appendFile(join(app.getPath('userData'), 'egress-unattributed.jsonl'), `${JSON.stringify(record)}\n`, { mode: 0o600 });
+    for (const dir of dirs) await appendEgress(dir, record).catch(() => {});
+  },
   ...(process.env.RICE_TEST_MCP_CONFIG ? { testMcpConfig: process.env.RICE_TEST_MCP_CONFIG } : {}),
   // SÓ INSTÂNCIAS DE TESTE: as APIs de IA falam com um servidor local falso (RICE_TEST_AI_BASE_URL) em vez da internet
   ...(TEST_INSTANCE && process.env.RICE_TEST_AI_BASE_URL ? { fetch: (url: string, init: RequestInit) => fetch(url.replace(/^https:\/\/[^/]+/, process.env.RICE_TEST_AI_BASE_URL ?? ''), init) } : {}),
 });
+let memoryRef: MemoryService | null = null; // memória entre reuniões (criada em registerIpc)
 let lightRunner: AiRunner | null = null; // modelo leve do provedor ativo: etapas simples (extrações, sugestões, ideias)
 const supportsWarRoom = (p: string) => p === 'claude-sub' || p === 'chatgpt-sub';
 let aiMigrated = false;
@@ -149,6 +184,7 @@ async function loadSettings(): Promise<Settings> {
   } catch {
     cachedSettings = { root: join(homedir(), 'Rice'), keepAudio: true };
   }
+  setLocalMode(cachedSettings.fullyLocal === true); // o Modo 100% local vale desde a primeira leitura
   return cachedSettings;
 }
 
@@ -198,7 +234,7 @@ async function createSpeakerIdentifier(dir: string): Promise<SpeakerIdentifier |
   try {
     const model = await ensureModel(SPEAKER_MODEL, modelsDir(), { onProgress: (p) => send('asr:download-progress', p) });
     const embedder = await OnnxSpeakerEmbedder.create(model);
-    return new ClusteringIdentifier(embedder, new OnlineSpeakerClusterer({}, await loadClusterState(dir)), (state) => saveClusterState(dir, state));
+    return createClusteringIdentifier(embedder); // só em memória: a assinatura de voz nunca vai para o disco
   } catch (err) {
     send('session:session-warning', { message: t('speakers.unavailable', { error: (err as Error).message }) });
     return null;
@@ -842,11 +878,11 @@ function setupSession(runner: AiRunner): AsrService {
   const screenshotCapture = new ScreenshotCapture({
     grab: TEST_INSTANCE && process.env.RICE_SHOT_SOURCE_DIR ? grabFromFolder(process.env.RICE_SHOT_SOURCE_DIR) : (hint) => grabScreen({ apps: [...activeMeetingApps], preferWindow: hint.preferWindow }), // o detector diz qual app usa o microfone; RICE_SHOT_SOURCE_DIR: só instâncias de teste, quadros prontos no lugar da tela
     // a decisão é só por texto (últimos ~60 s + o trecho candidato): vale para qualquer provedor, inclusive os CLIs
-    decide: async (context, candidates, d) => decideCapture(lightRunner ?? runner, await shotLanguage(d), context, candidates),
+    decide: async (context, candidates, d) => decideCapture(withEgressContext(lightRunner ?? runner, { kind: 'screenshot', dir: d }), await shotLanguage(d), context, candidates),
     // com provedor que aceita imagem, a legenda pode ser refinada pela imagem; sem ele fica o motivo da fala
     refine: async (jpeg, _reason, d) => {
       if (!providerSeesImages((await currentAiSettings()).provider)) return null;
-      const verdict = await judgeShot(lightRunner ?? runner, { mime: 'image/jpeg', data: jpeg.toString('base64') }, await shotLanguage(d));
+      const verdict = await judgeShot(withEgressContext(lightRunner ?? runner, { kind: 'screenshot', dir: d }), { mime: 'image/jpeg', data: jpeg.toString('base64') }, await shotLanguage(d));
       return verdict.useful && verdict.caption ? verdict.caption : null;
     },
     nearestSegment: async (d, at) => nearestSegmentClock(await readMeetingText(d, 'transcript'), at),
@@ -1042,9 +1078,30 @@ function setupSession(runner: AiRunner): AsrService {
 }
 
 /** Pergunta sobre a reunião: monta o prompt, transmite o texto aos poucos e grava a troca no chat.md. */
+/** Orçamento de texto do modelo local (depende do `num_ctx`); null com qualquer outro provedor (valem os limites de sempre). */
+async function activeLocalBudget(): Promise<ContextBudget | null> {
+  const ai = await currentAiSettings();
+  return ai.provider === 'local-model' ? localBudget(ai.local?.numCtx ?? DEFAULT_NUM_CTX) : null;
+}
+
+/** O modelo local escolhido (ou o menor instalado) aceita imagens? */
+async function localAcceptsImages(): Promise<boolean> {
+  const ai = await currentAiSettings();
+  if (ai.provider !== 'local-model') return false;
+  const server = await cachedLocalServer(ai.local ?? {}, (url, init) => fetch(url, init), Date.now()).catch(() => null);
+  const model = ai.models['local-model'] || smallestLocalModel(server?.models ?? []);
+  return Boolean(server && model && (await isVisionModel(server, model, (url, init) => fetch(url, init))));
+}
+
 /** "Buscar na web" pedido para UMA pergunta: só vale com `true` exato e se o provedor ativo suporta; senão a pergunta nem sai. */
+/** Ferramentas/MCPs no chat: opção ligada, fora do Modo 100% local e com um provedor que as usa (o modelo local não usa). */
+async function toolsAllowed(): Promise<boolean> {
+  return (await loadSettings()).chatTools === true && !isLocalMode() && (await currentAiSettings()).provider !== 'local-model';
+}
+
 async function webRequested(raw: unknown): Promise<boolean> {
   if (raw !== true) return false;
+  if (isLocalMode()) throw new AiError('other', t('local.mode.blocked.web'));
   if (!webSearchSupported((await currentAiSettings()).provider)) throw new AiError('other', t('chat.web.unavailable'));
   return true;
 }
@@ -1052,14 +1109,16 @@ async function webRequested(raw: unknown): Promise<boolean> {
 async function chatAnswer(runner: AiRunner, dir: string, question: string, signal: AbortSignal, onDelta: (text: string) => void, web = false, onSources?: (sources: WebSource[]) => void): Promise<string> {
   const meta = await readMeta(dir);
   const { language } = await notesLanguageOf(meta);
+  const mem = (await memoryRef?.chatContext(question, meta).catch(() => null)) ?? { text: '', dirs: [] as string[] }; // pedidos, promessas e decisões de reuniões anteriores com essas pessoas
   const prompt = buildChatPrompt(
     {
       title: meta.title,
       startedAt: meta.startedAt,
-      transcript: await chatTranscript(dir, applySpeakerNames(await readMeetingText(dir, 'transcript'), meta.speakers), question, language),
+      transcript: await chatTranscript(dir, applySpeakerNames(await readMeetingText(dir, 'transcript'), meta.speakers), question, language, (await activeLocalBudget())?.chatChars),
       annotations: await readMeetingText(dir, 'annotations'),
       attachments: await attachmentsContext(dir),
       vocabulary: await meetingTerms(meta),
+      memory: mem.text,
     },
     await readChat(dir),
     question,
@@ -1072,11 +1131,11 @@ async function chatAnswer(runner: AiRunner, dir: string, question: string, signa
   const facts = warOn ? contextFacts(war) : [];
   const folder = warOn && war.sources.folder && (await currentAiSettings()).provider === 'claude-sub' && (await checkWorkFolder(war.sources.folder)).ok ? war.sources.folder : undefined;
   const system = facts.length ? `${chatSystemPrompt(language)}\n\n${t('warroom.facts.context', undefined, language === 'en' ? 'en' : 'pt-BR')}:\n${facts.map((f) => `- ${f.text}`).join('\n')}` : chatSystemPrompt(language);
-  const warAccess = warOn && (war.sources.web || war.sources.mcp || folder) && supportsWarRoom(await currentAiSettings().then((a) => a.provider)) ? { mcp: war.sources.mcp, web: war.sources.web, ...(folder ? { folder } : {}) } : undefined;
-  const apiProvider = ['claude-api', 'openai-api', 'gemini-api'].includes((await currentAiSettings()).provider);
-  const images = apiProvider ? await attachmentImages(dir) : []; // imagens só vão para APIs que aceitam bloco de imagem; os CLIs as ignoram
+  const warAccess = warOn && !isLocalMode() && (war.sources.web || war.sources.mcp || folder) && supportsWarRoom(await currentAiSettings().then((a) => a.provider)) ? { mcp: war.sources.mcp, web: war.sources.web, ...(folder ? { folder } : {}) } : undefined;
+  const apiProvider = ['claude-api', 'openai-api', 'gemini-api'].includes((await currentAiSettings()).provider) || (await localAcceptsImages());
+  const images = apiProvider ? await attachmentImages(dir) : []; // imagens só vão para APIs (e modelos locais de visão); os CLIs as ignoram
   let found: WebSource[] = [];
-  const answer = await runChat(runner, { system, prompt, signal, ...(images.length ? { images } : {}) }, { useTools: (await loadSettings()).chatTools === true, ...(warAccess ? { access: warAccess } : {}), language: language === 'en' ? 'en' : 'pt-BR', onDelta, ...(web ? { web: true, onSources: (list: WebSource[]) => { found = list; onSources?.(list); } } : {}) });
+  const answer = await runChat(runner, { system, prompt, signal, egress: { kind: 'chat', dirs: [...new Set([dir, ...mem.dirs])] }, ...(images.length ? { images } : {}) }, { useTools: await toolsAllowed(), ...(warAccess ? { access: warAccess } : {}), language: language === 'en' ? 'en' : 'pt-BR', onDelta, ...(web ? { web: true, onSources: (list: WebSource[]) => { found = list; onSources?.(list); } } : {}) });
   await appendChat(dir, new Date(), question, answer, found); // as fontes ficam junto da resposta e voltam ao reabrir
   return answer;
 }
@@ -1209,11 +1268,41 @@ const shortcutManager = createShortcutManager({
   },
 });
 
+/** Varredura de retenção: nunca toca em reunião gravando/finalizando; manda para a Lixeira do sistema e avisa uma vez. */
+async function sweepRetention(now: Date = new Date()): Promise<SweepAction[]> {
+  const settings = await loadSettings();
+  const folders = await readFolders(settings.root);
+  if (!settings.retentionDefault && !folders.some((f) => f.retention)) return []; // nenhuma regra em lugar nenhum
+  const meetings: SweepMeeting[] = [];
+  for (const dir of await listMeetingDirs(settings.root)) {
+    const meta = await readMeta(dir).catch(() => null);
+    if (!meta) continue;
+    const audio = (await readdir(dir).catch(() => [] as string[])).filter((n) => /^audio\.(m4a|wav)$/.test(n));
+    meetings.push({ dir, state: meta.state, startedAt: meta.startedAt, ...(meta.endedAt ? { endedAt: meta.endedAt } : {}), ...(meta.folderId ? { folderId: meta.folderId } : {}), audio });
+  }
+  const busy = new Set<string>(session && session.state !== 'idle' && session.currentDir ? [session.currentDir] : []);
+  const plan = planSweep({ meetings, folders, fallback: settings.retentionDefault, now, busy });
+  const done: SweepAction[] = [];
+  for (const action of plan) {
+    try {
+      for (const file of action.kind === 'meeting' ? [action.dir] : action.files.map((f) => join(action.dir, f))) await shell.trashItem(file);
+      done.push(action);
+    } catch (err) {
+      logError('retention trash', err);
+    }
+  }
+  if (done.length > 0) {
+    send('meetings:changed', null);
+    if (Notification.isSupported()) new Notification({ title: 'Rice', body: sweepNotice(done, (key, n, vars) => tn(key, n, vars)).slice(0, 3).join('\n'), silent: true }).show();
+  }
+  return done;
+}
+
 /** Versão do build (commit, remote público, clone de origem); lida uma vez ao abrir. Instância de teste nunca consulta nada. */
 let buildInfo: BuildInfo | null = null;
 const updateChecker = createUpdateChecker({
   info: () => buildInfo,
-  enabled: async () => (await loadSettings()).checkUpdates !== false,
+  enabled: async () => (await loadSettings()).checkUpdates !== false && !isLocalMode(),
   getState: async () => (await loadSettings()).updateCheck ?? {},
   setState: async (state) => saveSettings({ ...(await loadSettings()), updateCheck: state }),
   disabled: () => TEST_INSTANCE,
@@ -1221,6 +1310,50 @@ const updateChecker = createUpdateChecker({
 });
 
 function registerIpc(runner: AiRunner): void {
+  // memória entre reuniões e pendências: só consome notas e eventos que já existem (nunca toca na captura de áudio)
+  const memorySvc = new MemoryService({
+    root: async () => (await loadSettings()).root,
+    runner: () => lightRunner ?? runner,
+    language: async (meta) => ((await notesLanguageOf((meta ?? {}) as MeetingMeta)).language === 'en' ? 'en' : 'pt'),
+    enabled: () => cachedSettings.memory !== false,
+    notifyEnabled: () => cachedSettings.followupNotify !== false,
+    events: () => calendarFeed.events(),
+    ownDomains: () => cachedSettings.memoryOwnDomains ?? [],
+    budget: async () => (await activeLocalBudget())?.globalChars, // modelo local: contexto menor
+    onChanged: () => send('memory:changed', null),
+    onProgress: (p) => send('memory:progress', p),
+  });
+  memoryRef = memorySvc;
+  onNotesDone((dir) => void memorySvc.onNotesReady(dir));
+  registerMemory(
+    {
+      handle,
+      send,
+      checkedDir,
+      readMeetingInfo: async (dir) => {
+        const m = await readMeta(dir).catch(() => null);
+        return m ? { title: m.title, date: m.startedAt } : null;
+      },
+      setEnabled: async (on) => void (await saveSettings({ ...(await loadSettings()), memory: on })),
+      setNotify: async (on) => void (await saveSettings({ ...(await loadSettings()), followupNotify: on })),
+      remindersActive: async () => isMac() && remindersAccess === 'granted' && remindersSupported() && (await loadSettings()).showReminders !== false,
+    },
+    memorySvc,
+  );
+  // cobrança: uma vez por dia, a partir das 9h (ou na abertura do app, se ele estava fechado); agrupa várias numa só
+  const checkFollowupsDue = async () => {
+    const n = await memorySvc.dueNotification().catch(() => null);
+    if (!n) return;
+    await memorySvc.markNotified(n.ids).catch(() => {});
+    const title = n.count === 1 ? t('followup.notify.one', { text: n.text }) : n.allToday ? t('followup.notify.many-today', { n: n.count }) : t('followup.notify.many-overdue', { n: n.count });
+    if (TEST_INSTANCE && process.env.RICE_NOTIFY_LOG) {
+      await appendFile(process.env.RICE_NOTIFY_LOG, `${JSON.stringify({ title, count: n.count })}\n`).catch(() => {}); // instância de teste: nada aparece na tela do usuário
+      return;
+    }
+    notify({ title, actionText: t('followup.notify.open'), onAction: () => { showMainWindow(); send('app:open-followups', null); } });
+  };
+  setTimeout(() => void checkFollowupsDue(), 15_000).unref();
+  setInterval(() => void checkFollowupsDue(), 10 * 60_000).unref();
   handle('settings:get', async () => {
     const settings = await loadSettings();
     return {
@@ -1232,9 +1365,16 @@ function registerIpc(runner: AiRunner): void {
       vocabulary: settings.vocabulary ?? '',
       vocabularyAttendees: settings.vocabularyAttendees !== false,
       identifySpeakers: settings.identifySpeakers === true,
+      memory: settings.memory !== false,
+      followupNotify: settings.followupNotify !== false,
       screenshots: settings.screenshots === true,
       chatTools: settings.chatTools === true,
       checkUpdates: settings.checkUpdates !== false,
+      fullyLocal: settings.fullyLocal === true,
+      redactPii: settings.redactPii === true,
+      retentionDefault: settings.retentionDefault ?? {},
+      consentRemind: settings.consentRemind !== false,
+      consentText: settings.consentText ?? '',
       savedPrompts: normalizeSavedPrompts(settings.savedPrompts),
       warroomMaxCycles: normalizeMaxCycles(settings.warroomMaxCycles),
     };
@@ -1265,6 +1405,7 @@ function registerIpc(runner: AiRunner): void {
     return { ok: true as const };
   });
   handle('settings:set-chat-tools', async (_e, on: unknown) => {
+    if (on === true && isLocalMode()) return { ok: false as const, message: t('local.mode.blocked.tools') };
     await saveSettings({ ...(await loadSettings()), chatTools: on === true });
     return { ok: true as const };
   });
@@ -1272,6 +1413,8 @@ function registerIpc(runner: AiRunner): void {
   handle('ai:tools-status', async () => {
     const on = (await loadSettings()).chatTools === true;
     const provider = (await currentAiSettings()).provider;
+    if (isLocalMode()) return { on, provider, available: false as const, hint: t('local.mode.blocked.tools') };
+    if (provider === 'local-model') return { on, provider, available: false as const, hint: t('chat-tools.unavailable-local') };
     if (provider === 'claude-sub') {
       const deps = aiDeps();
       const servers = on ? await probeClaudeMcpServers({ binary: deps.binaries.claude, cwd: `${deps.workDir}/claude-cwd`, token: await getSecret('claude-sub') }) : [];
@@ -1283,7 +1426,71 @@ function registerIpc(runner: AiRunner): void {
   // "Buscar na web" do chat: o provedor ativo suporta? (o interruptor fica desabilitado, com o motivo, quando não)
   handle('ai:web-status', async () => {
     const provider = (await currentAiSettings()).provider;
+    if (isLocalMode()) return { available: false as const, provider, hint: t('local.mode.blocked.web') };
+    if (provider === 'local-model') return { available: false as const, provider, hint: t('chat.web.unavailable-local') };
     return webSearchSupported(provider) ? { available: true as const, provider } : { available: false as const, provider, hint: t('chat.web.unavailable-provider', { provider: PROVIDER_LABEL[provider] }) };
+  });
+  // aviso de consentimento: o toast ao começar a gravar (só UI, disparado pelo estado da sessão); o texto vem daqui, no idioma da reunião
+  handle('consent:notice', async (_e, rawDir: unknown) => {
+    try {
+      const dir = await checkedDir(rawDir);
+      const meta = await readMeta(dir);
+      const lang = (await notesLanguageOf(meta)).headings === 'en' ? 'en' : 'pt-BR';
+      return consentOffer(await loadSettings(), meta, lang, (l) => t('consent.default-text', undefined, l));
+    } catch {
+      return { show: false as const };
+    }
+  });
+  handle('consent:mark-copied', async (_e, rawDir: unknown) => {
+    const dir = await checkedDir(rawDir);
+    await updateMeta(dir, (m) => ({ ...m, consentNoticeCopiedAt: toLocalIso(new Date()) }));
+    return { ok: true as const };
+  });
+  handle('settings:set-consent', async (_e, remind: unknown, text: unknown) => {
+    await saveSettings({ ...(await loadSettings()), consentRemind: remind !== false, consentText: normalizeConsentText(text) });
+    return { ok: true as const };
+  });
+  // ocultar dados pessoais (opção global) e retenção padrão, em Configurações › Privacidade
+  handle('settings:set-privacy', async (_e, input: unknown) => {
+    const o = (typeof input === 'object' && input !== null ? input : {}) as { redactPii?: unknown; retentionDefault?: unknown };
+    const settings = await loadSettings();
+    const retentionDefault = o.retentionDefault === undefined ? settings.retentionDefault : parseRetention(o.retentionDefault);
+    const { retentionDefault: _old, ...rest } = settings;
+    await saveSettings({ ...rest, redactPii: o.redactPii === undefined ? settings.redactPii === true : o.redactPii === true, ...(retentionDefault ? { retentionDefault } : {}) });
+    return { ok: true as const };
+  });
+  // pasta sensível e tempo de guarda de uma pasta (no ⋯ da pasta)
+  handle('folders:set-privacy', (_e, id: unknown, patch: unknown) => folderCall((root) => setFolderPrivacy(root, String(id ?? ''), (typeof patch === 'object' && patch !== null ? patch : {}) as { sensitive?: unknown; retention?: unknown })));
+  // recibo de privacidade: o que saiu (ou não) desta reunião, só a partir dos metadados guardados (nunca o conteúdo)
+  const receiptOf = async (rawDir: unknown) => {
+    const dir = await checkedDir(rawDir);
+    const meta = await readMeta(dir);
+    const receipt = buildReceipt(await readEgress(dir), meta, (key, vars) => t(key, vars), (key, n, vars) => tn(key, n, vars), (p) => t(`receipt.provider.${p}`));
+    return { dir, meta, receipt, text: receiptText(receipt, meta.title, t('receipt.title')) };
+  };
+  handle('receipt:get', async (_e, dir: unknown) => {
+    try {
+      const { meta, receipt, text } = await receiptOf(dir);
+      return { ok: true as const, title: meta.title, ...receipt, text };
+    } catch (err) {
+      return { ok: false as const, message: (err as Error).message };
+    }
+  });
+  handle('receipt:export', async (_e, dir: unknown, mode: unknown) => {
+    try {
+      const { meta, receipt, text } = await receiptOf(dir);
+      if (mode === 'copy') {
+        clipboard.writeText(text);
+        return { ok: true as const };
+      }
+      const deps = shareDeps(runner);
+      const path = await deps.exportTarget(pdfFileName(`${t('receipt.file')} - ${meta.title}`));
+      const html = receiptHtml({ title: meta.title, heading: t('receipt.title'), generated: t('receipt.generated', { date: new Date().toLocaleString(locale()) }), receipt });
+      await deps.writeFile(path, await renderPdf(html, deps.createPdfWindow));
+      return { ok: true as const, path, display: tildify(path) };
+    } catch (err) {
+      return { ok: false as const, message: (err as Error).message };
+    }
   });
   // atalho global: o renderer só pede "none", "default" ou um atalho; o main valida e só guarda o que conseguiu registrar
   handle('shortcut:status', () => shortcutManager.status());
@@ -1502,9 +1709,11 @@ function registerIpc(runner: AiRunner): void {
     ...(await googleAuth.status()),
     calendars: calendarFeed.calendarCount(),
     error: calendarFeed.lastError,
+    ...(isLocalMode() ? { blocked: t('local.mode.blocked.google') } : {}),
   }));
   handle('calendar:google-save-client', (_e, id: string, secret: string) => googleAuth.saveClient(String(id ?? ''), String(secret ?? '')));
   handle('calendar:google-connect', async () => {
+    if (isLocalMode()) return { ok: false as const, message: t('local.mode.blocked.google') };
     const result = await googleAuth.connect();
     if (result.ok) await calendarFeed.refresh();
     return result;
@@ -1525,14 +1734,14 @@ function registerIpc(runner: AiRunner): void {
     if (action === 'join') startFromCalendar(ev, true);
     else if (action === 'record') startFromCalendar(ev, false);
   });
-  handle('calendar:events', () => calendarFeed.events());
+  handle('calendar:events', () => calendarFeed.events().map(({ selfEmail: _self, ...rest }) => rest)); // o e-mail do próprio usuário não vai para o renderer
   handle('calendar:open-link', (_e, url: string) => openJoinUrl(String(url ?? '')));
 
   // ---- provedores de IA: o renderer nunca recebe segredo, só hasKey e os 4 últimos caracteres ----
   handle('ai:status', async () => {
     const settings = await currentAiSettings();
     const notice = (await loadSettings()).aiNotices?.geminiSub ? 'gemini-discontinued' : null;
-    return { ...(await aiStatus(settings, aiDeps())), light: settings.light, lightModel: (await lightModelFor(settings, undefined, () => cachedAgyModels({ binary: agyBinary(), workDir: app.getPath('userData') }, false))) ?? null, notice };
+    return { ...(await aiStatus(settings, aiDeps())), light: settings.light, lightModel: (await lightModelFor(settings, undefined, () => cachedAgyModels({ binary: agyBinary(), workDir: app.getPath('userData') }, false), () => installedLocalModels(aiDeps()))) ?? null, fullyLocal: isLocalMode(), notice };
   });
   // o aviso aparece até a tela de IA mostrá-lo uma vez: aí o renderer chama isto e ele some
   handle('ai:dismiss-notice', async () => {
@@ -1554,6 +1763,7 @@ function registerIpc(runner: AiRunner): void {
   handle('ai:set-provider', async (_e, provider: unknown) => {
     invalidateAiStatus();
     if (!isProvider(provider)) return { ok: false as const, message: t('err.provider-unknown') };
+    if (isLocalMode() && provider !== 'local-model') return { ok: false as const, message: t('local.mode.only-local') };
     await updateAiSettings((ai) => ({ ...ai, provider }));
     return { ok: true as const };
   });
@@ -1561,6 +1771,7 @@ function registerIpc(runner: AiRunner): void {
   handle('ai:save-key', async (_e, provider: unknown, raw: unknown) => {
     invalidateAiStatus();
     if (!isProvider(provider) || !hasKeyField(provider)) return { ok: false as const, message: t('err.provider-no-key') };
+    if (isLocalMode()) return { ok: false as const, message: t('local.mode.only-local') };
     const valid = validateKey(provider, String(raw ?? ''));
     if (!valid.ok) return { ok: false as const, message: valid.message };
     if (!safeStorage.isEncryptionAvailable()) return { ok: false as const, message: t('err.keychain') };
@@ -1580,6 +1791,7 @@ function registerIpc(runner: AiRunner): void {
   handle('ai:test', async (_e, provider: unknown) => {
     invalidateAiStatus();
     if (!isProvider(provider)) return { ok: false as const, message: t('err.provider-unknown') };
+    if (isLocalMode() && provider !== 'local-model') return { ok: false as const, message: t('local.mode.only-local') };
     const result = await testProvider(provider, await currentAiSettings(), aiDeps());
     await updateAiSettings((ai) => ({ ...ai, verified: { ...ai.verified, [provider]: result.ok } }));
     return result;
@@ -1587,6 +1799,7 @@ function registerIpc(runner: AiRunner): void {
 
   handle('ai:list-models', async (_e, provider: unknown) => {
     if (!isProvider(provider)) return { ok: false as const, message: t('err.provider-unknown') };
+    if (isLocalMode() && provider !== 'local-model') return { ok: false as const, message: t('local.mode.only-local') };
     return listModels(provider, aiDeps());
   });
 
@@ -1598,6 +1811,7 @@ function registerIpc(runner: AiRunner): void {
         const r = await listModels('opencode-sub', aiDeps());
         return r.ok ? r.models : [];
       },
+      local: async () => (await installedLocalModels(aiDeps())).map((m) => ({ id: m.id, label: m.id })),
       agy: async () => {
         const r = await listModels('agy-sub', aiDeps());
         return r.ok ? r.models.map((id) => ({ id, label: id })) : [];
@@ -1606,6 +1820,39 @@ function registerIpc(runner: AiRunner): void {
     return { ok: true as const, models };
   });
 
+  // Modelo local: endereço (SÓ localhost; qualquer outro é recusado aqui) e tamanho do contexto
+  handle('ai:set-local', async (_e, input: unknown) => {
+    const o = (typeof input === 'object' && input !== null ? input : {}) as { url?: unknown; numCtx?: unknown; server?: unknown };
+    let url: string | undefined;
+    if (typeof o.url === 'string' && o.url.trim()) {
+      try {
+        url = parseLocalUrl(o.url);
+      } catch (err) {
+        return { ok: false as const, message: (err as Error).message };
+      }
+    }
+    if (o.numCtx !== undefined && !isNumCtx(o.numCtx)) return { ok: false as const, message: t('ai.local.bad-ctx') };
+    if (o.server !== undefined && !isLocalServerId(o.server)) return { ok: false as const, message: t('ai.local.bad-url') };
+    invalidateAiStatus();
+    const ai = await updateAiSettings((cur) => {
+      const server = o.server === undefined ? cur.local?.server : o.server === 'auto' ? undefined : (o.server as LocalServerId);
+      return { ...cur, local: { ...(url ? { url } : {}), ...(server ? { server } : {}), ...(isNumCtx(o.numCtx) ? { numCtx: o.numCtx } : cur.local?.numCtx ? { numCtx: cur.local.numCtx } : {}) } };
+    });
+    return { ok: true as const, local: ai.local ?? {} };
+  });
+  // Modo 100% local: só liga com o Modelo local ativo; bloqueia tudo o que usa a rede (ver privacy/local-mode.ts)
+  handle('privacy:set-local-mode', async (_e, on: unknown) => {
+    if (on === true) {
+      if ((await currentAiSettings()).provider !== 'local-model') return { ok: false as const, needsProvider: true as const, message: t('local.mode.need-provider') };
+      setLocalMode(true);
+    } else {
+      setLocalMode(false);
+    }
+    await saveSettings({ ...(await loadSettings()), fullyLocal: on === true });
+    invalidateAiStatus();
+    send('privacy:changed', { fullyLocal: isLocalMode() });
+    return { ok: true as const, fullyLocal: isLocalMode() };
+  });
   handle('ai:set-model', async (_e, provider: unknown, model: unknown) => {
     if (!isProvider(provider)) return { ok: false as const, message: t('err.provider-unknown') };
     const value = String(model ?? '').trim();
@@ -1690,7 +1937,7 @@ function registerIpc(runner: AiRunner): void {
       const meta = await readMeta(dir);
       const { language } = await notesLanguageOf(meta);
       const transcript = await chatTranscript(dir, await readMeetingText(dir, 'transcript'), 'obrigado, valeu, thanks', language);
-      return { ok: true as const, suggestions: await suggestSpeakerNames(lightRunner ?? runner, transcript, language) };
+      return { ok: true as const, suggestions: await suggestSpeakerNames(withEgressContext(lightRunner ?? runner, { kind: 'other', dir }), transcript, language) };
     } catch (err) {
       return { ok: false as const, message: err instanceof Error ? err.message : String(err) };
     }
@@ -1715,6 +1962,7 @@ function registerIpc(runner: AiRunner): void {
     try {
       const { root } = await loadSettings();
       await deleteMeetingDir({ dir, root, sessionState: session?.state ?? 'idle', currentDir: session?.currentDir ?? null, trash: (d) => shell.trashItem(d) });
+      await memoryRef?.removeMeeting(resolve(String(dir))).catch(() => {}); // apagar a reunião remove os fatos dela
       return { ok: true as const };
     } catch (err) {
       return { ok: false as const, message: (err as Error).message };
@@ -1797,7 +2045,9 @@ function registerIpc(runner: AiRunner): void {
           noMeetings: (lang) => t('gchat.none', undefined, lang === 'en' ? 'en' : 'pt-BR'),
           fallbackNotice: (lang) => t('gchat.fallback', undefined, lang === 'en' ? 'en' : 'pt-BR'),
           noMeetingsInPeriod: (lang) => t('gchat.none-period', undefined, lang === 'en' ? 'en' : 'pt-BR'),
-          useTools: async () => (await loadSettings()).chatTools === true,
+          memory: async (q) => (await memoryRef?.chatContext(q)) ?? { text: '', dirs: [] },
+          useTools: toolsAllowed,
+          contextBudget: async () => (await activeLocalBudget())?.globalChars,
           web: () => webRequested(web),
         },
         question,
@@ -1870,6 +2120,11 @@ app.whenReady().then(async () => {
   lightRunner = createLightRunner(currentAiSettings, aiDeps());
   configureLongNotes({
     lightRunner,
+    // modelo local: janela pequena; o limite do map-reduce e o tamanho das partes seguem o `num_ctx` escolhido
+    budget: () => {
+      const ai = resolveAiSettings(cachedSettings.ai);
+      return ai.provider === 'local-model' ? localBudget(ai.local?.numCtx ?? DEFAULT_NUM_CTX) : null;
+    },
     ...(typeof cachedSettings.notesDirectMaxChars === 'number' && cachedSettings.notesDirectMaxChars >= 5_000 ? { directMaxChars: cachedSettings.notesDirectMaxChars } : {}),
     onProgress: (p) => {
       if (p.phase === 'done') notesProgress.delete(p.dir);
@@ -1910,11 +2165,25 @@ app.whenReady().then(async () => {
     isRecording: () => session?.state !== 'idle',
     show: showAlert,
   });
-  calendarFeed.on('change', () => alertScheduler?.update(calendarFeed.events()));
+  calendarFeed.on('change', () => {
+    alertScheduler?.update(calendarFeed.events());
+    const mine = [...new Set(calendarFeed.events().flatMap((e) => (e.selfEmail ? [e.selfEmail.split('@')[1]?.toLowerCase() ?? ''] : [])).filter(Boolean))];
+    if (mine.some((d) => !(cachedSettings.memoryOwnDomains ?? []).includes(d))) void saveSettings({ ...cachedSettings, memoryOwnDomains: [...new Set([...(cachedSettings.memoryOwnDomains ?? []), ...mine])] }).catch(() => {});
+  });
+  if (TEST_INSTANCE && process.env.RICE_TEST_EVENTS) {
+    try {
+      calendarFeed.setTestEvents(JSON.parse(process.env.RICE_TEST_EVENTS));
+    } catch {
+      // JSON inválido: sem eventos de teste
+    }
+  }
   calendarFeed.start();
   setInterval(() => void refreshEventKit(), 5 * 60_000).unref();
   setTimeout(() => void asr.warmup(), 2000);
   shortcutManager.init((await loadSettings()).recordShortcut);
+  // retenção por pasta: varredura ao abrir e a cada 24 h; o que venceu vai para a Lixeira (nunca apaga em definitivo) e o Rice avisa uma vez
+  setTimeout(() => void sweepRetention().catch((err) => logError('retention', err)), 30_000).unref();
+  setInterval(() => void sweepRetention().catch((err) => logError('retention', err)), 24 * 3_600_000).unref();
   // versão nova: lê o build-info e consulta (no máximo uma vez por dia) pouco depois de abrir e a cada 6 h com o app aberto
   buildInfo = await readBuildInfo(join(__dirname, 'build-info.json'));
   const checkUpdate = () => void updateChecker.maybeCheck().then((status) => send('update:changed', status)).catch(() => {});
@@ -1922,6 +2191,8 @@ app.whenReady().then(async () => {
   setInterval(checkUpdate, 6 * 3_600_000).unref();
   // monta o índice de busca em segundo plano, para a primeira busca já encontrar tudo
   void loadSettings().then(({ root }) => searchIndex.refresh(root)).catch((err) => logError('search index', err));
+  // versões antigas guardavam os centroides das vozes em `falantes.json` por reunião; a assinatura de voz agora é só em memória: apaga o legado
+  void loadSettings().then(async ({ root }) => removeLegacyVoiceFiles(await listMeetingDirs(root))).catch((err) => logError('voice cleanup', err));
   app.on('activate', createWindow);
 
   app.on('before-quit', (event) => {

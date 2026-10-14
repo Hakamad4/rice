@@ -22,8 +22,14 @@ export class CalendarFeed extends EventEmitter {
     super();
   }
 
+  /** SÓ INSTÂNCIAS DE TESTE: eventos fictícios (com e-mails dos participantes) no lugar de uma conta de agenda. */
+  private testEvents: CalEvent[] = [];
+  setTestEvents(events: CalEvent[]): void {
+    this.testEvents = events;
+  }
+
   events(): CalEvent[] {
-    return mergeEvents(this.google, [...this.eventkit.values()]);
+    return [...mergeEvents(this.google, [...this.eventkit.values()]), ...this.testEvents];
   }
 
   calendarCount(): number {

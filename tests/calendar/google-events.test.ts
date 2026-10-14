@@ -18,7 +18,7 @@ test('extractJoinUrl: hangoutLink, entryPoint de vídeo, location e description'
 
 test('normalizeEvent: campos, cor da agenda, participantes sem salas', () => {
   const n = normalizeEvent(ev({ hangoutLink: 'https://meet.google.com/a', attendees: [{ self: true, email: 'eu@mim.com', responseStatus: 'accepted' }, { email: 'ana@acme.com' }, { email: 'sala@x.com', resource: true }] }), cal)!;
-  expect(n).toEqual({ id: 'e1', title: 'Daily', start: '2026-10-09T10:00:00-03:00', end: '2026-10-09T10:30:00-03:00', joinUrl: 'https://meet.google.com/a', color: '#3366cc', calendar: 'Trabalho', attendees: 2, attendeeEmails: ['ana@acme.com'], source: 'google' }); // sem o próprio usuário nem a sala
+  expect(n).toEqual({ id: 'e1', title: 'Daily', start: '2026-10-09T10:00:00-03:00', end: '2026-10-09T10:30:00-03:00', joinUrl: 'https://meet.google.com/a', color: '#3366cc', calendar: 'Trabalho', attendees: 2, attendeeEmails: ['ana@acme.com'], selfEmail: 'eu@mim.com', source: 'google' }); // sem o próprio usuário nem a sala
 });
 
 test('normalizeEvent ignora cancelado e recusado por mim; dia inteiro vira allDay em meia-noite local', () => {

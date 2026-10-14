@@ -97,8 +97,12 @@
         if (task) {
           const box = doc.createElement('input');
           box.type = 'checkbox';
-          box.disabled = true;
           box.checked = task[1] !== ' ';
+          if (opts && typeof opts.onTask === 'function') {
+            // notas: marcar a tarefa grava nas notas e reflete nas pendências
+            const label = task[2];
+            box.onchange = () => opts.onTask(label, box.checked);
+          } else box.disabled = true;
           li.className = 'task';
           li.append(box);
           content = task[2];

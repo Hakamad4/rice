@@ -20,7 +20,7 @@ export function friendlyMessage(provider: AiProvider, kind: AiError['kind'], det
     case 'rate-limit':
       return t('ai.err.rate-limit', { name });
     case 'network':
-      return t('ai.err.network', { name });
+      return provider === 'local-model' ? t('ai.local.down') : t('ai.err.network', { name });
     case 'cancelled':
       return t('ai.err.cancelled');
     case 'not-installed':

@@ -24,7 +24,7 @@ Rice is a Mac app that records your meetings, transcribes them on your machine a
 - [Requirements](#requirements)
 - [Install](#install)
 - [First steps](#first-steps)
-- [Connect an AI](#connect-an-ai)
+- [Connect an AI](#connect-an-ai) (including [Local model](#local-model-no-internet))
 - [Everyday use](#everyday-use)
 - [Where your files live](#where-your-files-live)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -46,7 +46,15 @@ Rice is a Mac app that records your meetings, transcribes them on your machine a
 
 Requires a Mac with Apple Silicon (arm64) and macOS 14 or newer. Transcription uses `whisper-server` from Homebrew (`brew install whisper.cpp`).
 
-### Option 1 — for developers: build and install from source
+### Option 1 — recommended: install from Terminal
+
+One line. It downloads the source into `~/rice`, builds it and puts **Rice.app** in `/Applications`. Because the app is built on your Mac, macOS does not block it (no `xattr` or "Open Anyway"). Running it again updates Rice.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WalissonCF/rice/main/get.sh | bash
+```
+
+Or, step by step:
 
 ```bash
 git clone https://github.com/WalissonCF/rice.git
@@ -156,7 +164,7 @@ The guide shows the progress of the transcription model. When it says **Model lo
 
 ## Connect an AI
 
-Open **Settings › Artificial intelligence** (the same list appears in the **How to use Rice** guide). Each provider is one line, with the active AI on top; click a line to open its steps. You can connect more than one provider and switch at any time with **Use this one**.
+Open **Settings › Artificial intelligence** (the same list appears in the **How to use Rice** guide). Each provider is one line (Claude, ChatGPT, Gemini, OpenCode, Antigravity and **Local model**), with the active AI on top; click a line to open its steps. You can connect more than one provider and switch at any time with **Use this one**.
 
 ![AI providers](docs/images/en/10-ai-providers.png)
 
@@ -185,6 +193,33 @@ Rice uses the OpenCode CLI you are already signed in to, just like Claude and Ch
 
 You can use your Antigravity subscription as the AI (Settings > Artificial intelligence > Antigravity). Because `agy` is an agent with file and terminal access, Rice runs it inside a macOS sandbox: it only generates text, can't write anywhere except an empty temporary folder, can't run commands and can't read your home folder. The conversation created on each use is deleted from the agy state. The prompt goes in through stdin, so it does not show up in the process list. In Rice, click Test connection and pick a model (the list comes from `agy models`; in Automatic mode the light model for simple steps is the smallest Flash). The agent still has web access, so Antigravity is not available for War room or for chat with tools. Responses take a few seconds longer than other providers (the agy takes ~4 s to start).
 
+### Local model (no internet)
+
+For law, health, government and banking, where meetings cannot go to the cloud: the transcription is already local, and with the **Local model** provider the AI is too, so Rice works offline from end to end.
+
+1. Install [Ollama](https://ollama.com) and open the app (Rice never installs anything by itself).
+2. Download a model: `ollama pull qwen3:8b` (5.2 GB, a good choice for Portuguese on Macs with **16 GB**) or a smaller one for **8 GB**: `ollama pull qwen3:4b` (2.5 GB) or `ollama pull llama3.2:3b` (2.0 GB).
+3. In **Settings › Artificial intelligence › Local model** pick the **Server**: **Automatic** (Rice tests all the default ports at once, with a short timeout, and shows what it found, for example "Found: LM Studio at :1234") or one of the list. Any local server works, not just Ollama. The **Server address** field is editable, but **only 127.0.0.1, localhost or ::1** are accepted: anything else is refused, so "local" really is local. Pick the model (sizes are shown) or type its name in **Model name** (for servers that do not list models), click **Test connection** (a tiny generation) and **Use this one**.
+
+| Server | Default port | API | How to start it |
+| --- | --- | --- | --- |
+| Ollama | 11434 | Ollama (`/api/chat`) | open the app and `ollama pull qwen3:8b` |
+| LM Studio | 1234 | OpenAI-compatible | load a model and turn on the Local Server (or `lms server start`) |
+| llama.cpp (`llama-server`) | 9931 (older versions: 8080) | OpenAI-compatible | `llama-server -m model.gguf --port 9931` |
+| MLX (`mlx_lm.server`) | 8080 | OpenAI-compatible | `mlx_lm.server --model mlx-community/Qwen3-8B-4bit` |
+| Jan | 1337 | OpenAI-compatible | Settings › Local API Server › Start Server |
+| Other | any, on localhost | OpenAI-compatible (`/v1/chat/completions`) | vLLM, KoboldCpp, text-generation-webui… |
+
+Each option fills in the default port above (checked in each project's official documentation) and shows its own short steps, with a copy button on the commands.
+
+**Context size** (8k / 16k / 32k, default 16k) is how much text the model reads at once; it is sent to Ollama as `num_ctx`, and Rice sizes the long-meeting extraction and the chat context from it. More context fits longer meetings but uses more RAM and is slower. The **light model** (Automatic) is the smallest installed model. Images only go to vision models (for example `llava` or `qwen2.5vl`). Web search, tools and MCPs are not available with the local model.
+
+**Limits:** notes come out somewhat simpler than with the big models, and generation is slower.
+
+**Fully local mode** (Settings › Privacy, off by default) is the trust seal: it only accepts the Local model provider and blocks everything that uses the network: web search, tools and MCPs, the war room with the internet, Google Calendar sync (the macOS Calendar keeps working), update checks and downloads of transcription models (the model must already be downloaded). Blocked controls stay on screen, disabled, with the reason, and a discreet **100% local** badge appears at the bottom of the sidebar. Underneath, the app's network layer itself refuses any destination that is not localhost while the mode is on.
+
+![Local model card with the server found](docs/images/en/37-local-model.png)
+
 ## Everyday use
 
 ### Record, stop and continue
@@ -193,9 +228,13 @@ Click **New meeting**, then **Record**. When you stop, Rice writes the notes. If
 
 Rice also notices meetings (Zoom, Meet, Teams) and calendar events and offers to record.
 
+![Home with the meeting happening now and Record now](docs/images/en/31-record-now.png)
+
 ### Pause recording
 
 For a side conversation that should not be recorded, use **Pause** (next to **Stop**, the **Pause** item in the tray or the Mini Rice button). While paused, Rice releases the microphone: audio is neither recorded nor transcribed, the clock stops, the button becomes **Resume · 00:42** (the paused time, in discreet amber) and the recording dot in the sidebar, the meeting item and the tray turns amber and still. Live ideas, the War room and screenshots stop too. **Resume** continues in the same meeting, and the transcript gets a discreet marker, for example “recording paused from 14:03 to 14:07”; times after the pause stay correct. While paused, Rice does not ask “still recording?” and does not stop by itself; after 30 minutes it only asks whether you want to stop. If the app crashes during a pause, “Recover meeting” works as usual.
+
+![Paused recording: Resume · 00:12 and the marker in the transcript](docs/images/en/32-pause.png)
 
 ### Notes versions
 
@@ -251,6 +290,28 @@ Off by default. Turn it on in **Settings › Screenshots**, after a notice. Whil
 
 How it works: a local filter, in Portuguese and English, picks the sentences worth a question; only then does Rice send the last ~60 s of the transcript (text) to the AI you configured to confirm. This works with any provider, including CLI subscriptions. With an API key (Claude, OpenAI or Gemini) the image also goes to the AI, only to refine the caption; with CLI subscriptions images stay on your computer. At most one question every ~15 s and one screenshot every ~10 s; screenshots equal to the previous one are dropped. Which screen: Rice uses the app the detector saw using the microphone (Zoom, Teams, Meet in a browser…) and captures the screen where its window is; when someone else is speaking (computer audio), it captures only the call window. If it cannot find the app, it uses the screen under the cursor (on Windows, always that one). Needs the macOS Screen Recording permission. You can turn it off at any time, even while recording.
 
+![Transcript with the screenshot right after the trigger sentence](docs/images/en/35-screenshots.png)
+
+### Memory across meetings
+
+Instead of every meeting being an island, Rice remembers what each person and company **asked for, promised and decided**, and what is still pending. When a meeting’s notes are ready, one call to the AI’s **light model** (one per meeting, with only the text of the notes, annotations and participants) extracts those facts. Everything stays **on this Mac**, in `<meetings folder>/.rice/memory.jsonl`; people come from the calendar participants and the names you gave, and the company comes from the email domain (ignoring Gmail, Outlook, iCloud and similar, and your own domain).
+
+- **Before the call:** in the **Notes** tab of a calendar event’s meeting a collapsible **What to remember** card shows 3 to 6 points (open follow-ups first, overdue ones in amber), each with a link to the meeting it came from. On **Home**, an event starting within 15 minutes gets a line with the first point and “see more”. With no facts, nothing shows.
+- **Follow-ups that close themselves:** if in the next meeting someone says “I sent the proposal”, the AI marks the follow-up as done, with the source (“completed in …”). It never deletes: you can reopen it with one click.
+- **In chat:** the meeting chat and the all-meetings chat get the facts of the people and companies involved as extra context (“what did Acme ask for before?”).
+- **Memory page (sidebar, right below Follow-ups):** People and Companies tabs with search; each one opens a detail with open follow-ups first, then decisions, context and the latest meetings (with links), plus edit, mark as resolved, delete and “Forget this person/company”. The person/company name in the “What to remember” card and on Home links straight to that detail. An empty memory explains what will show up.
+- **Settings › Memory:** the on/off option (on by default), a link to the page, **Erase memory** (with confirmation, hidden while empty) and **Build memory from older meetings** runs in the background, one meeting at a time, with progress and a cancel button, and only after your click (it uses the AI once per meeting). Deleting a meeting removes its facts.
+
+![Memory page with people and companies](docs/images/en/42-memory.png)
+
+![What to remember card in the Notes tab](docs/images/en/43-what-to-remember.png)
+
+### Follow-ups
+
+The **Follow-ups** item in the sidebar (with a counter of your overdue ones) gathers what you promised and what others promised you, from all meetings, in Overdue, Today, This week, Later, No due date and Done, with **Mine**, **From others** and **All** filters. Each row has a checkbox, text, owner, due date (one click to change) and a link to the source meeting; the **Add a follow-up** field creates your own, linked to a meeting or not. Relative dates (“until Friday”, “next week”) are converted to a date by the AI using the meeting’s date; with no clear date, the field stays empty. Checking a follow-up checks the matching `- [ ]` in the notes, and checking the task in the notes checks the follow-up. A **local notification** reminds you at 9 am on the due date (or when the app opens), grouping the day’s items into one; you can turn it off in Settings › Follow-ups. With the Reminders integration on, **Send to Reminders** takes one follow-up (or all of yours) to the macOS Reminders app.
+
+![Follow-ups page with groups](docs/images/en/44-follow-ups.png)
+
 ### Edit and create templates
 
 Open **Templates** in the sidebar. Built-in templates can be edited (and restored later); **Duplicate** creates your own. A template is just a title, a short description and the list of sections Rice should fill in.
@@ -265,6 +326,10 @@ Click **Ask Rice** (top right) and ask anything about the open meeting: decision
 
 **Switching the AI and model in the chat.** In the chat header, the chip with the AI name (for example "Claude · Sonnet") opens a menu with the providers you have already set up and each one's models; the current one shows a ✓. The choice applies to the whole app (it is the same as Settings > AI): the next question and the next notes already use the chosen model. Providers not set up yet appear at the end, with "Set up…". The chip is disabled while an answer is being written. In OpenCode, the free model is an explicit option and warns that it may use your transcripts to improve models.
 
+![Saved questions menu in the chat](docs/images/en/33-saved-questions.png)
+
+![Chat with web search on and the sources of the answer](docs/images/en/34-web-search.png)
+
 ### Ask across your meetings
 
 Open **Home** (first item of the sidebar): the **Ask about your meetings** field sits at the top of the page. You can also press **⌘J** from anywhere. Rice opens the chat panel in **All meetings** mode: it picks the most relevant meetings from your question (its words, a period such as "last month" or "last week", a folder or client name), sends their notes and the matching transcript passages to your AI and answers citing the meetings. The small numbers in the answer, and the **Sources** line, open the meeting at that passage.
@@ -276,6 +341,8 @@ The chip at the top of the panel switches between **This meeting**, **All meetin
 ### Record and stop from anywhere
 
 Press **⌥⌘R** (Ctrl+Alt+R on Windows) in any app, with Rice in the background: it starts a meeting, using the note of the calendar meeting that is happening or starts within 10 minutes (like **Record now** on Home), and stops when pressed again. A discreet notification says "Recording" or "Recording stopped". Change the keys or choose **None** in **Settings > Shortcuts**; if another app already uses them, Settings shows a warning so you can pick another.
+
+![Settings › Shortcuts](docs/images/en/36-shortcuts.png)
 
 ### Mini Rice
 
@@ -428,16 +495,31 @@ In Settings > Tools and MCPs in chat you can let the chat use the MCPs you alrea
 
 ## Privacy
 
-- Audio is recorded and transcribed on your Mac and never leaves it.
-- Only text leaves your Mac: the transcript and your questions go to the AI provider **you** chose, and only when Rice writes notes or answers. Rice has no servers, account, telemetry or error reporting. The code is open (MIT).
+What stays, what leaves, and how to check it:
+
+- **Audio never leaves your Mac.** It is recorded and transcribed locally. Only text can leave: the transcript and your questions go to the AI provider **you** chose, and only when Rice writes notes or answers. Rice has no servers, account, telemetry or error reporting. The code is open (MIT).
+- **Receipt per meeting.** In the meeting **⋯ › What left this computer** you see, line by line, what was sent to the AI, how many times, when and to which provider ("Notes: Claude (subscription) · 1 send · 14:31", "Screenshots: 0 sent", "Web search: not used"), or "Nothing from this meeting left your computer". It is built from a metadata-only log kept in the meeting folder (`.rice-egress.jsonl`: time, kind, provider, sizes; never the content) and can be copied as text or saved as PDF for compliance. Every call to the AI is recorded in one central place, so no feature can forget it; the Local model counts as "did not leave".
+- **Consent notice.** When recording starts (button, Record now, meeting alert or the ⌥⌘R shortcut) a discreet toast, which never blocks the recording, suggests telling the participants, with a **Copy notice** button and a ready-made sentence in the meeting's language ("Notice: I am using Rice to transcribe this meeting locally on my computer, for my own notes…"). Edit the text or turn the reminder off in **Settings › Privacy**. The time the notice was copied appears in the receipt. Recording laws vary: in many places you must tell participants.
+- **Your voice is never saved.** In participant identification (beta) the voices are compared **only in memory** while recording and discarded at the end: no voice signature (embedding) is written to disk, to the meeting or to the network. Earlier versions kept the speaker clusters in `falantes.json` per meeting; Rice now deletes that file and never writes it again (a test records a simulated meeting and checks that no file contains voice vectors).
+- **Hide personal data.** With **Settings › Privacy › Hide personal data when sending to the AI**, or in a folder marked **Sensitive** (folder ⋯; subfolders inherit it), CPF, CNPJ, card numbers (Luhn-checked), email, phone numbers (BR/international), RG and CEP are replaced by markers such as `[CPF 1]` and `[EMAIL 2]` before the text leaves your Mac, and the answer is restored locally before it is saved or shown. The marker map lives only in memory, per call, and is never written. Common false positives (order numbers, dates, amounts) are left alone. Images cannot be redacted, so they are not sent while hiding is on. The receipt shows "12 personal data items hidden". It makes no difference with the Local model.
+- **Retention per folder.** Folder ⋯ › **Retention…** sets two independent rules: **audio** (keep forever, or delete after 7, 30 or 90 days) and **whole meeting** (keep forever, or after 6 months or 1 year); subfolders inherit from the parent folder, and **Settings › Privacy** has a default. A daily sweep (at start and every 24 h) moves only what expired to the system **Trash** (never a permanent delete), never touches a meeting that is recording or finishing, and tells you once ("3 old audio files were moved to the Trash by the Legal folder rule").
+- **Fully local mode** (Settings › Privacy, off by default): only the Local model provider; web search, tools and MCPs, the war room with the internet, Google Calendar, update checks and transcription model downloads are blocked, and the app's network layer refuses anything that is not localhost (see [Local model](#local-model-no-internet)).
 - Questions across meetings and follow-up drafts send, to the provider **you** chose, only the notes and a few transcript passages of the meetings they need (at most 8, with a size limit). Search runs entirely on your Mac.
 - Everything Rice creates (audio, transcripts, notes, chats, settings) lives in folders and files only your user can read (permissions 0700/0600). Keys and tokens are kept in the macOS Keychain.
-- The AI CLIs run without tools that touch your files (Claude with no tools; Codex with shell, browser, computer and plugins turned off; OpenCode with every permission denied; Antigravity inside a macOS sandbox that only allows writing to an empty temporary folder, blocks commands and blocks reading your home folder). OpenCode Zen's free model may use your transcripts to improve models.
+- The AI CLIs run without tools that touch your files (Claude with no tools; Codex with shell, browser, computer and plugins turned off; OpenCode with every permission denied; Antigravity inside a macOS sandbox that only allows writing to an empty temporary folder).
+- Memory across meetings (on by default, can be turned off): facts stay only on this Mac, in `.rice/memory.jsonl`; what leaves is each meeting’s notes text to the AI provider you chose, one light-model call per meeting, plus the relevant facts alongside chat questions and “What to remember”. These calls show up in the per-meeting receipt (kind “memory”) and respect personal-data redaction, sensitive folders and Fully local mode (with the Local model provider nothing leaves your computer).
 - The transcription and voice models are downloaded once and checked by SHA-256. Google Calendar (optional) is read-only; you can use the macOS Calendar instead.
 - The app only loads its own local pages: it does not navigate to websites, open windows or request page permissions.
 - Screenshots (optional, off by default): they stay in the meeting folder. To decide when to take one, recent parts of the transcript (text) go to the AI you chose; the image only goes if it is an API key.
 - Deleting a meeting moves it to the Trash; nothing is kept elsewhere.
-- Recording laws vary: in many places you must tell participants the meeting is being recorded.
+
+![What left this computer: the receipt of a meeting](docs/images/en/39-privacy-receipt.png)
+
+![Consent notice toast](docs/images/en/40-consent.png)
+
+![Fully local mode in Settings › Privacy, with the badge in the sidebar](docs/images/en/38-fully-local.png)
+
+![Folder retention](docs/images/en/41-retention.png)
 
 ## License
 

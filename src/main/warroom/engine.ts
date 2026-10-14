@@ -365,7 +365,7 @@ export class WarRoomEngine {
       if (track === 'ideas') {
         const previous = await readIdeas(dir);
         const template = this.deps.ideaTemplate ? await this.deps.ideaTemplate(cfg.ideas.templateId) : undefined;
-        const out = await collect((this.deps.lightRunner ?? this.deps.runner)().run({ system: ideasSystem(language, template), prompt: ideasPrompt(recent, previous, language, provisional), signal: controller.signal }));
+        const out = await collect((this.deps.lightRunner ?? this.deps.runner)().run({ system: ideasSystem(language, template), prompt: ideasPrompt(recent, previous, language, provisional), signal: controller.signal, egress: { kind: 'ideas', dir } }));
         if (controller.signal.aborted) throw new Error('cancelled');
         if (unparsed(out)) throw new Error(t('warroom.err.unparsed', { text: out.trim().slice(0, 120) }));
         const added = parseIdeas(out, template?.categories ?? []).map((i): Idea => ({ id: randomUUID().slice(0, 8), at: now, ...i, ...(template ? { templateId: template.id, templateTitle: template.title } : {}) }));
@@ -380,6 +380,7 @@ export class WarRoomEngine {
             system: investigationSystem(language, tools),
             prompt: investigationPrompt(recent, contextFacts(cfg), language, provisional, cfg.facts.filter((f) => !f.dismissed).slice(-20).map((f) => f.text)),
             signal: controller.signal,
+            egress: { kind: 'warroom', dir },
             ...(tools
               ? {
                   tools: {

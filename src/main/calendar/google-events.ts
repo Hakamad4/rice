@@ -15,6 +15,8 @@ export type CalEvent = {
   attendeeNames?: string[];
   /** E-mails dos participantes (sem o do próprio usuário nem salas); só o Google informa. */
   attendeeEmails?: string[];
+  /** O e-mail do próprio usuário (o participante `self` do Google): dele sai o "domínio da própria empresa" da memória. Não vai para o renderer. */
+  selfEmail?: string;
   source: 'google' | 'eventkit';
   /** Dia inteiro: aparece na lista do Início, mas nunca gera aviso nem convite de gravação. */
   allDay?: boolean;
@@ -70,6 +72,7 @@ export function normalizeEvent(ev: RawEvent, cal: RawCalendar): CalEvent | null 
     attendees: attendees.filter((a) => !a.resource).length,
     ...(attendeeNamesOf(attendees).length > 0 ? { attendeeNames: attendeeNamesOf(attendees) } : {}),
     ...(emails.length > 0 ? { attendeeEmails: emails } : {}),
+    ...(typeof attendees.find((a) => a.self)?.email === 'string' ? { selfEmail: String(attendees.find((a) => a.self)!.email) } : {}),
     source: 'google',
     ...(allDay ? { allDay: true } : {}),
   };

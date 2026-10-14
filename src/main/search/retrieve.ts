@@ -199,7 +199,7 @@ function transcriptLines(entry: IndexedMeeting, terms: string[], max: number): s
 }
 
 // O texto da reunião não pode fechar nem abrir um dos nossos blocos.
-export const neutralizeTags = (text: string): string => text.replace(/<(\/?)(reuniao|notas|trechos|anotacoes|conversa|pergunta)\b[^>]*>/gi, '‹$1$2›');
+export const neutralizeTags = (text: string): string => text.replace(/<(\/?)(reuniao|notas|trechos|anotacoes|conversa|pergunta|memoria)\b[^>]*>/gi, '‹$1$2›');
 
 export type ContextLabels = { title: string; date: string; folder: string; notes: string; excerpts: string; none: string; truncated: string };
 

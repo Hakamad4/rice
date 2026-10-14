@@ -1,8 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readdir } from 'node:fs/promises';
 import { expect, test } from 'vitest';
 import { OnlineSpeakerClusterer } from '../../src/main/asr/speaker-cluster';
-import { ClusteringIdentifier, loadClusterState, saveClusterState } from '../../src/main/asr/speaker-identifier';
+import { ClusteringIdentifier } from '../../src/main/asr/speaker-identifier';
 import type { SpeakerEmbedder } from '../../src/main/asr/speaker-embedder';
 import { makeTmpDir } from '../helpers/tmp';
 
@@ -46,17 +45,15 @@ test('falha do embedder vira null; depois de 3 falhas seguidas desiste sem insis
   expect(embedder.calls).toBe(3);
 });
 
-test('close persiste os grupos e fecha o embedder; o estado salvo retoma a numeração', async () => {
+test('close fecha o embedder e NÃO grava nada: ao retomar, os grupos recomeçam do zero', async () => {
   const dir = await makeTmpDir();
   const embedder = new FakeEmbedder();
-  const a = new ClusteringIdentifier(embedder, new OnlineSpeakerClusterer(), (s) => saveClusterState(dir, s));
+  const a = new ClusteringIdentifier(embedder, new OnlineSpeakerClusterer());
   await a.identify(seconds(3, 0));
   await a.identify(seconds(3, 1));
   await a.close();
   expect(embedder.closed).toBe(true);
-  expect(JSON.parse(await readFile(join(dir, 'falantes.json'), 'utf8')).clusters).toHaveLength(2);
-  const resumed = new ClusteringIdentifier(new FakeEmbedder(), new OnlineSpeakerClusterer({}, await loadClusterState(dir)));
-  expect(await resumed.identify(seconds(3, 1))).toBe(2);
-  expect(await resumed.identify(seconds(3, 2))).toBe(3);
-  expect(await loadClusterState(await makeTmpDir())).toBeUndefined();
+  expect(await readdir(dir)).toEqual([]);
+  const resumed = new ClusteringIdentifier(new FakeEmbedder(), new OnlineSpeakerClusterer());
+  expect(await resumed.identify(seconds(3, 1))).toBe(1); // sem memória da sessão anterior
 });

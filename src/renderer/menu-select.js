@@ -7,7 +7,8 @@
   }
 
   /**
-   * `options`: { items: [{ value, label }], value, ariaLabel, onChoose(value) }.
+   * `options`: { items: [{ value, label, sub? }], value, ariaLabel, onChoose(value), searchFrom?, searchPlaceholder? }. `sub` é um texto secundário
+   * (ex. a data); com `searchFrom` (n de itens a partir do qual aparece a busca) o menu ganha um campo de busca no topo.
    * Devolve { root, setItems(items, value?), setValue(value) }. Esc fecha, ↑/↓ navegam, Enter escolhe, clique fora fecha.
    */
   function create(options) {
@@ -53,22 +54,37 @@
       const list = el('div', { className: 'select-list', tabIndex: -1 }, []);
       list.setAttribute('role', 'listbox');
       if (options.ariaLabel) list.setAttribute('aria-label', options.ariaLabel);
-      const nodes = items.map((item) => {
-        const opt = el('div', { className: 'menu-item select-opt' }, [
-          el('span', { textContent: item.label }, []),
-          el('span', { className: 'check' }, item.value === value ? [window.RiceIcons.icon('check')] : []),
-        ]);
-        opt.setAttribute('role', 'option');
-        opt.setAttribute('aria-selected', String(item.value === value));
-        opt.onclick = () => choose(item.value);
-        return opt;
-      });
+      let shown = items;
+      let nodes = [];
       const paint = () => {
         nodes.forEach((n, i) => n.classList.toggle('active', i === active));
         if (nodes[active] && nodes[active].scrollIntoView) nodes[active].scrollIntoView({ block: 'nearest' });
       };
-      list.append(...nodes);
-      popover = el('div', { className: 'menu-popover select-popover' }, [list]);
+      const fill = (query) => {
+        const q = String(query || '').trim().toLowerCase();
+        shown = q ? items.filter((i) => `${i.label} ${i.sub || ''}`.toLowerCase().includes(q)) : items;
+        nodes = shown.map((item) => {
+          const opt = el('div', { className: 'menu-item select-opt' }, [
+            el('span', { className: 'select-opt-text' }, [document.createTextNode(item.label), ...(item.sub ? [el('span', { className: 'select-opt-sub', textContent: item.sub }, [])] : [])]),
+            el('span', { className: 'check' }, item.value === value ? [window.RiceIcons.icon('check')] : []),
+          ]);
+          opt.setAttribute('role', 'option');
+          opt.setAttribute('aria-selected', String(item.value === value));
+          opt.onclick = () => choose(item.value);
+          return opt;
+        });
+        active = q ? 0 : Math.max(0, shown.findIndex((i) => i.value === value));
+        list.replaceChildren(...nodes);
+        paint();
+      };
+      const searchable = options.searchFrom !== undefined && items.length >= options.searchFrom;
+      const search = searchable ? el('input', { type: 'search', className: 'select-search', placeholder: options.searchPlaceholder || '', autocomplete: 'off', spellcheck: false }, []) : null;
+      if (search) {
+        search.setAttribute('aria-label', options.searchPlaceholder || options.ariaLabel || '');
+        search.oninput = () => fill(search.value);
+      }
+      fill('');
+      popover = el('div', { className: 'menu-popover select-popover' }, [...(search ? [search] : []), list]);
       popover.onkeydown = (e) => {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -76,14 +92,13 @@
           close(true);
         } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
           e.preventDefault();
-          active = Math.max(0, Math.min(items.length - 1, active + (e.key === 'ArrowDown' ? 1 : -1)));
+          active = Math.max(0, Math.min(shown.length - 1, active + (e.key === 'ArrowDown' ? 1 : -1)));
           paint();
-        } else if (e.key === 'Enter' && items[active]) {
+        } else if (e.key === 'Enter' && shown[active]) {
           e.preventDefault();
-          choose(items[active].value);
+          choose(shown[active].value);
         }
       };
-      paint();
       root.append(popover);
       // perto da borda direita (ex. o seletor alinhado à direita nas Configurações): abre para a esquerda, sem rolagem horizontal
       if (popover.getBoundingClientRect().right > document.documentElement.clientWidth - 8) {
@@ -96,7 +111,7 @@
       };
       document.addEventListener('mousedown', outside);
       offOutside = () => document.removeEventListener('mousedown', outside);
-      list.focus();
+      (search || list).focus();
     }
 
     button.onclick = () => (popover ? close(true) : open());

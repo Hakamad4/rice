@@ -53,11 +53,27 @@ export type MeetingMeta = {
   participants?: string[];
   /** Nomes dados às pessoas identificadas: `{ "2": "Ana" }` para a "Pessoa 2". */
   speakers?: Record<string, string>;
+  /** Quando o aviso de consentimento foi copiado (toast "Avise os participantes"); aparece no recibo de privacidade. */
+  consentNoticeCopiedAt?: string;
   gaps: AudioGap[];
 };
 
 /** Pasta de agrupamento de reuniões. `parentId` ausente = pasta da raiz; `order` vale entre irmãs. */
-export type Folder = { id: string; name: string; createdAt: string; order: number; parentId?: string };
+/**
+ * Regras de guarda de uma pasta. `0` = manter sempre (explícito, vale mesmo contra a regra da mãe/padrão); ausente = herdar.
+ * Áudio: apagar depois de 7, 30 ou 90 dias. Reunião inteira: depois de 6 ou 12 meses.
+ */
+export type FolderRetention = { audioDays?: 0 | 7 | 30 | 90; meetingMonths?: 0 | 6 | 12 };
+export type Folder = {
+  id: string;
+  name: string;
+  createdAt: string;
+  order: number;
+  parentId?: string;
+  /** "Pasta sensível": liga por padrão a ocultação de dados pessoais ao enviar para a IA; as subpastas herdam. */
+  sensitive?: boolean;
+  retention?: FolderRetention;
+};
 
 /** Fonte da busca na web que a resposta usou (https). */
 export type ChatSource = { url: string; title: string };

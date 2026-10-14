@@ -58,9 +58,9 @@ export type EmailDraft = { subject: string; body: string; to: string[]; mailtoLi
 /** A IA escreve assunto e corpo no idioma da reunião; os destinatários vêm dos participantes da agenda (sem o usuário). */
 export async function draftEmail(deps: ShareDeps, rawDir: unknown, signal: AbortSignal): Promise<Result<EmailDraft>> {
   try {
-    const { meta, notes } = await notesOf(deps, rawDir);
+    const { dir, meta, notes } = await notesOf(deps, rawDir);
     const { language } = await deps.languageOf(meta);
-    const run = deps.runner.run({ system: followUpSystemPrompt(language), prompt: buildFollowUpPrompt({ title: meta.title, startedAt: meta.startedAt, notes }, language), signal });
+    const run = deps.runner.run({ system: followUpSystemPrompt(language), prompt: buildFollowUpPrompt({ title: meta.title, startedAt: meta.startedAt, notes }, language), signal, egress: { kind: 'email-draft', dir } });
     let text: string;
     for (;;) {
       const step = await run.next();

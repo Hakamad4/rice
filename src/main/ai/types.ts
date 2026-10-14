@@ -1,5 +1,5 @@
 /** Provedores de IA que o Rice sabe usar. Assinatura = login do usuário (CLI); API = chave própria cobrada por uso. */
-export const AI_PROVIDERS = ['claude-sub', 'claude-api', 'chatgpt-sub', 'openai-api', 'gemini-api', 'opencode-sub', 'agy-sub'] as const;
+export const AI_PROVIDERS = ['claude-sub', 'claude-api', 'chatgpt-sub', 'openai-api', 'gemini-api', 'opencode-sub', 'agy-sub', 'local-model'] as const;
 export type AiProvider = (typeof AI_PROVIDERS)[number];
 
 export const DEFAULT_PROVIDER: AiProvider = 'claude-sub';
@@ -19,6 +19,7 @@ export const PROVIDER_LABEL: Record<AiProvider, string> = {
   'gemini-api': 'Gemini (API)',
   'opencode-sub': 'OpenCode',
   'agy-sub': 'Antigravity',
+  'local-model': 'Local model',
 };
 
 export type AiErrorKind = 'auth' | 'rate-limit' | 'network' | 'cancelled' | 'not-installed' | 'other';
@@ -55,7 +56,10 @@ export type ToolsRequest = {
 
 /** Imagem anexada (base64), só para as APIs que aceitam bloco de imagem; os CLIs a ignoram. */
 export type AiImage = { mime: string; data: string };
-export type AiRunOptions = { system: string; prompt: string; signal?: AbortSignal; tools?: ToolsRequest; images?: AiImage[] };
+/** De que reunião(ões) e para quê é a chamada: serve só para o recibo de privacidade (metadados, nunca conteúdo). */
+export type EgressKind = 'notes' | 'chat' | 'ideas' | 'warroom' | 'screenshot' | 'memory' | 'email-draft' | 'other';
+export type EgressContext = { kind: EgressKind; dir?: string; dirs?: readonly string[] };
+export type AiRunOptions = { system: string; prompt: string; signal?: AbortSignal; tools?: ToolsRequest; images?: AiImage[]; egress?: EgressContext };
 
 /** Mesma forma do `ClaudeRunner`: emite pedaços de texto e devolve o texto completo. */
 export interface AiRunner {

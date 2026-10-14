@@ -24,7 +24,7 @@
       node = el('div', { id: 'toast', className: 'toast' }, []);
       node.setAttribute('role', 'status');
       node.setAttribute('aria-live', 'polite');
-      document.body.append(node);
+      window.RiceToastStack.get().append(node);
     }
     node.textContent = text;
     node.classList.add('show');

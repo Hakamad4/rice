@@ -58,11 +58,11 @@ it('menu: só os provedores configurados têm modelos (o ativo primeiro, com ✓
   chip().click();
   await vi.waitFor(() => expect(menu()).not.toBeNull());
   expect(heads()).toEqual(['ChatGPT', 'Claude']); // ativo primeiro; Gemini e OpenCode não configurados não ganham cabeçalho
-  expect(labels()).toEqual(['Padrão', 'gpt-5.5', 'Padrão', 'Opus 5.5', 'Sonnet 5.5', 'Haiku 5.5', 'Google Gemini', 'OpenCode', 'Antigravity']);
+  expect(labels()).toEqual(['Padrão', 'gpt-5.5', 'Padrão', 'Opus 5.5', 'Sonnet 5.5', 'Haiku 5.5', 'Google Gemini', 'OpenCode', 'Antigravity', 'Modelo local']);
   expect(item('gpt-5.5').getAttribute('aria-checked')).toBe('true');
   expect(item('Padrão').getAttribute('aria-checked')).toBeNull();
   const missing = [...menu().querySelectorAll('.action-item.muted')];
-  expect(missing.map((n: any) => n.querySelector('.action-label').textContent)).toEqual(['Google Gemini', 'OpenCode', 'Antigravity']);
+  expect(missing.map((n: any) => n.querySelector('.action-label').textContent)).toEqual(['Google Gemini', 'OpenCode', 'Antigravity', 'Modelo local']);
   expect(missing.every((n: any) => n.querySelector('.action-hint').textContent === 'Configurar…')).toBe(true);
   expect(menu().textContent).toContain('Também usado nas notas.');
 });
@@ -115,7 +115,7 @@ it('OpenCode: o gratuito é uma opção explícita rotulada e, selecionado, o me
   await vi.waitFor(() => expect(chip().textContent).toBe('OpenCode · Zen grátis'));
   chip().click();
   await vi.waitFor(() => expect(menu()).not.toBeNull());
-  expect(labels()).toEqual(['Padrão', 'anthropic/claude-sonnet-4-5', 'Gratuito (OpenCode Zen)', 'Claude', 'ChatGPT', 'Google Gemini', 'Antigravity']);
+  expect(labels()).toEqual(['Padrão', 'anthropic/claude-sonnet-4-5', 'Gratuito (OpenCode Zen)', 'Claude', 'ChatGPT', 'Google Gemini', 'Antigravity', 'Modelo local']);
   expect(item('Gratuito (OpenCode Zen)').getAttribute('aria-checked')).toBe('true');
   expect(menu().textContent).toContain('pode usar suas transcrições');
 });
@@ -152,6 +152,6 @@ it('em inglês: textos do menu e do chip traduzidos', async () => {
   chip().click();
   await vi.waitFor(() => expect(menu()).not.toBeNull());
   expect(menu().textContent).toContain('Also used for notes.');
-  expect([...menu().querySelectorAll('.action-hint')].map((n: any) => n.textContent)).toEqual(['Set up…', 'Set up…', 'Set up…']);
+  expect([...menu().querySelectorAll('.action-hint')].map((n: any) => n.textContent)).toEqual(['Set up…', 'Set up…', 'Set up…', 'Set up…']);
   expect(chip().title).toContain('Change the AI and model');
 });

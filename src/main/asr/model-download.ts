@@ -1,4 +1,6 @@
+import { t } from '../i18n';
 import { renameRetry } from '../platform/fs';
+import { isLocalMode, LocalModeError } from '../privacy/local-mode';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, type WriteStream } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -75,6 +77,8 @@ export async function ensureModel(
 ): Promise<string> {
   const dest = join(dir, spec.name);
   if (await alreadyVerified(dest)) return dest;
+  // Modo 100% local: o modelo precisa já estar baixado (aqui só entra quem ainda não está); avisa em vez de tentar a rede
+  if (isLocalMode()) throw new LocalModeError(t('local.mode.model-missing', { name: spec.name }));
   await mkdir(dir, { recursive: true });
 
   let expectedSha = spec.sha256?.toLowerCase() ?? '';

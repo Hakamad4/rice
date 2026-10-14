@@ -29,6 +29,7 @@
     trash: [p('M3 6h18'), p('M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6'), p('M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2'), p('M10 11v6'), p('M14 11v6')],
     pause: [['rect', { x: 14, y: 4, width: 4, height: 16, rx: 1 }], ['rect', { x: 6, y: 4, width: 4, height: 16, rx: 1 }]],
     play: [p('M6 3l14 9-14 9z')],
+    'check-circle': [circle(12, 12, 9), p('m8.5 12.5 2.5 2.5 4.5-5')],
     camera: [p('M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z'), circle(12, 13, 3)],
     more: [dot(5, 12), dot(12, 12), dot(19, 12)],
     'chevron-right': [p('m9 18 6-6-6-6')],
