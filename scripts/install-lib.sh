@@ -29,6 +29,18 @@ rice_running_paths() { rice_running | sed -E 's/^[^ ]+ //' | sort -u; }
 # O valor de uma chave de texto de um JSON simples ("chave": "valor"), sem depender de node/python.
 rice_json_field() { sed -nE "s/.*\"$2\": *\"([^\"]*)\".*/\1/p" "$1" 2>/dev/null | head -n 1; }
 
+# Onde ficam as notas do Rice: a pasta escolhida nas configurações do app, ou ~/Rice (o padrão do app).
+# Where Rice keeps the notes: the folder chosen in the app settings, or ~/Rice (the app default).
+rice_notes_root() {
+  local r
+  r="$(rice_json_field "$HOME/Library/Application Support/Rice/settings.json" root)"
+  printf '%s' "${r:-$HOME/Rice}"
+}
+
+# As duas pastas existem e são a mesma: compara o inode, o que pega ~/rice vs ~/Rice no APFS (não distingue maiúsculas) e links.
+# Both folders exist and are the same one: compares the inode, which catches ~/rice vs ~/Rice on APFS (case-insensitive) and links.
+rice_same_dir() { [ -d "$1" ] && [ -d "$2" ] && [ "$(stat -f %i "$1")" = "$(stat -f %i "$2")" ]; }
+
 rice_installed_commit() { rice_json_field "$RICE_APP/Contents/Resources/app/out/build-info.json" commit; }
 rice_installed_version() { rice_json_field "$RICE_APP/Contents/Resources/app/package.json" version; }
 

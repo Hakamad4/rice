@@ -23,6 +23,16 @@ MAJOR="$(sw_vers -productVersion | cut -d. -f1)"
 [ "$MAJOR" -ge 14 ] || die "é preciso o macOS 14 ou mais novo (você tem $(sw_vers -productVersion))." "macOS 14 or newer is required (you have $(sw_vers -productVersion))."
 say "macOS $(sw_vers -productVersion), arm64: ok" "macOS $(sw_vers -productVersion), arm64: ok"
 
+# 1b) o clone não pode ser a pasta de notas do Rice (~/Rice por padrão; no APFS, ~/rice é a MESMA pasta): o app tranca o que há nela
+# (0700/0600, o que tira o +x destes scripts) e grava as reuniões no meio do código.
+# 1b) the clone cannot be the Rice notes folder (~/Rice by default; on APFS ~/rice is the SAME folder): the app locks what is in it
+# (0700/0600, which strips +x from these scripts) and saves meetings in the middle of the source.
+NOTES="$(rice_notes_root)"
+if rice_same_dir "$PWD" "$NOTES"; then
+  die "$PWD é a pasta das suas notas do Rice: o código não pode ficar nela. Baixe o código em outra pasta: RICE_DIR=\$HOME/rice-src curl -fsSL https://ricenotes.app/install | bash (as reuniões continuam em $NOTES)." \
+      "$PWD is your Rice notes folder: the source cannot live in it. Download the source into another folder: RICE_DIR=\$HOME/rice-src curl -fsSL https://ricenotes.app/install | bash (the meetings stay in $NOTES)."
+fi
+
 # 2) Xcode Command Line Tools (compilam os binários nativos em Swift)
 if ! xcode-select -p >/dev/null 2>&1; then
   [ "$CHECK_ONLY" = 1 ] || xcode-select --install >/dev/null 2>&1 || true

@@ -48,7 +48,7 @@ Requires a Mac with Apple Silicon (arm64) and macOS 14 or newer. Transcription u
 
 ### Option 1 — recommended: install from Terminal
 
-One line. It downloads the source into `~/rice`, builds it and puts **Rice.app** in `/Applications`. Because the app is built on your Mac, macOS does not block it (no `xattr` or "Open Anyway"). Running it again updates Rice.
+One line. It downloads the source into `~/rice-src`, builds it and puts **Rice.app** in `/Applications`. Because the app is built on your Mac, macOS does not block it (no `xattr` or "Open Anyway"). Running it again updates Rice.
 
 ```bash
 curl -fsSL https://ricenotes.app/install | bash
