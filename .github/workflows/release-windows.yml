@@ -1,0 +1,50 @@
+name: release-windows
+
+# Quando uma release do GitHub é publicada, gera o instalador do Windows (NSIS, sem assinatura) e ANEXA à release o .exe, o .blockmap e o
+# latest.yml. O electron-updater (atualização automática do Rice no Windows) lê o latest.yml da última release; o install-win.ps1 também o usa
+# para conferir o SHA-256 do .exe. Sem esses três arquivos na release, a atualização automática não encontra nada.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag da release que recebe os arquivos (ex.: v0.5.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Helpers
+        run: |
+          cmake -S native/win -B build/win -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/win
+      - name: Instalador NSIS (sem assinatura); o electron-builder gera também o latest.yml e o .blockmap
+        run: npm run dist:win
+      - name: Conferir que os três arquivos existem
+        shell: bash
+        run: |
+          ls -l dist/Rice-Setup-*.exe dist/Rice-Setup-*.exe.blockmap dist/latest.yml
+          cat dist/latest.yml
+      - name: Anexar à release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: gh release upload "$TAG" dist/Rice-Setup-*.exe dist/Rice-Setup-*.exe.blockmap dist/latest.yml --clobber

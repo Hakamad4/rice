@@ -1,6 +1,7 @@
 import type { TranscriptionLanguage } from '../../shared/types';
 import { modelsDir, whisperServerBinary } from '../asr/config';
-import { ensureModel, WHISPER_MODEL, type DownloadProgress } from '../asr/model-download';
+import { ensureModel, type DownloadProgress } from '../asr/model-download';
+import { currentPlan } from '../asr/transcriber-plan';
 import type { SpeakerIdentifier } from '../asr/speaker-identifier';
 import { AsrPipeline } from '../asr/pipeline';
 import { createSileroSession, SileroVad } from '../asr/silero-vad';
@@ -18,9 +19,9 @@ export type AsrServiceDeps = {
 };
 
 const defaultDeps: AsrServiceDeps = {
-  ensureModel: (onProgress) => ensureModel(WHISPER_MODEL, modelsDir(), { onProgress }),
+  ensureModel: (onProgress) => ensureModel(currentPlan().model, modelsDir(), { onProgress }), // Mac: sempre o large-v3-turbo q5_0; Windows: o plano do hardware/configuração
   createServer: async (modelPath) => {
-    const server = new WhisperServer({ binary: whisperServerBinary(), modelPath });
+    const server = new WhisperServer({ binary: whisperServerBinary(), modelPath, threads: currentPlan().threads });
     await server.start();
     return server;
   },

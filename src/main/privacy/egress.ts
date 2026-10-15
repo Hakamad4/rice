@@ -73,7 +73,7 @@ export type ReceiptRow = { id: string; label: string; value: string; /** true = 
 export type Receipt = { summary: string; nothingLeft: boolean; rows: ReceiptRow[] };
 
 type Tr = (key: string, vars?: Record<string, string | number>) => string;
-type Meta = { consentNoticeCopiedAt?: string };
+type Meta = { consentNoticeCopiedAt?: string; micName?: string; micChanges?: Array<{ at: string; name: string }> };
 
 const GROUPS: Array<{ id: string; kinds: EgressKind[] }> = [
   { id: 'notes', kinds: ['notes'] },
@@ -99,6 +99,11 @@ export function buildReceipt(entries: readonly EgressRecord[], meta: Meta, t: Tr
     { id: 'audio', label: t('receipt.audio'), value: t('receipt.audio.value'), sent: false },
     { id: 'transcript', label: t('receipt.transcript'), value: t('receipt.transcript.value'), sent: false },
   ];
+  // o microfone que foi capturado (nome do dispositivo; com trocas no meio, a sequência): o áudio em si nunca sai do computador
+  if (meta.micName) {
+    const names = (meta.micChanges ?? []).map((c) => c.name).filter((n, i, all) => i === 0 || n !== all[i - 1]);
+    rows.push({ id: 'mic', label: t('receipt.mic'), value: names.length > 1 ? names.join(' → ') : meta.micName, sent: false });
+  }
   for (const group of GROUPS) {
     const list = entries.filter((e) => group.kinds.includes(e.kind));
     if (list.length === 0 && !ALWAYS.has(group.id)) continue;

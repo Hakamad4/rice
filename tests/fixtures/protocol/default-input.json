@@ -1,0 +1,8 @@
+{
+  "comment": "Evento opcional default-input do rice-detector do Mac (consulta CoreAudio da entrada padrão; o rice-audio usa essa mesma entrada). id = UID do dispositivo. Nulos = sem entrada.",
+  "events": [
+    {"event":"default-input","id":"BuiltInMicrophoneDevice","name":"Microfone do MacBook Pro"},
+    {"event":"default-input","id":"AppleUSBAudioEngine:Unknown Manufacturer:fifine Microphone:3100000:2","name":"fifine Microphone"},
+    {"event":"default-input","id":null,"name":null}
+  ]
+}

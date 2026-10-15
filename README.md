@@ -101,39 +101,38 @@ or click **Update** in **Settings > Updates** when Rice shows "New version avail
 
 **Installed from the .dmg:** download the newest `.dmg` from **Releases**, drag **Rice** to **Applications** replacing the old one and run the `xattr` command above again.
 
-**Windows:** download the newest installer from **Releases** and run it over the old one; it replaces the previous version.
+**Windows:** automatic: **Settings › Updates** shows "New version available" › **Download and install** › **Restart and update** (see the Windows section below). You can also run the newest installer from **Releases** over the old one; it replaces the previous version.
 
 After updating, macOS may ask for the permissions again (microphone, system audio, Screen Recording, Calendar), because the app is not signed by Apple.
 
-### Windows (x64, Windows 10 22H2 or 11) — work in progress
+### Windows (x64, Windows 10 22H2 or 11) — ready for testing
 
-The Windows port is built and tested in CI, but has not been tried on a real PC yet. In PowerShell, from the repository folder:
+The Windows port is built and tested in CI (and its UI is checked in the simulated-Windows test instance), but **it has not been tried on a real PC yet**: treat it as a release candidate and report what you find.
+
+**Install (recommended): the `.exe` from the latest release.** Download `Rice-Setup-<version>-x64.exe` from **Releases** and run it. It installs per user (no administrator) and is unsigned: SmartScreen may show "Windows protected your PC"; choose "More info" and "Run anyway".
+
+**Install in one line (PowerShell).** It downloads the installer of the latest release from GitHub, checks its hash against the release's `latest.yml` (a mismatch deletes the file and installs nothing) and runs it:
+
+```powershell
+irm https://raw.githubusercontent.com/WalissonCF/rice/main/install-win.ps1 | iex
+```
+
+(Once the site publishes it, `irm https://ricenotes.app/install.ps1 | iex` will do the same.)
+
+**Updates are automatic.** In **Settings › Updates** Rice shows "New version X available" › **Download and install** (with progress) › **Restart and update**; the installer runs and Rice opens again. It never updates in the middle of a recording (it waits for it to end), it respects **Check for updates** (off means nothing is queried or downloaded) and Fully local mode blocks the check. It only works in the app installed by the `.exe`, and needs the release to carry `latest.yml` and the `.blockmap` (the `release-windows` workflow attaches them).
+
+**Start with Windows** (Settings › Startup, off by default) opens Rice in the tray, without a window, so the shortcut and the meeting alerts are ready. **Microphone** (Settings › Audio): "Windows default (recommended)" or a specific input; use the same microphone you picked in Teams or Zoom. A chip near **Stop** shows which microphone is being recorded. With 8 GB of RAM or less Rice picks the **light** transcription model (Settings › Audio shows which one is in use and why, and lets you force it) and keeps live ideas and the war room more contained.
+
+**Calendar without the system calendar:** in **Settings › Calendar** use **Subscribe by link (ICS)** (Outlook/Microsoft 365: Publish a calendar; Google: "Secret address in iCal format"; iCloud and Fastmail also work) or connect Google directly.
+
+**Differences from the Mac:** no Antigravity, no Reminders, no system Calendar; system audio is captured by WASAPI loopback (echo cancellation is the part still being finished); native notifications have no action buttons (clicking the notice does the main action); the keys are protected by Windows (DPAPI) and shortcuts use Ctrl.
+
+**For developers only:** `install.ps1` builds Rice from the source (it needs Node 22, CMake and the Visual Studio C++ tools):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File install.ps1 -Check   # checks Windows, Node 22, CMake and the Visual Studio C++ tools
 powershell -ExecutionPolicy Bypass -File install.ps1           # builds the helpers and the installer (dist\Rice-Setup-*.exe) and opens it
 ```
-
-The installer is per user (no administrator) and unsigned: SmartScreen may show "Windows protected your PC"; choose "More info" and "Run anyway". Differences from the Mac: no Antigravity, no Reminders, no system Calendar (the agenda comes from Google), the keys are protected by Windows (DPAPI) and shortcuts use Ctrl.
-
-### Running from source (development)
-
-```bash
-brew install whisper.cpp meson ninja pkg-config
-npm install
-node node_modules/electron/install.js   # downloads the Electron app shell
-scripts/build-native.sh                 # native audio helpers (needs internet the first time)
-npm run app                             # build and open Rice
-```
-
-Good to know:
-
-- `scripts/build-native.sh` first builds the echo canceller (WebRTC audio processing, downloaded and checked against a fixed SHA-256), then the two Swift helpers. Next runs are fast.
-- The transcription server is `whisper-server` from Homebrew. Rice expects it at `/opt/homebrew/bin/whisper-server`. If yours is somewhere else, start Rice with `RICE_WHISPER_SERVER=/path/to/whisper-server npm run app`.
-- The transcription model is downloaded automatically on first launch into `~/Library/Application Support/Rice/models`, and checked with a SHA-256. By default Rice uses the quantized `large-v3-turbo` (about 0.6 GB). `RICE_WHISPER_MODEL=f16` switches to the full model (about 1.6 GB).
-- To open Rice again later, open **Rice** from Applications (installed with the .dmg or `install.sh`), or run `npm run app` from the `rice` folder when running from source.
-
-**Dock and Applications.** There is no `.app` bundle yet. While it runs, you can keep Rice in the Dock with right click on its icon › Options › Keep in Dock. *Coming soon: a `.dmg` and a Homebrew cask.*
 
 ## First steps
 
@@ -232,6 +231,8 @@ Each option fills in the default port above (checked in each project's official 
 
 Click **New meeting**, then **Record**. When you stop, Rice writes the notes. If the meeting is not over, open it later and click **Continue recording**: the new audio and transcript are added to the same meeting.
 
+**Which microphone?** While recording, a chip near **Stop** shows the microphone being captured (hover for the full name and whether it is the system default or the one you chose); if it changes mid-meeting, Rice says "Microphone switched to X". The name is saved in the meeting (shown in its details and in the privacy receipt). On the Mac Rice records the macOS default input (System Settings › Sound › Input); on Windows you can choose the microphone in **Settings › Audio**.
+
 Rice also notices meetings (Zoom, Meet, Teams) and calendar events and offers to record.
 
 ![Home with the meeting happening now and Record now](docs/images/en/31-record-now.webp)
@@ -251,6 +252,8 @@ Generating the notes again (another template, or a new transcript) no longer los
 ### Calendar
 
 **Home** shows your next 7 days grouped by day (Today, Tomorrow, "Fri, Oct 17"). All-day events sit in one discreet line per day; timed events show their range ("09:00–09:30") and **Join** / **Take notes** only when they are meetings (a call link or attendees). Connect the **macOS Calendar** (recommended: add your Google account in System Settings › Internet Accounts) or Google directly in **Settings › Calendar**. Event titles stay on your Mac: only the title of a meeting you record is used, and all-day events never trigger a recording prompt.
+
+**Subscribe by link (ICS)** (Mac and Windows): in **Settings › Calendar** paste the private link of your calendar (Outlook/Microsoft 365: Settings › Calendar › Shared calendars › Publish a calendar; Google: Settings › your calendar › Integrate calendar › "Secret address in iCal format"; iCloud and Fastmail work too; `webcal://` is fine). Rice reads only that link, every 10 minutes, over https, with a size limit, and handles repeating events (with exceptions), time zones, all-day and cancelled events. The link is a secret: it is stored encrypted (DPAPI on Windows, Keychain on the Mac), never shown back and never sent to the interface in full. Fully local mode blocks it.
 
 ![Home with the calendar](docs/images/en/24-calendar.webp)
 

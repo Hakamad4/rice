@@ -2,6 +2,7 @@ import { isAbsolutePath } from '../platform';
 import { renameRetry } from '../platform/fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { getLightFactor } from '../platform/light'; // modo leve: os intervalos padrão ficam maiores
 
 export const INTERVALS = [2, 5, 10, 15] as const;
 export type IdeaKind = 'idea' | 'question' | 'risk';
@@ -24,7 +25,7 @@ export type WarRoomConfig = {
 /** Quanto "Continuar mais" libera de uma vez. */
 export const MORE_CYCLES = 30;
 
-export const defaultConfig = (): WarRoomConfig => ({ kind: 'meeting', ideas: { on: false, intervalMin: 5 }, investigation: { intervalMin: 5, paused: false }, sources: { web: false, mcp: false, folder: null }, ideasCycles: 0, investigationCycles: 0, extraCycles: 0, facts: [] });
+export const defaultConfig = (): WarRoomConfig => ({ kind: 'meeting', ideas: { on: false, intervalMin: 5 * getLightFactor() }, investigation: { intervalMin: 5 * getLightFactor(), paused: false }, sources: { web: false, mcp: false, folder: null }, ideasCycles: 0, investigationCycles: 0, extraCycles: 0, facts: [] });
 
 const obj = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {});
 const count = (v: unknown) => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : 0);

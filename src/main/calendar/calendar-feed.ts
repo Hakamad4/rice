@@ -8,6 +8,7 @@ export const REFRESH_MS = 5 * 60_000;
 export class CalendarFeed extends EventEmitter {
   private google: CalEvent[] = [];
   private eventkit = new Map<string, CalEvent>();
+  private ics: CalEvent[] = [];
   private calendars = 0;
   private timer: NodeJS.Timeout | null = null;
   /** Geração monotônica: um refresh só grava se ninguém o invalidou nem começou outro depois. */
@@ -29,7 +30,7 @@ export class CalendarFeed extends EventEmitter {
   }
 
   events(): CalEvent[] {
-    return [...mergeEvents(this.google, [...this.eventkit.values()]), ...this.testEvents];
+    return [...mergeEvents(this.google, [...this.eventkit.values()], this.ics), ...this.testEvents];
   }
 
   calendarCount(): number {
@@ -38,6 +39,12 @@ export class CalendarFeed extends EventEmitter {
 
   addEventKit(ev: CalEvent): void {
     this.eventkit.set(ev.id, ev);
+    this.emit('change');
+  }
+
+  /** Troca TODOS os eventos do link ICS pela lista nova (ou esvazia, com `[]`). */
+  setIcs(events: CalEvent[]): void {
+    this.ics = events;
     this.emit('change');
   }
 

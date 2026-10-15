@@ -307,6 +307,11 @@
       ]);
     }
 
+    // modo leve (pouca memória): ideias ao vivo e war room vêm desligados por padrão, com ciclos mais espaçados; aqui só a explicação
+    let lightMode = false;
+    if (rice.audioProfile) rice.audioProfile().then((p) => { lightMode = Boolean(p && p.light); }).catch(() => {});
+    const lightNote = () => el('p', { className: 'ai-note-line wr-light-note' }, [el('span', { className: 'ico' }, [window.RiceIcons.icon('info')]), el('span', { textContent: t('warroom.light-note') }, [])]);
+
     function ideasView() {
       const status = statusBlock(false);
       const bar = footer(status, [], true);
@@ -477,7 +482,10 @@
         seenMemory.set(dir, new Set(ids));
       },
       setKind: (kind) => rice.warRoomSet(dir, { kind }),
-      view: (id) => (!data ? [] : id === 'ideas' ? ideasView() : data.cfg.kind === 'warroom' ? warView() : notWarView()),
+      view: (id) => {
+        const nodes = !data ? [] : id === 'ideas' ? ideasView() : data.cfg.kind === 'warroom' ? warView() : notWarView();
+        return lightMode && nodes.length > 0 ? [lightNote(), ...nodes] : nodes; // modo leve: avisa por que a IA ao vivo vem contida
+      },
     };
   }
 

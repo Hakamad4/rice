@@ -232,3 +232,18 @@ describe('ocultar dados pessoais no ponto central dos runners', () => {
     expect(JSON.stringify(out.records)).not.toMatch(/\[CPF|\[EMAIL|529|acme/);
   });
 });
+
+describe('recibo: microfone capturado', () => {
+  const make = (meta = {}) => buildReceipt([], meta, (k, v) => t(k, v), (k, n, v) => tn(k, n, v), (p) => p);
+  test('mostra o microfone (o áudio em si nunca sai) e a sequência quando trocou no meio', () => {
+    const one = make({ micName: 'MacBook Pro Microphone', micChanges: [{ at: '2026-10-14T10:00:00-03:00', name: 'MacBook Pro Microphone' }] });
+    const row = one.rows.find((r) => r.id === 'mic')!;
+    expect(row).toMatchObject({ value: 'MacBook Pro Microphone', sent: false });
+    const sw = make({ micName: 'FIFINE K669', micChanges: [{ at: 'a', name: 'Realtek Audio' }, { at: 'b', name: 'FIFINE K669' }] });
+    expect(sw.rows.find((r) => r.id === 'mic')!.value).toBe('Realtek Audio → FIFINE K669');
+    expect(sw.nothingLeft).toBe(true);
+  });
+  test('sem informação de microfone, a linha não aparece', () => {
+    expect(make().rows.some((r) => r.id === 'mic')).toBe(false);
+  });
+});

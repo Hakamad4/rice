@@ -2,10 +2,10 @@ name: windows
 
 on:
   push:
-    branches: [feat/win-native, feat/integration, main, windows]
-    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml', 'scripts/build-webrtc-apm.ps1', 'vitest.config.ts', 'tests/native/**']
+    branches: [feat/win-native, feat/integration, main, windows, 'feat/windows-parity-*']
+    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml', 'scripts/build-webrtc-apm.ps1', 'vitest.config.ts', 'tests/native/**', 'src/main/screenshots/**', 'tests/screenshots/**', 'install.ps1', 'scripts/stage-native-win.ps1']
   pull_request:
-    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml', 'scripts/build-webrtc-apm.ps1', 'vitest.config.ts', 'tests/native/**']
+    paths: ['native/**', 'tests/fixtures/protocol/**', 'src/shared/frames.ts', 'src/main/session/**', '.github/workflows/windows.yml', 'scripts/build-webrtc-apm.ps1', 'vitest.config.ts', 'tests/native/**', 'src/main/screenshots/**', 'tests/screenshots/**', 'install.ps1', 'scripts/stage-native-win.ps1']
   workflow_dispatch:
 
 jobs:
@@ -20,10 +20,31 @@ jobs:
         with:
           arch: x64
 
-      - name: Configurar (CMake + Ninja, sem AEC)
-        run: cmake -S native/win -B build/win -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - name: Compilar rice-audio.exe, rice-detector.exe e os testes
+      - name: meson e ninja (versões fixas)
+        run: pip install meson==1.5.2 ninja==1.11.1.1
+
+      # O WebRTC AEC3 (webrtc-audio-processing 2.1) é compilado com MSVC (/MT, estático) a partir do tarball de native/vendor,
+      # com SHA-256 fixado no script; o prefixo pronto fica em cache e só é refeito quando o script ou o tarball mudam.
+      - name: Cache do webrtc-audio-processing
+        id: apm-cache
+        uses: actions/cache@v4
+        with:
+          path: native/third_party/webrtc-apm-win
+          key: webrtc-apm-win-msvc-${{ hashFiles('scripts/build-webrtc-apm.ps1', 'native/vendor/webrtc-audio-processing-2.1.tar.xz') }}
+
+      - name: Compilar o webrtc-audio-processing
+        if: steps.apm-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: scripts/build-webrtc-apm.ps1
+
+      - name: Configurar (CMake + Ninja, com AEC; falha se o AEC não entrar)
+        run: cmake -S native/win -B build/win -G Ninja -DCMAKE_BUILD_TYPE=Release -DRICE_REQUIRE_AEC=ON
+
+      - name: Compilar rice-audio.exe (com AEC), rice-detector.exe e os testes
         run: cmake --build build/win
 
       - name: Testes portáveis (comparam com o Swift)
@@ -38,6 +59,15 @@ jobs:
           diff gap.stderr tests/fixtures/protocol/gap.stderr || diff <(tr -d '\r' < gap.stderr) tests/fixtures/protocol/gap.stderr
           ls -l tone.bin tests/fixtures/protocol/tone.bin
 
+      - name: Selftest do AEC no rice-audio.exe (eco sintético atrasado, energia cai e a voz sobrevive)
+        shell: bash
+        run: |
+          build/win/rice-audio.exe --selftest-aec | tee aec.json
+          node -e "const r=JSON.parse(require('fs').readFileSync('aec.json','utf8'));if(!(r.reductionDb>=15&&r.voiceLossDb<6)){console.error('AEC fraco',r);process.exit(1)}"
+
+      - uses: actions/setup-python@v5  # node-gyp quebra com o Python 3.14 das maquinas novas
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -49,6 +79,7 @@ jobs:
         shell: bash
         env:
           RICE_WIN_BIN_DIR: ${{ github.workspace }}/build/win
+          RICE_EXPECT_AEC: '1'
         run: npx vitest run tests/native/win-parity.test.ts
 
       - name: Smoke do detector no registro real do runner (não deve falhar nem travar)
@@ -63,24 +94,3 @@ jobs:
           path: |
             build/win/rice-audio.exe
             build/win/rice-detector.exe
-
-  # Experimental: descobre se o WebRTC AEC3 fecha no MSVC. Falhar aqui não derruba o resto.
-  aec:
-    runs-on: windows-latest
-    continue-on-error: true
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
-      - run: pip install meson ninja
-      - name: Compilar o webrtc-audio-processing
-        run: pwsh scripts/build-webrtc-apm.ps1
-      - name: Compilar o rice-audio com AEC e rodar o selftest
-        shell: bash
-        run: |
-          cmake -S native/win -B build/aec -G Ninja -DCMAKE_BUILD_TYPE=Release -DRICE_WITH_AEC=ON -DRICE_WEBRTC_DIR="$PWD/native/third_party/webrtc-apm-win"
-          cmake --build build/aec --target rice-audio
-          build/aec/rice-audio.exe --selftest-aec | tee aec.json
-          node -e "const r=JSON.parse(require('fs').readFileSync('aec.json','utf8'));if(!(r.reductionDb>=15))process.exit(1)"

@@ -27,3 +27,30 @@ it('os arquivos do logo existem: ícone 1024 com alfa, .icns, fonte svg e imagen
   expect(readFileSync('assets/icon/rice-icon.svg', 'utf8')).toContain('#F4F1EA');
 });
 
+
+import { existsSync, readFileSync } from 'node:fs';
+import { findWinTrayIcon } from '../../src/main/app/app-icon';
+
+it('Windows: o ícone da bandeja acompanha a barra de tarefas (preto na clara, branco na escura), ou null sem ele', () => {
+  expect(findWinTrayIcon('/app/out', false, () => true)).toBe(p('/app/out/trayWin-light.png'));
+  expect(findWinTrayIcon('/app/out', true, () => true)).toBe(p('/app/out/trayWin-dark.png'));
+  expect(findWinTrayIcon('/app/out', true, (x) => x.includes('assets'))).toBe(p('/app/assets/icon/trayWin-dark.png'));
+  expect(findWinTrayIcon('/app/out', false, () => false)).toBeNull();
+});
+
+it('os ícones da bandeja do Windows existem em 16, 20, 24 e 32 px (100%, 125%, 150% e 200% de escala) e o .ico tem todos os tamanhos', () => {
+  const dims = (file: string) => {
+    const b = readFileSync(file);
+    return [b.readUInt32BE(16), b.readUInt32BE(20)];
+  };
+  for (const theme of ['light', 'dark']) {
+    for (const [suffix, size] of [['', 16], ['@1.25x', 20], ['@1.5x', 24], ['@2x', 32]] as const) {
+      const file = `assets/icon/trayWin-${theme}${suffix}.png`;
+      expect(existsSync(file), file).toBe(true);
+      expect(dims(file)).toEqual([size, size]);
+    }
+  }
+  const ico = readFileSync('assets/icon/icon.ico');
+  const sizes = Array.from({ length: ico.readUInt16LE(4) }, (_, i) => ico[6 + 16 * i] || 256);
+  expect(sizes).toEqual([16, 24, 32, 48, 64, 128, 256]); // a barra de título, o Alt+Tab, a barra de tarefas e o instalador pegam cada um o seu
+});

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { DetectorClient } from '../../src/main/session/detector-client';
@@ -18,7 +19,7 @@ function client(script: Array<{ at: number; line: object }>, current?: object, d
   const c = new DetectorClient(FAKE, { releaseDebounceMs: debounce, restartBackoffMs: backoff });
   clients.push(c);
   const seen: Array<[string, unknown, number]> = [];
-  for (const name of ['meeting-app-started', 'meeting-app-ended', 'upcoming', 'calendar-access', 'exit']) c.on(name, (p) => seen.push([name, p, Date.now()]));
+  for (const name of ['meeting-app-started', 'meeting-app-ended', 'upcoming', 'calendar-access', 'default-input', 'exit']) c.on(name, (p) => seen.push([name, p, Date.now()]));
   c.start();
   return { c, seen };
 }
@@ -130,4 +131,19 @@ test('listEvents manda from/to sem milissegundos (o detector nativo não lia "�
   child.stdin.write = (chunk: string) => ((sent += chunk), write(chunk));
   await c.listEvents(new Date('2026-10-10T03:00:00.000Z'), new Date('2026-10-18T03:00:00.000Z'));
   expect(JSON.parse(sent)).toEqual({ cmd: 'list-events', from: '2026-10-10T03:00:00Z', to: '2026-10-18T03:00:00Z' });
+});
+
+test('default-input (opcional, só Mac): guarda o nome do microfone e avisa a cada troca; sem o evento nada muda', async () => {
+  const fixture = JSON.parse(readFileSync(resolve(__dirname, '../fixtures/protocol/default-input.json'), 'utf8')) as { events: object[] };
+  const { c, seen } = client([...fixture.events.map((line, i) => ({ at: 10 + i * 20, line })), sentinel(100)]);
+  const devices: unknown[] = [];
+  c.on('default-input', (d) => devices.push(d));
+  expect(c.inputDevice).toBeNull();
+  await waitSentinel(seen);
+  expect(devices).toEqual([
+    { id: 'BuiltInMicrophoneDevice', name: 'Microfone do MacBook Pro' },
+    { id: 'AppleUSBAudioEngine:Unknown Manufacturer:fifine Microphone:3100000:2', name: 'fifine Microphone' },
+    null,
+  ]);
+  expect(c.inputDevice).toBeNull(); // o último evento tinha nulos
 });

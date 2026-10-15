@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -7,6 +7,9 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { FrameDecoder, type AudioFrame } from '../../src/shared/frames';
 import { AudioCapture } from '../../src/main/session/audio-capture';
 import { DetectorClient } from '../../src/main/session/detector-client';
+import { listWindowsWin } from '../../src/main/screenshots/win-windows';
+import { parseMicDeviceEvent, parseMicInputs } from '../../src/main/platform/mic-input';
+import { chooseTarget, findWindowSource } from '../../src/main/screenshots/target';
 
 // Os helpers C++ (native/win) contra o contrato gravado do Swift. No CI do Windows, RICE_WIN_BIN_DIR aponta para os .exe
 // compilados com MSVC; nos demais sistemas o teste compila a parte portável com o c++ do sistema (e pula se não houver).
@@ -37,9 +40,9 @@ beforeAll(async () => {
   const flags = ['-std=c++17', '-O1', '-pthread'];
   audio = join(out, 'rice-audio');
   detector = join(out, 'rice-detector');
-  const core = ['echo_canceller', 'recorder', 'selftests', 'sinks', 'simulated_platform', 'output_classify', 'main'].map((f) => `${WIN}/audio/${f}.cpp`);
+  const core = ['echo_canceller', 'recorder', 'selftests', 'sinks', 'simulated_platform', 'output_classify', 'mic_device', 'main'].map((f) => `${WIN}/audio/${f}.cpp`);
   await run('c++', [...flags, ...common, ...core, '-o', audio], { maxBuffer: 64 * 1024 * 1024 });
-  const det = ['app_matcher', 'mic_watcher', 'mic_monitor', 'main'].map((f) => `${WIN}/detector/${f}.cpp`);
+  const det = ['app_matcher', 'mic_watcher', 'mic_monitor', 'window_list', 'main'].map((f) => `${WIN}/detector/${f}.cpp`);
   await run('c++', [...flags, ...common, ...det, '-o', detector], { maxBuffer: 64 * 1024 * 1024 });
 }, 300_000);
 
@@ -164,6 +167,129 @@ describe('rice-detector (C++) contra o Swift', () => {
       client.stop();
       delete process.env.RICE_DETECTOR_FAKE_MIC_STEPS;
       delete process.env.RICE_DETECTOR_FAKE_MIC_INTERVAL_MS;
+    }
+  });
+});
+
+describe('rice-audio (C++): microfone escolhido', () => {
+  test.skipIf(skip)('--list-inputs imprime a lista de entradas que o app lê (simulado: uma entrada padrão)', async () => {
+    const { stdout } = await run(audio, ['--list-inputs', '--simulate-capture']);
+    expect(parseMicInputs(stdout)).toEqual([{ id: 'sim-default', name: 'Microfone simulado', isDefault: true, state: 'active' }]);
+  });
+
+  test.skipIf(skip)('o AudioCapture real recebe mic-device ao abrir; RICE_MIC_DEVICE desconhecido cai no padrão; sem a variável segue o padrão', async () => {
+    process.env.RICE_AUDIO_SIMULATE = '1';
+    const run1 = async (device: string | undefined) => {
+      if (device) process.env.RICE_MIC_DEVICE = device;
+      else delete process.env.RICE_MIC_DEVICE;
+      const capture = new AudioCapture(audio);
+      const seen: Array<ReturnType<typeof parseMicDeviceEvent>> = [];
+      const events: string[] = [];
+      capture.on('event', (e: { event: string }) => {
+        events.push(e.event);
+        seen.push(parseMicDeviceEvent(e));
+      });
+      capture.start();
+      await new Promise((r) => setTimeout(r, 600));
+      await capture.stop();
+      return { mic: seen.filter(Boolean), events };
+    };
+    try {
+      for (const device of [undefined, 'um-id-que-nao-existe']) {
+        const r = await run1(device);
+        expect(r.mic).toEqual([{ id: 'sim-default', name: 'Microfone simulado', isDefault: true, chosen: false, reason: 'open' }]);
+        expect(r.events).toContain('started'); // os eventos existentes continuam
+      }
+    } finally {
+      delete process.env.RICE_AUDIO_SIMULATE;
+      delete process.env.RICE_MIC_DEVICE;
+    }
+  });
+});
+
+describe('rice-audio (C++): AEC', () => {
+  // No CI do Windows (RICE_EXPECT_AEC=1) o .exe TEM de trazer o AEC3; nos outros ambientes sem o APM, o selftest avisa em JSON.
+  test.skipIf(skip)('--selftest-aec: com AEC o eco sintético cai >= 15 dB e a voz fica; sem AEC, erro explícito', async () => {
+    const { stdout } = await run(audio, ['--selftest-aec']);
+    const r = JSON.parse(stdout.trim().split(/\r?\n/).pop()!) as { error?: string; reductionDb?: number; voiceLossDb?: number };
+    if (r.error) {
+      expect(process.env.RICE_EXPECT_AEC, `AEC esperado neste build, mas: ${r.error}`).toBeUndefined();
+      expect(r.error).toMatch(/AEC3 não incluído/);
+      return;
+    }
+    expect(r.reductionDb!).toBeGreaterThanOrEqual(15);
+    expect(r.voiceLossDb!).toBeLessThan(6);
+  });
+});
+
+describe('rice-detector (C++): lista de janelas', () => {
+  const FAKE = JSON.stringify([
+    { id: 101, owner: 'x', pid: 10, exe: 'chrome.exe', title: 'Docs - Google Chrome', x: 0, y: 0, w: 1000, h: 700, monitor: 1, mx: 0, my: 0, mw: 1920, mh: 1080 },
+    { id: 102, owner: 'x', pid: 10, exe: 'chrome.exe', title: 'Meet - abc-defg-hij - Google Chrome', x: 2000, y: 40, w: 1400, h: 900, monitor: 2, mx: 1920, my: 0, mw: 2560, mh: 1440 },
+    { id: 103, owner: 'x', pid: 20, exe: 'Code.exe', title: 'main.cpp', x: 0, y: 0, w: 800, h: 600, monitor: 1, mx: 0, my: 0, mw: 1920, mh: 1080 },
+    { id: 104, owner: 'x', pid: 30, exe: 'Zoom.exe', title: 'Zoom Meeting', x: 100, y: 100, w: 1280, h: 720, monitor: 1, mx: 0, my: 0, mw: 1920, mh: 1080 },
+  ]);
+
+  test.skipIf(skip)('--list-windows --app filtra pelo nome do app do detector e preserva a ordem (da frente para trás)', async () => {
+    const { stdout } = await run(detector, ['--list-windows', '--app', 'Google Chrome', '--fake-windows', FAKE]);
+    const list = JSON.parse(stdout) as Array<{ id: number; owner: string; title: string; w: number }>;
+    expect(list.map((w) => w.id)).toEqual([101, 102]);
+    expect(list.every((w) => w.owner === 'Google Chrome')).toBe(true);
+    expect(list[1]).toMatchObject({ title: 'Meet - abc-defg-hij - Google Chrome', w: 1400, monitor: 2, mx: 1920 });
+  });
+
+  test.skipIf(skip)('--list-windows aceita --exe e --pid, e sem filtro devolve todas', async () => {
+    const byExe = JSON.parse((await run(detector, ['--list-windows', '--exe', 'zoom.exe', '--fake-windows', FAKE])).stdout);
+    expect(byExe.map((w: { id: number }) => w.id)).toEqual([104]);
+    const byPid = JSON.parse((await run(detector, ['--list-windows', '--pid', '20', '--fake-windows', FAKE])).stdout);
+    expect(byPid.map((w: { id: number }) => w.id)).toEqual([103]);
+    const all = JSON.parse((await run(detector, ['--list-windows', '--fake-windows', FAKE])).stdout);
+    expect(all).toHaveLength(4);
+  });
+
+  test.skipIf(skip)('o comando list-windows no stdin responde windows-list sem mexer nos eventos existentes', async () => {
+    const child = spawn(detector, [], { env: { ...process.env, RICE_DETECTOR_FAKE_WINDOWS: FAKE, RICE_DETECTOR_FAKE_MIC_STEPS: '[]' }, stdio: ['pipe', 'pipe', 'ignore'] });
+    const lines: Array<Record<string, unknown>> = [];
+    let buffer = '';
+    child.stdout.on('data', (d: Buffer) => {
+      buffer += d.toString();
+      let nl: number;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (line) lines.push(JSON.parse(line));
+      }
+    });
+    try {
+      child.stdin.write('{"cmd":"list-windows","apps":["Zoom"]}\n');
+      for (let i = 0; i < 50 && !lines.some((l) => l.event === 'windows-list'); i++) await new Promise((r) => setTimeout(r, 50));
+      const reply = lines.find((l) => l.event === 'windows-list') as { windows: Array<{ id: number }> };
+      expect(reply.windows.map((w) => w.id)).toEqual([104]);
+      expect(lines.filter((l) => l.event !== 'windows-list').map((l) => l.event).sort()).toEqual(['calendar-access', 'reminders-access']);
+    } finally {
+      child.stdin.end();
+      child.kill();
+    }
+  });
+
+  test.skipIf(skip)('listWindowsWin (o que o grab usa) lê o helper real e converte para DIP; o helper ausente cai em lista vazia', async () => {
+    process.env.RICE_DETECTOR_FAKE_WINDOWS = FAKE;
+    try {
+      const wins = await listWindowsWin(['Google Chrome'], detector, (r) => ({ x: r.x / 2, y: r.y / 2, width: r.width / 2, height: r.height / 2 }));
+      expect(wins.map((w) => w.id)).toEqual([101, 102]);
+      expect(wins[1]!.bounds).toEqual({ x: 1000, y: 20, width: 700, height: 450 });
+      // ...e a escolha: com outra pessoa mostrando algo, a janela da aba da chamada, na tela 2 (já em DIP).
+      const target = chooseTarget({
+        windows: wins,
+        displays: [{ id: 1, bounds: { x: 0, y: 0, width: 960, height: 540 } }, { id: 2, bounds: { x: 960, y: 0, width: 1280, height: 720 } }],
+        apps: ['Google Chrome'], cursorDisplayId: 1, primaryDisplayId: 1, preferWindow: true,
+      });
+      expect(target).toEqual({ kind: 'window', windowId: 102, displayId: 2 });
+      expect(findWindowSource([{ id: 'window:101:0', name: 'a' }, { id: 'window:102:0', name: 'b' }], { id: 102, title: 'x' })?.name).toBe('b');
+      expect(await listWindowsWin([], detector, (r) => r)).toEqual([]);
+      expect(await listWindowsWin(['Zoom'], join(tmpdir(), 'nao-existe-rice-detector'), (r) => r)).toEqual([]);
+    } finally {
+      delete process.env.RICE_DETECTOR_FAKE_WINDOWS;
     }
   });
 });

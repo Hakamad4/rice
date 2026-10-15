@@ -451,6 +451,8 @@ export class MeetingSession extends EventEmitter {
     });
     capture.on('event', (event: AudioEvent) => {
       this.emit('capture-event', event);
+      // Aditivo: só o helper do Windows emite `mic-device`; o do Mac nunca, então nada muda por lá. Não mexe na captura.
+      if (event.event === 'mic-device' && typeof event.name === 'string') this.emit('mic', { id: typeof event.id === 'string' ? event.id : undefined, name: event.name, isDefault: event.isDefault === true, chosen: event.chosen === true });
       if (event.fatal === true && active.capture === capture && !active.closing) {
         // fonte perdida com o processo ainda vivo: tratar como queda
         void capture.stop().catch(() => {});

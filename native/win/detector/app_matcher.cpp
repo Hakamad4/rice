@@ -20,16 +20,17 @@ const std::vector<AppEntry>& apps() {
   static const std::vector<AppEntry> list = {
       {"Zoom", {"us.zoom.xos"}, {"zoom.exe"}, {"zoomvideocommunications."}},
       {"Microsoft Teams", {"com.microsoft.teams", "com.microsoft.teams2"}, {"ms-teams.exe", "teams.exe"}, {"msteams_"}},
-      {"Google Chrome", {"com.google.Chrome"}, {"chrome.exe"}, {}},
+      {"Google Chrome", {"com.google.Chrome"}, {"chrome.exe", "chrome_proxy.exe"}, {}},
       {"Arc", {"company.thebrowser.Browser"}, {"arc.exe"}, {"thebrowsercompany.arc"}},
       {"Safari", {"com.apple.Safari", "com.apple.WebKit"}, {}, {}},
       {"Firefox", {"org.mozilla.firefox"}, {"firefox.exe"}, {}},
-      {"Microsoft Edge", {"com.microsoft.edgemac"}, {"msedge.exe"}, {}},
-      {"Brave", {"com.brave.Browser"}, {"brave.exe"}, {}},
+      {"Microsoft Edge", {"com.microsoft.edgemac"}, {"msedge.exe", "msedge_proxy.exe"}, {}},
+      {"Brave", {"com.brave.Browser"}, {"brave.exe", "brave_proxy.exe"}, {}},
       {"Slack", {"com.tinyspeck.slackmacgap"}, {"slack.exe"}, {"com.tinyspeck.slackdesktop"}},
       {"FaceTime", {"com.apple.FaceTime", "com.apple.avconferenced"}, {}, {}},
-      {"Discord", {"com.hnc.Discord"}, {"discord.exe"}, {}},
-      {"Webex", {"com.cisco.webexmeetingsapp", "Cisco-Systems.Spark"}, {"webex.exe", "ciscocollabhost.exe", "atmgr.exe", "webexhost.exe"}, {"ciscospark."}},
+      {"Discord", {"com.hnc.Discord"}, {"discord.exe", "discordcanary.exe", "discordptb.exe"}, {}},
+      {"Whereby", {}, {"whereby.exe"}, {"whereby."}},
+      {"Webex", {"com.cisco.webexmeetingsapp", "Cisco-Systems.Spark"}, {"webex.exe", "ciscocollabhost.exe", "atmgr.exe", "webexhost.exe", "webexmta.exe"}, {"ciscospark."}},
   };
   return list;
 }

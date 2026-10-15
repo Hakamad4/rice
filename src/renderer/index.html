@@ -118,7 +118,7 @@
   #rec-bar { container-type:inline-size; container-name:recbar; }
   #chat-toggle { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; } #chat-toggle .ico { display:none; } #chat-toggle .ico .icon { width:16px; height:16px; }
   #rec .rec-short { display:none; }
-  @container recbar (max-width: 600px) { #chat-toggle { width:32px; padding:0; } #chat-toggle .lbl { display:none; } #chat-toggle .ico { display:inline-flex; } }
+  @container recbar (max-width: 600px) { #chat-toggle { width:32px; padding:0; } #chat-toggle .lbl { display:none; } #chat-toggle .ico { display:inline-flex; } .mic-chip { max-width:34px; padding:0 6px; } .mic-chip-name { display:none; } } /* faixa estreita: o chip do microfone vira só o ícone (o nome fica no title) */
   @container recbar (max-width: 500px) { .lang-chip { width:32px; padding:0; justify-content:center; } .lang-chip .lang-short, .lang-chip .icon.caret { display:none; } .pause-btn .pause-label { display:none; } .pause-btn { width:32px; padding:0; justify-content:center; } }
   @container recbar (max-width: 420px) { #rec .rec-long { display:none; } #rec .rec-short { display:inline; } }
   @container recbar (max-width: 330px) { #rec { width:32px; height:32px; min-width:32px; padding:0; justify-content:center; align-items:center; gap:0; aspect-ratio:1; } #rec .rec-short, #rec .rec-long { display:none; } #lang-slot { display:none; } } /* faixa mínima: cabem Pausar, Parar e o chat; o idioma da reunião continua nas Configurações */
@@ -345,6 +345,7 @@
   .shot-clock { font-variant-numeric:tabular-nums; color:var(--faint); } .shot-text { overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
   .shot-more { flex:none; opacity:.6; } .shot:hover .shot-more, .shot:focus-within .shot-more { opacity:1; }
   .note-shot { margin:var(--space-2) 0 var(--space-3); } .note-shot .shot-img { height:96px; max-width:min(240px, 60vw); }
+  .mic-chip { flex:none; display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 8px; border-radius:999px; font-size:11px; color:var(--muted); white-space:nowrap; max-width:200px; min-width:0; } .mic-chip[hidden] { display:none; } .mic-chip .icon { width:12px; height:12px; flex:none; } .mic-chip-name { overflow:hidden; text-overflow:ellipsis; }
   .shots-chip { flex:none; display:inline-flex; align-items:center; gap:6px; height:24px; padding:0 8px; border-radius:999px; font-size:11px; color:var(--muted); white-space:nowrap; } .shots-chip:hover { color:var(--ink); background:var(--hover); } .shots-chip[hidden] { display:none; } .shots-chip .icon { width:12px; height:12px; } .shots-chip.warn { color:var(--warn); }
   .shots-capture { flex:none; width:24px; height:24px; } .shots-capture[hidden] { display:none; } .shots-capture .icon { width:14px; height:14px; } .shots-capture:disabled { opacity:.4; }
   .live-dot.paused { background:var(--warn); animation:none; } /* pausado: âmbar e parado (não pulsa) */
@@ -765,6 +766,8 @@
   .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
   .update-notice { margin:0 0 14px; padding:12px 14px; border-radius:10px; background:var(--hover); }
   .update-notice[hidden] { display:none; } .update-notice .set-help { margin:8px 0 0; }
+  .mic-feedback:empty { display:none; } .mic-mac-note { margin:0 0 14px; }
+  .win-update-bar { width:100%; height:6px; margin:8px 0 2px; accent-color:var(--ink); } .win-update-error { color:var(--warn); }
   .update-about { margin:8px 0 14px; user-select:text; -webkit-user-select:text; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
   .update-line { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; min-width:0; }
   .update-text { flex:1 1 180px; min-width:0; font-size:13px; font-weight:500; overflow-wrap:anywhere; }
@@ -985,6 +988,7 @@
   <div id="center">
     <div id="rec-bar">
       <span id="status" class="empty"></span>
+      <div id="mic-chip" class="mic-chip" role="status" hidden></div>
       <button id="shots-chip" type="button" class="shots-chip" hidden></button>
       <button id="shots-capture" type="button" class="icon-btn shots-capture" hidden></button>
       <button id="retry" data-i18n="rec.retry" hidden>Tentar de novo</button>
@@ -1037,6 +1041,7 @@
   <script src="ai-chip.js"></script>
   <script src="web-search.js"></script>
   <script src="update-notice.js"></script>
+  <script src="win-update.js"></script>
   <script src="retention-dialog.js"></script>
   <script src="consent-toast.js"></script>
   <script src="receipt-card.js"></script>
@@ -1073,6 +1078,8 @@
   <script src="memory-page.js"></script>
   <script src="warroom.js"></script>
   <script src="sidebar-menu.js"></script>
+  <script src="mic-chip.js"></script>
+  <script src="audio-settings.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

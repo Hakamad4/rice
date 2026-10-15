@@ -23,3 +23,12 @@ export function findTrayIcons(dir: string, exists: (path: string) => boolean = e
 export function findWinIcon(dir: string, exists: (path: string) => boolean = existsSync): string | null {
   return [join(dir, 'icon.ico'), join(dir, '..', 'assets', 'icon', 'icon.ico')].find(exists) ?? null;
 }
+
+/**
+ * Windows: ícone monocromático da bandeja que acompanha a barra de tarefas (preto na clara, branco na escura), com as variantes
+ * @1.25x, @1.5x e @2x ao lado (o Electron escolhe pela escala da tela). `null` se não houver: o main usa o `icon.ico` colorido.
+ */
+export function findWinTrayIcon(dir: string, dark: boolean, exists: (path: string) => boolean = existsSync): string | null {
+  const name = `trayWin-${dark ? 'dark' : 'light'}.png`;
+  return [join(dir, name), join(dir, '..', 'assets', 'icon', name)].find(exists) ?? null;
+}

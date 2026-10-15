@@ -44,6 +44,10 @@ const attachments = window.RiceAttachments.create(attachDeps);
 const screens = window.RiceScreenshots.create({ rice: window.rice, warn: (message) => setWarning(message) });
 const shotsChip = window.RiceScreenshots.chip({ rice: window.rice, node: $('shots-chip'), captureNode: $('shots-capture') });
 const syncShotsChip = () => shotsChip.sync({ recording: recState === 'recording', dir: recDir });
+// microfone em uso (Mac: entrada padrão pelo detector; Windows: evento do helper): chip perto do Parar e aviso quando troca no meio
+const micChip = window.RiceMicChip.create({ node: $('mic-chip'), notice: (text) => window.RiceToastStack.notice(text) });
+window.rice.on('session:mic', (info) => micChip.show(info));
+if (window.rice.micCurrent) window.rice.micCurrent().then((info) => info && micChip.show(info)).catch(() => {});
 window.rice.on('screenshots:changed', (p) => {
   screens.changed(p);
   shotsChip.changed(p);
@@ -719,6 +723,7 @@ function metaLine(meta) {
   const duration = window.RiceGroup.formatMeetingDuration(meta);
   if (duration) parts.push(duration);
   if (meta.state === 'interrupted') parts.push(t('meeting.interrupted'));
+  if (meta.micName) parts.push(t('meeting.mic', { name: meta.micName })); // o microfone capturado (o último, se trocou no meio)
   return build('div', { className: 'page-meta' }, parts.map((text) => build('span', { textContent: text }, [])));
 }
 
@@ -2090,6 +2095,7 @@ window.rice.on('session:state', async (state) => {
   syncLiveTimer();
   renderRecLabel();
   syncShotsChip();
+  if (state === 'idle') micChip.hide(); // sem gravação, sem chip de microfone
   if (state === 'recording' || was === 'recording') refreshList(); // ponto vermelho na reunião que está gravando
   if (view === 'home' && (was === 'idle') !== (state === 'idle')) showHome(); // "Gravar agora" some/volta na agenda
   if (was !== 'idle' && state === 'idle') {
@@ -2230,6 +2236,15 @@ const applyUpdate = (status) => window.dispatchEvent(new CustomEvent('rice:updat
 window.addEventListener('rice:update-changed', (e) => window.RiceUpdate.applyDot($('settings-link'), e.detail));
 if (window.rice.updateStatus) window.rice.updateStatus().then(applyUpdate).catch(() => {});
 window.rice.on('update:changed', applyUpdate);
+// Windows: o estado da atualização automática (ponto em Configurações e a tela de Atualizações ouvem o mesmo evento)
+if (window.rice.platform === 'win32' && window.rice.winUpdateStatus) {
+  const applyWinUpdate = (state) => {
+    window.dispatchEvent(new CustomEvent('rice:winupdate-changed', { detail: state }));
+    window.RiceUpdate.applyDot($('settings-link'), { available: window.RiceWinUpdate.hasNews(state) });
+  };
+  window.rice.on('winupdate:changed', applyWinUpdate);
+  window.rice.winUpdateStatus().then(applyWinUpdate).catch(() => {});
+}
 // a retenção moveu reuniões para a Lixeira: a lista (e a reunião aberta, se foi ela) se atualizam
 window.rice.on('meetings:changed', async () => {
   await refreshList();

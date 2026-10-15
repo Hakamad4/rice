@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "mic_device.hpp"
+
 namespace rice {
 
 /// Bloco de áudio como o sistema entrega: float intercalado, taxa e canais nativos.
@@ -36,6 +38,14 @@ class Platform {
 
   /// Abre a captura do áudio do sistema. `onStopped` quando ela para sozinha (o Recorder reinicia uma vez).
   virtual std::unique_ptr<CaptureHandle> startSystem(BlockCallback onBlock, std::function<void(std::string)> onStopped, const std::vector<long>& excludePids, std::string& error) = 0;
+
+  /// Microfone escolhido (id do endpoint; vazio = padrão do sistema). Vale a partir do próximo startMic e das reaberturas.
+  virtual void setPreferredInput(const std::string& id) { (void)id; }
+  /// Chamado a cada abertura/troca do dispositivo do mic (padrão mudou, o escolhido sumiu ou voltou). Plataformas sem
+  /// noção de dispositivo não chamam; o Recorder só emite o evento `mic-device` quando isto acontece.
+  virtual void setMicDeviceListener(std::function<void(const MicDeviceInfo&)> listener) { (void)listener; }
+  /// Entradas ativas (para `--list-inputs`). Vazio se a plataforma não sabe listar.
+  virtual std::vector<InputDevice> listInputs() { return {}; }
 
   virtual OutputInfo currentOutput() = 0;
   /// Chama `handler` quando a saída padrão muda (de qualquer thread). Devolve quem cancela.

@@ -25,6 +25,9 @@ class SimulatedPlatform : public Platform {
 
   std::unique_ptr<CaptureHandle> startMic(BlockCallback onBlock, std::function<void()> onDeviceChanged, std::function<void(std::string)> onFatal, std::string& error, CaptureFailure& failure) override;
   std::unique_ptr<CaptureHandle> startSystem(BlockCallback onBlock, std::function<void(std::string)> onStopped, const std::vector<long>& excludePids, std::string& error) override;
+  void setPreferredInput(const std::string& id) override;
+  void setMicDeviceListener(std::function<void(const MicDeviceInfo&)> listener) override;
+  std::vector<InputDevice> listInputs() override;
   OutputInfo currentOutput() override;
   std::function<void()> observeOutput(std::function<void()> handler) override;
   bool preventSleep(std::string& warning) override;
@@ -32,6 +35,11 @@ class SimulatedPlatform : public Platform {
 
   /// Simula troca da saída padrão (dispara os observadores) para fone/alto-falante.
   void setHeadphones(bool value);
+  /// Entradas simuladas (por padrão uma só, "sim-default"). As mudanças reavaliam a escolha como o WASAPI faria.
+  void setInputs(std::vector<InputDevice> inputs);
+  void plugInput(const InputDevice& device);
+  void unplugInput(const std::string& id);
+  void setDefaultInput(const std::string& id);
   int sleepBlocks() const { return sleepBlocks_.load(); }
   int sleepReleases() const { return sleepReleases_.load(); }
   int systemOpens() const { return systemOpens_.load(); }
@@ -44,6 +52,12 @@ class SimulatedPlatform : public Platform {
   std::atomic<int> sleepReleases_{0};
   std::atomic<int> systemOpens_{0};
   std::atomic<bool> headphones_{false};
+  void reevaluateMic();
+  std::vector<InputDevice> inputs_ = {{"sim-default", "Microfone simulado", true, "active"}};
+  std::string preferred_;
+  MicDeviceTracker tracker_;
+  std::function<void(const MicDeviceInfo&)> micListener_;
+  bool micOpen_ = false;
 };
 
 }  // namespace rice

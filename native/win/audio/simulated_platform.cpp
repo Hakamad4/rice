@@ -44,12 +44,80 @@ class ToneThread : public CaptureHandle {
 };
 }  // namespace
 
+void SimulatedPlatform::setPreferredInput(const std::string& id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  preferred_ = id;
+}
+
+void SimulatedPlatform::setMicDeviceListener(std::function<void(const MicDeviceInfo&)> listener) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  micListener_ = std::move(listener);
+}
+
+std::vector<InputDevice> SimulatedPlatform::listInputs() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return inputs_;
+}
+
+void SimulatedPlatform::reevaluateMic() {
+  MicDeviceInfo info;
+  std::function<void(const MicDeviceInfo&)> listener;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!micOpen_ || !tracker_.update(preferred_, inputs_, info)) return;
+    listener = micListener_;
+  }
+  if (listener) listener(info);
+}
+
+void SimulatedPlatform::setInputs(std::vector<InputDevice> inputs) {
+  { std::lock_guard<std::mutex> lock(mutex_); inputs_ = std::move(inputs); }
+  reevaluateMic();
+}
+
+void SimulatedPlatform::plugInput(const InputDevice& device) {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    inputs_.push_back(device);
+  }
+  reevaluateMic();
+}
+
+void SimulatedPlatform::unplugInput(const std::string& id) {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    bool wasDefault = false;
+    for (auto it = inputs_.begin(); it != inputs_.end();) {
+      if (it->id == id) { wasDefault = it->isDefault; it = inputs_.erase(it); } else ++it;
+    }
+    if (wasDefault && !inputs_.empty()) inputs_.front().isDefault = true;  // o Windows escolhe outro padrão
+  }
+  reevaluateMic();
+}
+
+void SimulatedPlatform::setDefaultInput(const std::string& id) {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& d : inputs_) d.isDefault = d.id == id;
+  }
+  reevaluateMic();
+}
+
 std::unique_ptr<CaptureHandle> SimulatedPlatform::startMic(BlockCallback onBlock, std::function<void()>, std::function<void(std::string)>, std::string& error, CaptureFailure& failure) {
   if (script_.micPermissionDenied) {
     failure = CaptureFailure::PermissionDenied;
     error = "permissão de microfone negada";
     return nullptr;
   }
+  MicDeviceInfo info;
+  std::function<void(const MicDeviceInfo&)> listener;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    micOpen_ = true;
+    tracker_.reset();
+    if (tracker_.update(preferred_, inputs_, info)) listener = micListener_;
+  }
+  if (listener) listener(info);
   return std::make_unique<ToneThread>(440.0, std::move(onBlock), script_.realTime, script_.micBlocks, nullptr);
 }
 

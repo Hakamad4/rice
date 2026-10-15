@@ -17,7 +17,7 @@ export type CalEvent = {
   attendeeEmails?: string[];
   /** O e-mail do próprio usuário (o participante `self` do Google): dele sai o "domínio da própria empresa" da memória. Não vai para o renderer. */
   selfEmail?: string;
-  source: 'google' | 'eventkit';
+  source: 'google' | 'eventkit' | 'ics';
   /** Dia inteiro: aparece na lista do Início, mas nunca gera aviso nem convite de gravação. */
   allDay?: boolean;
 };
@@ -97,10 +97,12 @@ export function attendeeNamesOf(attendees: RawEvent[]): string[] {
 
 const norm = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-/** Une Google + EventKit: mesmo título normalizado e início ±2 min = o mesmo evento; o Google ganha. Ordenado por início. */
-export function mergeEvents(google: CalEvent[], eventkit: CalEvent[]): CalEvent[] {
-  const extra = eventkit.filter((k) => !google.some((g) => norm(g.title) === norm(k.title) && Math.abs(Date.parse(g.start) - Date.parse(k.start)) <= DEDUPE_MS));
-  return [...google, ...extra].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+/** Une Google + EventKit + link ICS: mesmo título normalizado e início ±2 min = o mesmo evento; prioridade Google > EventKit > ICS. Ordenado por início. */
+export function mergeEvents(google: CalEvent[], eventkit: CalEvent[], ics: CalEvent[] = []): CalEvent[] {
+  const same = (a: CalEvent, b: CalEvent) => norm(a.title) === norm(b.title) && Math.abs(Date.parse(a.start) - Date.parse(b.start)) <= DEDUPE_MS;
+  const kit = eventkit.filter((k) => !google.some((g) => same(g, k)));
+  const extra = ics.filter((i) => !google.some((g) => same(g, i)) && !kit.some((k) => same(k, i)));
+  return [...google, ...kit, ...extra].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
 }
 
 export type AlertPlan = { key: string; event: CalEvent; showAt: number; hideAt: number };

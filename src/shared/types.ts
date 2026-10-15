@@ -55,6 +55,9 @@ export type MeetingMeta = {
   speakers?: Record<string, string>;
   /** Quando o aviso de consentimento foi copiado (toast "Avise os participantes"); aparece no recibo de privacidade. */
   consentNoticeCopiedAt?: string;
+  /** Microfone em uso na gravação (o último) e as trocas no meio dela; vêm do helper (Windows) ou do detector (Mac). Aparecem no detalhe e no recibo. */
+  micName?: string;
+  micChanges?: Array<{ at: string; name: string }>;
   gaps: AudioGap[];
 };
 

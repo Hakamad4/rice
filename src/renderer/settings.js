@@ -50,7 +50,7 @@
 
   /** Lista de seções do menu lateral (Ajustes do macOS): grupo, ícone de linha e chave i18n do nome. */
   const NAV = [
-    { group: 'settings.group.general', items: [['language', 'globe', 'settings.language'], ['audio', 'mic', 'settings.audio'], ['folder', 'folder', 'settings.folder'], ['updates', 'download', 'settings.updates'], ['shortcuts', 'keyboard', 'settings.shortcuts']] },
+    { group: 'settings.group.general', items: [['language', 'globe', 'settings.language'], ['audio', 'mic', 'settings.audio'], ['folder', 'folder', 'settings.folder'], ['updates', 'download', 'settings.updates'], ['shortcuts', 'keyboard', 'settings.shortcuts'], ['startup', 'play', 'settings.startup']] }, // 'startup' só existe no Windows
     { group: 'settings.group.ai', items: [['ai', 'sparkles', 'settings.ai'], ['tools', 'plug', 'settings.nav.tools']] },
     { group: 'settings.group.meetings', items: [['calendar', 'calendar', 'settings.calendar'], ['vocabulary', 'file-text', 'settings.vocabulary'], ['speakers', 'users', 'settings.speakers'], ['screenshots', 'image', 'settings.screenshots'], ['memory', 'history', 'settings.memory'], ['followups', 'check-circle', 'settings.followups']] },
     { group: null, items: [['privacy', 'shield', 'settings.nav.privacy']] },
@@ -136,6 +136,16 @@
     const updateBox = window.RiceUpdate.box(null, () => rice.updateRun());
     const paintUpdate = (status) => window.RiceUpdate.paint(updateBox, status, () => rice.updateRun());
     if (rice.updateStatus) rice.updateStatus().then(paintUpdate).catch(() => {});
+    // Windows (instalado pelo NSIS): baixar e instalar de dentro do app; no Mac continua o aviso do update.sh
+    const winUpdate = rice.winUpdateStatus && rice.platform === 'win32' ? window.RiceWinUpdate.create({ check: () => rice.winUpdateCheck(), download: () => rice.winUpdateDownload(), install: () => rice.winUpdateInstall() }) : null;
+    if (winUpdate) {
+      rice.winUpdateStatus().then(winUpdate.paint).catch(() => {});
+      const onWinChanged = (e) => {
+        if (!winUpdate.node.isConnected) return window.removeEventListener('rice:winupdate-changed', onWinChanged);
+        winUpdate.paint(e.detail);
+      };
+      window.addEventListener('rice:winupdate-changed', onWinChanged);
+    }
     // qual cópia está aberta: a versão, o commit do build e o caminho do app (para conferir depois de atualizar)
     const aboutLine = el('p', { className: 'set-help update-about' }, []);
     if (rice.updateAbout) rice.updateAbout().then((about) => { aboutLine.textContent = window.RiceUpdate.aboutText(about); }).catch(() => {});
@@ -280,11 +290,12 @@
     const calBox = el('div', { className: 'cal-box' }, []);
     const loadCalendar = async () => {
       if (!rice.eventKitStatus) return;
-      const [google, eventKit] = await Promise.all([
+      const [google, eventKit, ics] = await Promise.all([
         rice.googleStatus ? rice.googleStatus().catch(() => ({})) : {},
         rice.eventKitStatus().catch(() => ({ access: 'unknown' })),
+        rice.icsStatus ? rice.icsStatus().catch(() => ({})) : {},
       ]);
-      calBox.replaceChildren(...window.RiceCalendarConnect.render({ google, eventKit, onChange: loadCalendar }));
+      calBox.replaceChildren(...window.RiceCalendarConnect.render({ google, eventKit, ics, onChange: loadCalendar }));
     };
     loadCalendar();
     loadReminders();
@@ -312,6 +323,10 @@
         }),
       ]),
     ]);
+    // Windows: "Iniciar com o Windows" (desligado por padrão); no Mac a seção não existe
+    const WIN = rice.platform === 'win32';
+    const launch = toggle('launch-login', settings.launchAtLogin === true, t('settings.startup.label'));
+    launch.onchange = () => rice.setLaunchAtLogin && rice.setLaunchAtLogin(launch.checked);
     // as seções ficam todas no DOM (na ordem de sempre); só a escolhida aparece (as outras têm `hidden`)
     const nodes = [
       section(t('settings.language'), null, window.RiceLanguage.rows({ settings, onChange: again, row }), 'language'),
@@ -324,12 +339,13 @@
       section(t('settings.memory'), t('settings.memory.text'), memoryNodes, 'memory'),
       section(t('settings.followups'), t('settings.followups.text'), [row(t('settings.followups.notify'), t('settings.followups.notify-help'), notify)], 'followups'),
       section(t('chat-tools.title'), null, [row(t('chat-tools.label'), t('chat-tools.help'), tools), toolsHint], 'tools'),
-      section(t('settings.audio'), null, [row(t('settings.audio.keep'), t('settings.audio.help'), keep)], 'audio'),
+      section(t('settings.audio'), null, [...(window.RiceAudioSettings ? window.RiceAudioSettings.nodes({ rice, settings, row }) : []), row(t('settings.audio.keep'), t('settings.audio.help'), keep)], 'audio'),
       section(t('settings.privacy'), t('settings.privacy.text'), [row(t('settings.localmode.label'), t('settings.localmode.help'), localMode), localExplain, localNote, localGo, row(t('settings.consent.label'), t('settings.consent.help'), consent), row(t('settings.redact.label'), t('settings.redact.help'), redact), el('div', { className: 'retention-default' }, [el('div', { className: 'set-label', textContent: t('settings.retention.title') }, []), el('p', { className: 'set-help', textContent: t('settings.retention.help') }, []), row(t('retention.audio'), null, retentionAudio.root), row(t('retention.meeting'), null, retentionMeeting.root)]), el('div', { className: 'consent-edit-block' }, [el('div', { className: 'set-label', textContent: t('settings.consent.text') }, []), el('p', { className: 'set-help', textContent: t('settings.consent.text-help') }, []), consentText, consentReset]), privBox], 'privacy'),
       section(t('settings.shortcuts'), null, [shortcutBox], 'shortcuts'),
-      section(t('settings.updates'), null, [updateBox, aboutLine, row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates)], 'updates'),
+      ...(WIN ? [section(t('settings.startup'), null, [row(t('settings.startup.label'), t('settings.startup.help'), launch)], 'startup')] : []),
+      section(t('settings.updates'), null, [...(winUpdate ? [winUpdate.node] : [updateBox]), aboutLine, row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates)], 'updates'),
     ];
-    const initial = [ctx && ctx.section, ctx && ctx.focus, remembered()].find((id) => IDS.includes(id)) || 'language';
+    const initial = [ctx && ctx.section, ctx && ctx.focus, remembered()].find((id) => IDS.includes(id) && (id !== 'startup' || WIN)) || 'language';
     const buttons = new Map();
     const show = (id) => {
       for (const node of nodes) node.hidden = node.dataset.section !== id;
@@ -338,7 +354,8 @@
       if (current && current.scrollIntoView) current.scrollIntoView({ block: 'nearest', inline: 'nearest' }); // aba ativa sempre visível na faixa rolável
       remember(id);
     };
-    const navChildren = NAV.flatMap((g) => [
+    const navVisible = NAV.map((g) => ({ ...g, items: g.items.filter((i) => i[0] !== 'startup' || WIN) }));
+    const navChildren = navVisible.flatMap((g) => [
       ...(g.group ? [el('div', { className: 'set-nav-group', textContent: t(g.group) }, [])] : []),
       ...g.items.map(([id, icon, label]) => {
         const button = el('button', { type: 'button', className: 'set-nav-item' }, [window.RiceIcons.icon(icon), el('span', { textContent: t(label) }, [])]);

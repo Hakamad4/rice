@@ -127,3 +127,39 @@ test('responde a current-event antes de encerrar com EOF no stdin', async () => 
   const hasCurrentEvent = stdout.split('\n').filter(Boolean).some((line) => JSON.parse(line).event === 'current-event');
   expect(hasCurrentEvent).toBe(true);
 }, 10_000);
+
+describe('default-input (entrada padrão do sistema)', () => {
+  test('--print-input responde {id,name} (ou nulos) sem gravar nada', async () => {
+    const { stdout } = await run(BIN, ['--print-input']);
+    const parsed = JSON.parse(stdout) as { id: string | null; name: string | null };
+    expect(Object.keys(parsed).sort()).toEqual(['id', 'name']);
+    expect(parsed.id === null).toBe(parsed.name === null);
+    if (parsed.id !== null) expect(typeof parsed.name).toBe('string');
+  });
+
+  test('o modo watch anuncia default-input ao abrir e o comando current-input repete', async () => {
+    const child = spawn(BIN, [], { stdio: ['pipe', 'pipe', 'ignore'] });
+    const lines: Array<Record<string, unknown>> = [];
+    let buffer = '';
+    child.stdout.on('data', (d: Buffer) => {
+      buffer += d.toString();
+      let nl: number;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (line) lines.push(JSON.parse(line));
+      }
+    });
+    try {
+      child.stdin.write('{"cmd":"current-input"}\n');
+      await new Promise((r) => setTimeout(r, 1500));
+      const inputs = lines.filter((l) => l.event === 'default-input');
+      expect(inputs.length).toBeGreaterThanOrEqual(2);
+      expect(Object.keys(inputs[0]!).sort()).toEqual(['event', 'id', 'name']);
+      expect(inputs[1]).toEqual(inputs[0]); // o mesmo dispositivo: current-input repete o estado
+      expect(lines.some((l) => l.event === 'error')).toBe(false);
+    } finally {
+      child.kill();
+    }
+  });
+});

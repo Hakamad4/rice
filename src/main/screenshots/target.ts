@@ -14,10 +14,13 @@ const ALIASES: string[][] = [
   ['slack'],
   ['discord'],
   ['webex', 'cisco webex meetings'],
+  ['whereby'],
   ['facetime'],
 ];
 /** O título da janela de uma chamada (num navegador, a aba da chamada). */
-const CALL_TITLE = /\b(meet|zoom|teams|webex|huddle|call|chamada|reuni|meeting|discord|whereby|jitsi)\b/i;
+const CALL_TITLE = /\b(meet|zoom|teams|webex|huddle|call|chamada|videochamada|reuni|meeting|discord|whereby|jitsi)\b/i;
+/** A janela da reunião em si (não a janela inicial do app): no Zoom do Windows é "Zoom Meeting"; ganha das demais do mesmo app. */
+const IN_CALL_TITLE = /\b(zoom meeting|reuni[aã]o do zoom|huddle)\b/i;
 const MIN_W = 300;
 const MIN_H = 200;
 
@@ -38,7 +41,7 @@ export function pickCallWindow(windows: readonly WinInfo[], apps: readonly strin
   let best: { win: WinInfo; score: number } | null = null;
   windows.forEach((win, index) => {
     if (!ownerMatches(win.owner, apps) || win.bounds.width < MIN_W || win.bounds.height < MIN_H) return;
-    const score = (CALL_TITLE.test(win.title) ? 1000 : 0) - index;
+    const score = (CALL_TITLE.test(win.title) ? 1000 : 0) + (IN_CALL_TITLE.test(win.title) ? 500 : 0) - index;
     if (!best || score > best.score) best = { win, score };
   });
   return best ? (best as { win: WinInfo }).win : null;
@@ -99,3 +102,22 @@ export function parseWindows(json: string): WinInfo[] {
 export const LIST_WINDOWS_JXA = `ObjC.import('CoreGraphics');
 const list = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly | $.kCGWindowListExcludeDesktopElements, 0)));
 JSON.stringify(list.filter((w) => w.kCGWindowLayer === 0 && w.kCGWindowBounds).map((w) => ({ id: w.kCGWindowNumber, owner: w.kCGWindowOwnerName, pid: w.kCGWindowOwnerPID, title: w.kCGWindowName || '', x: w.kCGWindowBounds.X, y: w.kCGWindowBounds.Y, w: w.kCGWindowBounds.Width, h: w.kCGWindowBounds.Height })));`;
+
+/** Converte os retângulos (pixels físicos no Windows) para as unidades das telas do Electron (DIP), com a conversão do próprio Electron. */
+export function windowsToDip(windows: readonly WinInfo[], toDip: (r: Rect) => Rect): WinInfo[] {
+  return windows.map((w) => ({ ...w, bounds: toDip(w.bounds) }));
+}
+
+export type WindowSource = { id: string; name: string };
+
+/**
+ * A fonte do `desktopCapturer` que corresponde à janela escolhida. No Windows o id da fonte é `window:<HWND>:0`; se o Electron
+ * mudar o formato, cai no título exato (e só se for único, para não capturar a janela errada).
+ */
+export function findWindowSource<T extends WindowSource>(sources: readonly T[], win: { id: number; title: string }): T | null {
+  const byHwnd = sources.find((s) => s.id === `window:${win.id}:0` || s.id.startsWith(`window:${win.id}:`));
+  if (byHwnd) return byHwnd;
+  if (!win.title) return null;
+  const byTitle = sources.filter((s) => s.name === win.title);
+  return byTitle.length === 1 ? byTitle[0]! : null;
+}

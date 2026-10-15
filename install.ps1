@@ -35,6 +35,19 @@ if ($Check) { Say 'ambiente conferido (-Check): nada foi instalado nem gerado.' 
 # 4) dependências, helpers nativos e o instalador
 Say 'instalando dependências (npm ci)…' 'installing dependencies (npm ci)…'
 npm ci; if ($LASTEXITCODE -ne 0) { Die 'npm ci falhou.' 'npm ci failed.' }
+# Cancelamento de eco (WebRTC AEC3): compila uma vez a partir do tarball versionado (10 a 20 min). Se faltar python/meson ou falhar,
+# o Rice instala igual, só que sem AEC (quem usa fone não percebe; no alto-falante o eco da call pode ser transcrito duas vezes).
+if (-not (Test-Path 'native\third_party\webrtc-apm-win\lib')) {
+  Say 'compilando o cancelamento de eco (WebRTC AEC3; só na primeira vez, leva alguns minutos)…' 'building echo cancellation (WebRTC AEC3; first time only, takes a few minutes)…'
+  $apmOk = $false
+  if (Get-Command python -ErrorAction SilentlyContinue) {
+    python -m pip install --quiet meson==1.5.2 ninja==1.11.1.1
+    if ($LASTEXITCODE -eq 0) {
+      try { & (Join-Path $PSScriptRoot 'scripts\build-webrtc-apm.ps1'); $apmOk = $true } catch { Write-Host $_.Exception.Message }
+    }
+  }
+  if (-not $apmOk) { Say 'aviso: não consegui compilar o AEC; seguindo sem cancelamento de eco.' 'warning: could not build the AEC; continuing without echo cancellation.' }
+}
 Say 'compilando os helpers nativos (rice-audio.exe, rice-detector.exe)…' 'building the native helpers (rice-audio.exe, rice-detector.exe)…'
 cmake -S native/win -B build/win -A x64; if ($LASTEXITCODE -ne 0) { Die 'o CMake não configurou os helpers.' 'CMake could not configure the helpers.' }
 cmake --build build/win --config Release; if ($LASTEXITCODE -ne 0) { Die 'a compilação dos helpers falhou. Veja as mensagens acima.' 'building the helpers failed. See the messages above.' }

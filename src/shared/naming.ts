@@ -9,6 +9,7 @@ export function sanitizeTitle(title: string, fallback = 'Reunião'): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/^\.+/, '')
+    .replace(/[. ]+$/, '') // o Windows descarta ponto e espaço no fim do nome da pasta: o caminho gravado deixaria de existir
     .trim();
   const chars = Array.from(cleaned).slice(0, MAX_TITLE).join('').trim();
   return chars || fallback;

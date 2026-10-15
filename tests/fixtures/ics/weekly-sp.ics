@@ -1,0 +1,18 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Teste//Rice//PT
+X-WR-CALNAME:Trabalho
+BEGIN:VEVENT
+UID:weekly-1@example.com
+DTSTAMP:20261001T000000Z
+DTSTART;TZID=America/Sao_Paulo:20261012T100000
+DTEND;TZID=America/Sao_Paulo:20261012T110000
+RRULE:FREQ=WEEKLY;BYDAY=MO,WE
+EXDATE;TZID=America/Sao_Paulo:20261014T100000
+SUMMARY:Planejamento semanal
+LOCATION:https://meet.google.com/abc-defg-hij
+ATTENDEE;CN="Silva\, Jose":mailto:jose.silva@example.com
+ATTENDEE;CN=Ana Souza;PARTSTAT=ACCEPTED:mailto:ana@example.com
+ATTENDEE;CUTYPE=ROOM;CN=Sala 3:mailto:sala3@example.com
+END:VEVENT
+END:VCALENDAR

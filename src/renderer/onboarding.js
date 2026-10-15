@@ -64,13 +64,14 @@
     // esqueleto síncrono: título e resumo já na tela; os passos chegam quando o status (IA, modelo, permissões…) estiver pronto
     if (!container.firstChild) container.replaceChildren(el('div', { className: 'guide-mark' }, [window.RiceIcons.icon('rice')]), el('h1', { className: 'page-title static', textContent: t('guide.title') }, []), el('p', { className: 'guide-lead', textContent: t('guide.lead') }, []));
     const rice = window.rice;
-    const [settings, ai, asr, perms, google, eventKit] = await Promise.all([
+    const [settings, ai, asr, perms, google, eventKit, ics] = await Promise.all([
       rice.getSettings(),
       rice.aiStatus(),
       rice.asrStatus(),
       rice.permissionStatus().catch(() => ({ microphone: 'unknown' })),
       rice.googleStatus ? rice.googleStatus().catch(() => ({})) : {},
       rice.eventKitStatus ? rice.eventKitStatus().catch(() => ({ access: 'unknown' })) : { access: 'unknown' },
+      rice.icsStatus ? rice.icsStatus().catch(() => ({})) : {},
     ]);
     const refresh = () => render(container, { ...ctx, focus: undefined });
 
@@ -143,8 +144,8 @@
     ];
 
     // 6. Agenda (opcional): Calendário do macOS (recomendado) ou Google direto (avançado)
-    const calendar = window.RiceCalendarConnect.summary({ google, eventKit });
-    const calendarBody = window.RiceCalendarConnect.render({ google, eventKit, onChange: refresh });
+    const calendar = window.RiceCalendarConnect.summary({ google, eventKit, ics });
+    const calendarBody = window.RiceCalendarConnect.render({ google, eventKit, ics, onChange: refresh });
 
     const howTo = el('ol', { className: 'howto' }, [
       el('li', { textContent: t('guide.rec.1') }, []),

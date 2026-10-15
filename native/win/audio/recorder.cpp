@@ -20,6 +20,7 @@ Recorder::Recorder(Platform& platform, FrameSink& sink, LineEmitter& events, Rec
       sysChunker_(Source::Sys, sink, events) {}
 
 Recorder::~Recorder() {
+  platform_.setMicDeviceListener(nullptr);  // o listener captura `this`
   for (auto& t : workers_) {
     if (t.joinable()) t.join();
   }
@@ -111,6 +112,8 @@ void Recorder::onSystemBlock(const float* data, size_t frames, int channels, int
 }
 
 bool Recorder::startMic() {
+  platform_.setPreferredInput(options_.micDevice);
+  platform_.setMicDeviceListener([this](const MicDeviceInfo& info) { events_.emit("mic-device", micDeviceFields(info)); });
   std::string message;
   CaptureFailure failure = CaptureFailure::None;
   auto capture = platform_.startMic(

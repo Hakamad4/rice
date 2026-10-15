@@ -212,6 +212,26 @@ test('captura que sai sempre: reinícios limitados, avisa fatal e continua grava
   }
 });
 
+test('mic-device do helper (Windows) vira o evento aditivo "mic" da sessão; qualquer outro evento não emite e a captura segue igual', async () => {
+  const { session, captures } = await setup();
+  const mics: unknown[] = [];
+  const raw: string[] = [];
+  session.on('mic', (m) => mics.push(m));
+  session.on('capture-event', (e: { event: string }) => raw.push(e.event));
+  await session.start({ title: 'A', trigger: 'manual' });
+  captures[0]!.emit('event', { event: 'started', mic: true, sys: true });
+  captures[0]!.emit('event', { event: 'mic-device', id: 'b', name: 'Microfone (FIFINE K669)', isDefault: false, chosen: true, reason: 'open' });
+  captures[0]!.emit('event', { event: 'mic-device', id: 7, name: 'Sem id válido', reason: 'default-changed' });
+  captures[0]!.emit('event', { event: 'mic-device', id: 'x' }); // sem nome: ignorado
+  expect(mics).toEqual([
+    { id: 'b', name: 'Microfone (FIFINE K669)', isDefault: false, chosen: true },
+    { id: undefined, name: 'Sem id válido', isDefault: false, chosen: false },
+  ]);
+  expect(raw).toEqual(['started', 'mic-device', 'mic-device', 'mic-device']); // o repasse de capture-event continua
+  expect(captures).toHaveLength(1); // nada reinicia
+  await session.stop();
+});
+
 test('evento fatal com o processo vivo reinicia a captura', async () => {
   const { session, captures } = await setup();
   await session.start({ title: 'A', trigger: 'manual' });

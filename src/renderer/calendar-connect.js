@@ -1,5 +1,6 @@
-// Passo "Agenda" do guia: duas opções em acordeão, no mesmo molde dos provedores de IA.
-// (1) Calendário do macOS (recomendado: conta Google em Contas de Internet + acesso do EventKit) e (2) Google direto (avançado, recolhido).
+// Passo "Agenda" do guia: opções em acordeão, no mesmo molde dos provedores de IA.
+// (1) Calendário do macOS (recomendado: conta Google em Contas de Internet + acesso do EventKit), (2) Google direto (avançado, recolhido) e
+// (3) Assinar por link (ICS), que vale no Windows e no Mac: a URL privada do calendário (Outlook, Google, iCloud, Fastmail…).
 // Só createElement/textContent; o Client secret digitado vai direto ao main e o campo é limpo.
 (function () {
   const t = (key, vars) => window.RiceI18n.t(key, vars);
@@ -34,18 +35,20 @@
   let carry; // qual opção estava aberta antes de reler o status
 
   /** Estado do passo para o título: { done, text }. */
-  function summary({ google, eventKit }) {
+  function summary({ google, eventKit, ics }) {
+    if (ics && ics.configured) return { done: true, text: t('guide.cal.state.ics') };
     if (google && google.connected) return { done: true, text: t('guide.cal.state.google') };
     if (eventKit && eventKit.access === 'granted') return { done: true, text: t('guide.cal.state.macos') };
     return { done: false, text: t('guide.optional') };
   }
 
-  function render({ google, eventKit, onChange }) {
+  function render({ google, eventKit, ics, onChange }) {
     const rice = window.rice;
     google = google || {};
+    ics = ics || {};
     const access = (eventKit && eventKit.access) || 'unknown';
     const noSystem = access === 'unsupported'; // Windows: sem Calendário do sistema, a agenda é só o Google
-    let openId = carry !== undefined ? carry : noSystem ? 'google' : 'macos';
+    let openId = carry !== undefined ? carry : noSystem ? 'ics' : 'macos';
     carry = undefined;
     const cards = [];
 
@@ -68,7 +71,7 @@
       const root = el('div', { className: 'ai-card' + (active ? ' active' : '') }, []);
       root.dataset.option = id;
       const head = el('button', { type: 'button', className: 'ai-head' }, [
-        el('span', { className: 'cal-ico' }, [window.RiceIcons.icon(id === 'macos' ? 'calendar' : 'globe')]),
+        el('span', { className: 'cal-ico' }, [window.RiceIcons.icon(id === 'macos' ? 'calendar' : id === 'ics' ? 'link' : 'globe')]),
         el('strong', { textContent: title }, []),
         el('span', { className: `ai-card-state${active ? ' state-active' : ''}` }, [el('span', { className: 'state-dot' }, []), document.createTextNode(stateText)]),
         el('span', { className: 'ai-chevron' }, [window.RiceIcons.icon('chevron-down')]),
@@ -160,8 +163,49 @@
     gBlocks.push(el('div', { className: 'ai-foot' }, [status(google.connected ? 'ok' : google.hasClient ? 'warn' : 'none', statusText), el('div', { className: 'ai-actions' }, [disconnect, connect])]));
     const direct = card('google', t('guide.cal.google.title'), google.connected ? t('guide.cal.on') : '', Boolean(google.connected), gBlocks);
 
+    // 3) Assinar por link (ICS): o link é segredo (o main o guarda cifrado e só devolve o domínio); o campo é limpo depois de salvar
+    const icsInput = el('input', { type: 'password', placeholder: t('ics.placeholder'), autocomplete: 'off', spellcheck: false, id: 'ics-url' }, []);
+    const icsFeedback = el('div', { className: 'feedback', id: 'ics-feedback' }, []);
+    const icsSay = (text, ok) => {
+      icsFeedback.textContent = text;
+      icsFeedback.className = 'feedback ' + (ok ? 'ok' : 'bad');
+    };
+    const icsSave = button(t('ics.save'), async () => {
+      if (!icsInput.value.trim()) return icsSay(t('ics.err.empty'), false);
+      icsSave.disabled = true;
+      icsSay(t('ics.reading'), true);
+      const result = await rice.icsSave(icsInput.value);
+      icsInput.value = '';
+      if (!result.ok) {
+        icsSave.disabled = false;
+        return icsSay(result.message, false);
+      }
+      await changed();
+    }, 'primary');
+    const icsRemove = button(t('ics.remove'), async () => {
+      await rice.icsRemove();
+      await changed();
+    });
+    icsRemove.hidden = !ics.configured;
+    const icsTone = ics.error ? 'bad' : ics.configured ? 'ok' : 'none';
+    const icsStatusText = ics.error ? t('ics.status.error', { host: ics.host || '', error: ics.error }) : ics.configured ? window.RiceI18n.tn('ics.status.ok', ics.count || 0, { host: ics.host || '' }) : t('ics.status.none');
+    const icsBlocks = [
+      el('p', { className: 'ai-lead', textContent: t('ics.lead') }, []),
+      el('ul', { className: 'guide-points' }, ['ics.how.outlook', 'ics.how.google', 'ics.how.other'].map((key) => el('li', { textContent: t(key) }, []))),
+      field(t('ics.field'), icsInput),
+      icsFeedback,
+      el('p', { className: 'ai-note-line' }, [el('span', { className: 'ico' }, [window.RiceIcons.icon('lock')]), el('span', { textContent: t('ics.privacy') }, [])]),
+    ];
+    if (ics.blocked) {
+      icsSave.disabled = true; // Modo 100% local: ler o link usa a internet
+      icsSave.title = ics.blocked;
+      icsBlocks.splice(icsBlocks.length - 1, 0, el('p', { className: 'ai-note-line' }, [el('span', { className: 'ico' }, [window.RiceIcons.icon('info')]), el('span', { textContent: ics.blocked }, [])]));
+    }
+    icsBlocks.push(el('div', { className: 'ai-foot' }, [status(icsTone, icsStatusText), el('div', { className: 'ai-actions' }, [icsRemove, icsSave])]));
+    const icsCard = card('ics', t('ics.title'), ics.configured ? t('guide.cal.on') : '', Boolean(ics.configured), icsBlocks);
+
     setOpen(openId);
-    return [el('div', { className: 'ai-cards' }, noSystem ? [direct] : [mac, direct]), el('p', { className: 'hint ai-note', textContent: t('guide.cal.privacy') }, [])];
+    return [el('div', { className: 'ai-cards' }, noSystem ? [icsCard, direct] : [mac, icsCard, direct]), el('p', { className: 'hint ai-note', textContent: t('guide.cal.privacy') }, [])];
   }
 
   window.RiceCalendarConnect = { render, summary };

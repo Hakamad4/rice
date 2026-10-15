@@ -25,6 +25,8 @@ Um processo = uma gravação. O main (`AudioCapture`) lança `rice-audio --exclu
 | --- | --- |
 | `--exclude-pid N` (repetível) | Processos cujo áudio não entra no `sys` (o Rice se exclui). Windows: aceito; ver nota em `native/win/README.md`. |
 | `--no-aec` | Não cancela eco no microfone. Evento `aec {enabled:false, reason:"desligado por --no-aec"}`. |
+| `--mic-device ID` (ou env `RICE_MIC_DEVICE`) | **Só Windows, opcional.** Abre o endpoint de captura `ID` (o `id` de `--list-inputs`) em vez do padrão do Windows. Sem o argumento: padrão (`eConsole`), seguindo as trocas. Se o endpoint sumir, volta ao padrão; se voltar, retoma (evento `mic-device`). O Mac não tem o argumento (usa a entrada padrão do sistema) e o ignora. |
+| `--list-inputs` | **Só Windows.** Imprime UMA linha JSON no stdout e sai com 0: `{"inputs":[{"id","isDefault","name","state"}]}` (entradas ativas; `name` é o nome amigável, ex. `Microfone (FIFINE K669)`; `state` é `active`). Fixture: `tests/fixtures/protocol/mic-device.json`. |
 | `--system-source tap\|sck\|auto` | Só macOS (fonte do áudio do sistema). Windows aceita e ignora. |
 | `--seconds N --out-dir DIR` | Modo manual: grava N s e escreve `mic.pcm`/`sys.pcm` (PCM cru) em DIR; stdout vazio. Erro de abertura → evento `error {source:"cli"}` e saída 1. |
 | `--selftest-tone` | Ver "Selftests". |
@@ -37,6 +39,7 @@ Sem `--seconds`, o processo entra no modo controle: lê o stdin e **não captura
 
 - `{"cmd":"start"}`: inicia sleep-guard, AEC, microfone e áudio do sistema (nessa ordem). `start` repetido, ou depois de `stop`, é ignorado.
   Emite `started` ao final se nenhum `stop` chegou no meio.
+- `{"cmd":"list-inputs"}` (só Windows): responde o evento `inputs {inputs:[…]}` (mesma lista de `--list-inputs`).
 - `{"cmd":"stop"}`: para tudo, escoa o stdout e sai com código 0.
 - EOF do stdin equivale a `stop` (o pai fechou ou morreu).
 - `stop` durante um `start` em andamento cancela o `start`: o que já tinha iniciado é desfeito.
@@ -76,6 +79,7 @@ Campo `event` + campos extras. Eventos:
 | `stopped` | (nenhum) | fim do `stop`, depois de escoar o resto dos chunkers. Só se havia gravação em andamento |
 | `device-changed` | (nenhum) | o microfone foi reaberto depois de troca de dispositivo |
 | `aec` | `enabled: bool`, `reason: string` | AEC ligado/desligado (no início e a cada troca da saída padrão) |
+| `mic-device` | `id`, `name`, `isDefault: bool`, `chosen: bool`, `reason` | **Opcional, aditivo, só Windows** (o helper do Mac não emite e o app tem que funcionar sem ele). Emitido ao abrir o mic e a cada troca do dispositivo em uso. `isDefault`: é o padrão do sistema; `chosen`: é o microfone escolhido pelo usuário e está em uso. `reason` ∈ `open`, `default-changed` (o padrão do Windows mudou), `preferred-missing` (o escolhido sumiu, voltou ao padrão), `preferred-returned` (o escolhido voltou e foi retomado) |
 | `gap` | `source: "mic"\|"sys"`, `ms: int` | silêncio inserido (ver acima) |
 | `warning` | `source`, `message` | problema não fatal (`power`, `aec`, `sys`) |
 | `error` | `source`, `message`, `fatal?: true` | `source` ∈ `cli`, `mic`, `sys`, `resampler`; `fatal:true` = o main deve encerrar/reiniciar a captura |
@@ -132,6 +136,7 @@ Se o processo morre, o main o relança (1 s, 3 s, 9 s). EOF do stdin → termina
 | `events-list` | `events: [{id,title,start,end,allDay,calendar,attendees,url?,color?}]` | resposta de `list-events` |
 | `reminders-list` | `reminders: [{id,title,due,hasTime,overdue,list,color?}]` | resposta de `list-reminders` |
 | `reminder-completed` | `id`, `ok: bool` | resposta de `complete-reminder` |
+| `default-input` | `id`, `name` (nulos se não há entrada) | **Opcional, aditivo, só o detector do Mac** (o do Windows não emite; o app funciona sem ele). Entrada de áudio padrão do sistema (CoreAudio, `kAudioHardwarePropertyDefaultInputDevice`): na partida, a cada troca e como resposta de `current-input`. É a entrada que o `rice-audio` do Mac grava (`AVAudioEngine.inputNode` sem dispositivo fixo). `id` = UID do dispositivo. O detector só consulta; não grava. Fixture: `tests/fixtures/protocol/default-input.json` |
 | `calendar-changed`, `reminders-changed` | (nenhum) | o repositório mudou |
 | `error` | `message` | `invalid command line` / `unknown command: X` |
 
@@ -141,13 +146,14 @@ O `bundleId` de um app é o primeiro identificador visto para ele (`activeApps[a
 ### Comandos de stdin
 
 `current-event`, `list-events` (`from`, `to` ISO 8601, com ou sem milissegundos), `request-calendar-access`, `list-reminders`,
-`request-reminders-access`, `complete-reminder` (`id`). Cada um responde com o evento da tabela.
+`request-reminders-access`, `complete-reminder` (`id`), `current-input` (só Mac; repete `default-input`). Cada um responde com o evento da tabela.
 
 ### Argumentos (modos de teste, sem watch)
 
 | Argumento | Saída (uma linha JSON no stdout, sai com 0) |
 | --- | --- |
 | `--match <id>` | `{"app":"Google Chrome"}` ou `{"app":null}` |
+| `--print-input` | `{"id":…,"name":…}` da entrada padrão atual (só Mac) |
 | `--print-mic-processes` | lista dos ids de processos usando o mic (formato livre; só diagnóstico) |
 | `--simulate-mic '<json>'` | `<json>` = `[["id",...],["id"],[]]`: cada passo é um snapshot; imprime os eventos `mic-in-use`/`mic-released` gerados, um por linha, na ordem do Swift (primeiro os `in-use` em ordem alfabética do app, depois os `released`) |
 | `--simulate-upcoming '<json>'` | `{now,announced:[ids],events:[{id,title,start,end}]}` → array JSON dos ids que disparam |
@@ -168,5 +174,6 @@ O detector Windows mantém os mesmos eventos e comandos. Diferenças deliberadas
 - Calendário e Lembretes não existem: `calendar-access`/`reminders-access` respondem `status:"unsupported"` (o `DetectorClient`
   ignora status fora de `granted|denied|notDetermined`), `current-event` → `{"id":null}`, `events-list` e `reminders-list` vazios,
   `reminder-completed` → `ok:false`. Nunca há `upcoming-event`. `--simulate-upcoming` e `--simulate-reminders` não existem.
+- Pedido extra, só Windows (não existe no Swift; o Mac nunca o envia): `{"cmd":"list-windows","apps":["Zoom"],"exes":["chrome.exe"],"pids":[123]}` → `{"event":"windows-list","windows":[{id,owner,pid,exe,title,x,y,w,h,monitor,mx,my,mw,mh}]}` (janelas visíveis, da frente para trás). Também como `--list-windows [--app|--exe|--pid]`. Os eventos acima não mudam.
 - `--fake-mic-steps '<json>' [--fake-mic-interval-ms N]` (só nas versões portáveis): o modo watch lê os snapshots do mic dessa lista
   (um por intervalo, padrão 2000 ms; o último se repete) em vez do registro. Para smoke tests.

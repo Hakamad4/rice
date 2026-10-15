@@ -3,6 +3,7 @@ import type { Shot } from '../../shared/screenshots';
 import { isNearDuplicate } from './phash';
 import { addShot, listShots, removeShot } from './store';
 import { looksLikeShowing } from './trigger';
+import { getLightFactor } from '../platform/light';
 
 /** No máximo 1 pergunta à IA a cada tanto tempo, e 1 captura a cada tanto. */
 export const ASK_COOLDOWN_MS = 15_000;
@@ -104,7 +105,7 @@ export class ScreenshotCapture {
 
   private scheduleAsk(): void {
     if (this.askTimer || this.asking) return;
-    const wait = Math.max(COLLECT_MS, this.lastAskAt + ASK_COOLDOWN_MS - Date.now());
+    const wait = Math.max(COLLECT_MS, this.lastAskAt + ASK_COOLDOWN_MS * getLightFactor() - Date.now()); // modo leve: perguntas à IA mais espaçadas
     this.askTimer = setTimeout(() => void this.ask(), wait);
     this.askTimer.unref?.();
   }
@@ -134,7 +135,7 @@ export class ScreenshotCapture {
 
   private scheduleCapture(trigger: SpokenSegment, reason: string, session: number, retry: boolean): void {
     if (this.captureTimer) return; // já há uma captura a caminho: ela cobre este momento
-    const wait = Math.max(retry ? RETRY_DELAY_MS : CAPTURE_DELAY_MS, this.lastCaptureAt + CAPTURE_COOLDOWN_MS - Date.now());
+    const wait = Math.max(retry ? RETRY_DELAY_MS : CAPTURE_DELAY_MS, this.lastCaptureAt + CAPTURE_COOLDOWN_MS * getLightFactor() - Date.now());
     this.captureTimer = setTimeout(() => {
       this.captureTimer = null;
       void this.capture(trigger, reason, session, retry);

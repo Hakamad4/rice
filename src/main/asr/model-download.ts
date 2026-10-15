@@ -25,6 +25,10 @@ export const WHISPER_MODELS = {
   q5_0: { name: 'ggml-large-v3-turbo-q5_0.bin', url: `${HF}/ggml-large-v3-turbo-q5_0.bin`, sha256: '394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2', bytes: 574_041_195 },
   q8_0: { name: 'ggml-large-v3-turbo-q8_0.bin', url: `${HF}/ggml-large-v3-turbo-q8_0.bin` },
   f16: { name: 'ggml-large-v3-turbo.bin', url: `${HF}/ggml-large-v3-turbo.bin` },
+  // "Modo leve" do Windows (PC com pouca RAM/poucos núcleos): modelos pequenos quantizados, com SHA-256 e tamanho fixos como o padrão.
+  // Medidas e limites em native/win/README.md ("Modo leve do transcritor"). Baixam sob demanda, só quando o modo leve é escolhido.
+  small_q5_1: { name: 'ggml-small-q5_1.bin', url: `${HF}/ggml-small-q5_1.bin`, sha256: 'ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb', bytes: 190_085_487 },
+  base_q5_1: { name: 'ggml-base-q5_1.bin', url: `${HF}/ggml-base-q5_1.bin`, sha256: '422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898', bytes: 59_707_625 },
 } satisfies Record<string, ModelSpec>;
 
 export function whisperModelFor(variant: string | undefined = process.env.RICE_WHISPER_MODEL): ModelSpec {

@@ -56,14 +56,16 @@ describe('renderer no Windows (rice.platform = win32)', () => {
     expect(root.textContent).not.toMatch(/brew install|curl -fsSL/);
   });
 
-  it('Calendário: sem o do sistema, só o Google aparece (aberto)', () => {
+  it('Calendário: sem o do sistema, aparecem o link ICS (aberto) e o Google (recolhido)', () => {
     boot('win32');
     load(['calendar-connect']);
     const nodes = g.window.RiceCalendarConnect.render({ google: {}, eventKit: { access: 'unsupported' }, onChange: () => {} });
     const host = g.document.createElement('div');
     host.append(...nodes);
     expect(host.querySelector('[data-option="macos"]')).toBeNull();
-    expect(host.querySelector('[data-option="google"]')?.classList.contains('open')).toBe(true);
+    expect([...host.querySelectorAll('.ai-card')].map((c: any) => c.dataset.option)).toEqual(['ics', 'google']);
+    expect(host.querySelector('[data-option="ics"]')?.classList.contains('open')).toBe(true);
+    expect(host.querySelector('[data-option="google"]')?.classList.contains('open')).toBe(false);
   });
 
   it('Lembretes: acesso "unsupported" não desenha nada no Início', () => {

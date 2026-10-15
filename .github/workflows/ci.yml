@@ -5,7 +5,7 @@ name: ci
 # troque o passo "Helpers" por `uses: ./.github/workflows/windows.yml` e baixe o artefato `rice-helpers-win-x64`.
 on:
   push:
-    branches: [main, feat/integration, windows]
+    branches: [main, feat/integration, windows, 'feat/windows-parity-*']
   pull_request:
   workflow_dispatch:
 
@@ -24,6 +24,10 @@ jobs:
         os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+      # node-gyp (better-sqlite3 quando falta binario pronto) quebra com o Python 3.14 das maquinas novas
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -74,6 +78,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      # node-gyp (better-sqlite3 quando falta binario pronto) quebra com o Python 3.14 das maquinas novas
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -88,7 +96,11 @@ jobs:
           cmake --build build/win
       - name: Instalador NSIS (sem assinatura)
         run: npm run dist:win
+      # latest.yml e o .blockmap são o que o electron-updater lê para a atualização automática (ver release-windows.yml)
       - uses: actions/upload-artifact@v4
         with:
           name: Rice-Setup-win-x64
-          path: dist/Rice-Setup-*.exe
+          path: |
+            dist/Rice-Setup-*.exe
+            dist/Rice-Setup-*.exe.blockmap
+            dist/latest.yml

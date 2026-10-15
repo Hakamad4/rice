@@ -18,6 +18,7 @@ namespace rice {
 
 struct RecorderOptions {
   bool echoCancellation = true;
+  std::string micDevice;  // id do endpoint escolhido; vazio = padrão do sistema
   std::vector<long> excludePids;
   std::chrono::milliseconds systemRetryDelay{1000};
 };

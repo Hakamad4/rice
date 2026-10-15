@@ -25,12 +25,16 @@ const toCalendarEvent = (l: Line): CalendarEvent => ({
 
 const hasEventFields = (l: Line): boolean => [l.id, l.start, l.end].every((v) => typeof v === 'string' && v !== '');
 
+/** Entrada de áudio padrão do sistema (evento opcional `default-input` do detector do Mac). */
+export type InputDeviceInfo = { id: string; name: string };
+
 export class DetectorClient extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | null = null;
   private wanted = false;
   private readonly active = new Set<string>();
   private readonly releaseTimers = new Map<string, NodeJS.Timeout>();
   private readonly announced = new Set<string>();
+  private input: InputDeviceInfo | null = null;
   private pending: ((e: CalendarEvent | null) => void) | null = null;
   private inflight: Promise<CalendarEvent | null> | null = null;
   private restartTimer: NodeJS.Timeout | null = null;
@@ -159,6 +163,12 @@ export class DetectorClient extends EventEmitter {
         done?.(line.ok === true);
         break;
       }
+      case 'default-input': {
+        // Opcional (só o detector do Mac): o nome do microfone em uso. Nulos = sem entrada.
+        this.input = typeof line.id === 'string' && typeof line.name === 'string' ? { id: line.id, name: line.name } : null;
+        this.emit('default-input', this.input);
+        break;
+      }
       case 'calendar-changed':
         this.emit('calendar-changed');
         break;
@@ -253,6 +263,16 @@ export class DetectorClient extends EventEmitter {
       if (this.inflight === p) this.inflight = null;
     });
     return p;
+  }
+
+  /** Última entrada de áudio padrão informada pelo detector (null se ainda não veio ou não há). */
+  get inputDevice(): InputDeviceInfo | null {
+    return this.input;
+  }
+
+  /** Pede ao detector (Mac) para repetir o `default-input`. */
+  requestCurrentInput(): void {
+    this.child?.stdin.write('{"cmd":"current-input"}\n');
   }
 
   requestCalendarAccess(): void {

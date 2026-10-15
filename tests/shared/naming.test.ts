@@ -17,6 +17,12 @@ describe('sanitizeTitle', () => {
   test('remove pontos iniciais para não criar pasta oculta', () => {
     expect(sanitizeTitle('...secreto')).toBe('secreto');
   });
+  test('remove ponto e espaço no fim (o Windows os descarta do nome da pasta)', () => {
+    expect(sanitizeTitle('Reunião final.')).toBe('Reunião final');
+    expect(sanitizeTitle('Alinhamento...')).toBe('Alinhamento');
+    expect(sanitizeTitle('...')).toBe('Reunião');
+    expect(meetingFolderName(at, 'Plano Q4.')).toBe('2026-10-08 1430 - Plano Q4');
+  });
   test('corta em 80 caracteres', () => {
     expect(sanitizeTitle('a'.repeat(300))).toHaveLength(80);
   });

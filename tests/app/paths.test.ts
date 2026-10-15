@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { join, win32 } from 'node:path';
+import { afterEach, describe, expect, test } from 'vitest';
 import { isInsideRoot, nativeBinary, tildify, claudeBinary, codexBinary, opencodeBinary, repoRoot, riceAudioBinary, riceDetectorBinary } from '../../src/main/app/paths';
 
 afterEach(() => {
@@ -64,4 +64,37 @@ test('RICE_CODEX_BIN troca o codex (instância de teste)', () => {
 test('RICE_OPENCODE_BIN troca o opencode (instância de teste)', () => {
   process.env.RICE_OPENCODE_BIN = '/x/opencode';
   expect(opencodeBinary()).toBe('/x/opencode');
+});
+
+// Windows com espaço e acento no nome do usuário (C:\Users\José da Silva\…): as regras de caminho do Windows rodam também no Mac dos testes
+describe('caminhos do Windows com espaço e acento', () => {
+  const home = 'C:\\Users\\José da Silva';
+  const root = `${home}\\AppData\\Local\\Programs\\Rice\\resources\\app`;
+
+  test('os helpers nativos são achados dentro de uma pasta com espaço e acento (instalado e em desenvolvimento)', () => {
+    const packaged = nativeBinary('rice-audio', () => false, root, win32);
+    expect(packaged).toBe(`${root}\\native-bin\\win\\rice-audio.exe`);
+    const dev = `${home}\\Documentos com espaço\\rice`;
+    const built = `${dev}\\native\\win\\build\\Release\\rice-detector.exe`;
+    expect(nativeBinary('rice-detector', (p) => p === built, dev, win32)).toBe(built);
+  });
+
+  test('tildify mostra ~ para a pasta do usuário, sem se importar com maiúsculas e minúsculas', () => {
+    expect(tildify(`${home}\\Rice`, home, win32)).toBe('~\\Rice');
+    expect(tildify(`${home}\\Reuniões da Empresa\\2026`, home, win32)).toBe('~\\Reuniões da Empresa\\2026');
+    expect(tildify('c:\\users\\josé da silva\\Rice', home, win32)).toBe('~\\Rice');
+    expect(tildify(home, home, win32)).toBe('~');
+    expect(tildify('C:\\Users\\José da Silva2\\Rice', home, win32)).toBe('C:\\Users\\José da Silva2\\Rice'); // outra pasta com o mesmo começo
+    expect(tildify('D:\\Rice', home, win32)).toBe('D:\\Rice');
+  });
+
+  test('isInsideRoot: dentro, fora, vizinha com o mesmo prefixo, subir com .. e outra unidade', () => {
+    const r = `${home}\\Rice`;
+    expect(isInsideRoot(r, `${r}\\2026-10-08 1430 - Planejamento\\notas.md`, win32)).toBe(true);
+    expect(isInsideRoot(r, r, win32)).toBe(true);
+    expect(isInsideRoot(r, `${home}\\Rice2\\x`, win32)).toBe(false);
+    expect(isInsideRoot(r, `${r}\\..\\Outra`, win32)).toBe(false);
+    expect(isInsideRoot(r, 'D:\\Rice\\x', win32)).toBe(false);
+    expect(isInsideRoot(r, `${r.toUpperCase()}\\Pasta`, win32)).toBe(true); // o Windows ignora maiúsculas
+  });
 });

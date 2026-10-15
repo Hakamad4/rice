@@ -1,9 +1,10 @@
 import { access, appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { availableParallelism, homedir, totalmem } from 'node:os';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, globalShortcut, ipcMain, Menu, session as electronSession, nativeImage, nativeTheme, Notification, powerMonitor, safeStorage, screen, shell, systemPreferences, Tray } from 'electron';
+import { IcsSubscription, ICS_REFRESH_MS, type IcsResponse } from '../calendar/ics-feed';
 import { CalendarFeed } from '../calendar/calendar-feed';
 import { fromEventKit } from '../calendar/google-events';
 import { GoogleAuth } from '../calendar/google-auth';
@@ -42,7 +43,13 @@ import { discardEmptyDraft, findEmptyDraft, reuseDraft } from '../store/drafts';
 import { normalizeMaxCycles } from '../warroom/engine';
 import { checkWorkFolder } from '../warroom/folder';
 import { runChat } from '../ai/chat-run';
+import { applyMic, cleanInputs, isMicSwitch, normalizeMic, shortMicName } from '../audio/mic-info';
+import { asrChoiceOf, machineProfile, type AsrChoice } from '../platform/profile';
+import { setLightFactor, getLightFactor } from '../platform/light';
+import { loginItemApplicable, loginItemOptions, startedAtLogin } from './login-item';
+import { notificationOptions } from './notification-options';
 import { appAbout } from '../update/about';
+import { createWinUpdater, nsisInstall, type UpdaterLike, type WinUpdateState } from '../update/win-updater';
 import { readBuildInfo, type BuildInfo } from '../update/build-info';
 import { createUpdateChecker, RELEASES_URL, type UpdateState } from '../update/check';
 import { openUpdateInTerminal } from '../update/terminal';
@@ -68,8 +75,10 @@ import { recoverMeeting } from '../session/recover-meeting';
 import { alertPosition, AlertScheduler, ALERT_HEIGHT, ALERT_WIDTH, isHttpsUrl } from './meeting-alert';
 import { type AlertPlan } from '../calendar/google-events';
 import { LevelThrottle, NubController, NUB_BAR_WIDTH, NUB_HEIGHT, type Point } from './nub';
-import { findAppIcon, findTrayIcons, findWinIcon } from './app-icon';
+import { findAppIcon, findTrayIcons, findWinIcon, findWinTrayIcon } from './app-icon';
 import { isMac, isWindows, remindersSupported, systemCalendarSupported } from '../platform';
+import { applyMicDevice, listMicInputs } from '../platform/mic-input';
+import { currentPlan, normalizeMode, setTranscriberMode, type TranscriberMode } from '../asr/transcriber-plan';
 import { systemPanelUrl, titleBarOverlay } from '../platform/system';
 import { fromSystemLocale, locale, setLanguage, t, tn, type UiLanguage } from '../i18n';
 import { copyNotes, draftEmail, exportInfo, exportPdf, openMail, type ShareDeps } from '../share/actions';
@@ -108,7 +117,7 @@ import { configureLongNotes, type NotesProgress } from '../session/long-notes';
 import type { AlertActionKind } from '../session/alerts';
 import { saveAnnotations } from '../store/annotations';
 
-type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Ocultar dados pessoais ao enviar para a IA (as pastas sensíveis ligam por conta própria). */ redactPii?: boolean; /** Guarda padrão (as pastas podem definir a própria). */ retentionDefault?: FolderRetention; /** Aviso de consentimento ao gravar (padrão: ligado) e o texto próprio (vazio = o padrão no idioma da reunião). */ consentRemind?: boolean; consentText?: string; /** Modo 100% local: nada usa a rede (só localhost); só o provedor Modelo local. */ fullyLocal?: boolean; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean; /** Memória entre reuniões (padrão: ligada). */ memory?: boolean; /** Domínios do próprio usuário (do participante `self` da agenda), para a memória não tratar a própria empresa como cliente. */ memoryOwnDomains?: string[]; /** Aviso local quando uma pendência minha vence (padrão: ligado). */ followupNotify?: boolean; };
+type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Ocultar dados pessoais ao enviar para a IA (as pastas sensíveis ligam por conta própria). */ redactPii?: boolean; /** Guarda padrão (as pastas podem definir a própria). */ retentionDefault?: FolderRetention; /** Aviso de consentimento ao gravar (padrão: ligado) e o texto próprio (vazio = o padrão no idioma da reunião). */ consentRemind?: boolean; consentText?: string; /** Modo 100% local: nada usa a rede (só localhost); só o provedor Modelo local. */ fullyLocal?: boolean; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Windows: abrir com o Windows, só na bandeja (padrão: desligado). */ launchAtLogin?: boolean; /** Windows: id do microfone escolhido (ausente = padrão do Windows). */ micDevice?: string; /** Modelo de transcrição: automático (pela memória), leve ou completo. */ asrModel?: AsrChoice; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean; /** Memória entre reuniões (padrão: ligada). */ memory?: boolean; /** Domínios do próprio usuário (do participante `self` da agenda), para a memória não tratar a própria empresa como cliente. */ memoryOwnDomains?: string[]; /** Aviso local quando uma pendência minha vence (padrão: ligado). */ followupNotify?: boolean; };
 
 // Modo 100% local: o fetch global só fala com localhost enquanto o modo estiver ligado (rede de segurança por baixo dos bloqueios de cada recurso)
 installNetworkGuard();
@@ -125,6 +134,18 @@ const googleAuth = new GoogleAuth({
 });
 // Modo 100% local: a agenda do Google fica "desconectada" (as credenciais ficam como estão); o Calendário do macOS segue valendo
 const calendarFeed = new CalendarFeed({ accessToken: () => googleAuth.accessToken(), status: async () => (isLocalMode() ? { connected: false } : googleAuth.status()) }, (url, init) => fetch(url, init));
+// Agenda por link (ICS): a URL é segredo, guardada cifrada (DPAPI no Windows, Keychain no Mac); o Modo 100% local bloqueia a leitura
+const icsSub = new IcsSubscription({
+  dir: app.getPath('userData'),
+  crypto: tokenCrypto,
+  fetch: (url, init) => fetch(url, init) as unknown as Promise<IcsResponse>,
+  blocked: () => (isLocalMode() ? t('local.mode.blocked.ics') : null),
+});
+async function refreshIcs(): Promise<void> {
+  if (isLocalMode() || !(await icsSub.status()).configured) return calendarFeed.setIcs([]);
+  const events = await icsSub.refresh();
+  if (events) calendarFeed.setIcs(events); // em erro, a lista anterior fica
+}
 const getSecret: RunnerDeps['getSecret'] = (provider) =>
   safeStorage.isEncryptionAvailable() ? loadSecret(app.getPath('userData'), provider, tokenCrypto) : Promise.resolve(null);
 const aiDeps = (): RunnerDeps => ({
@@ -186,6 +207,8 @@ async function loadSettings(): Promise<Settings> {
     cachedSettings = { root: join(homedir(), 'Rice'), keepAudio: true };
   }
   setLocalMode(cachedSettings.fullyLocal === true); // o Modo 100% local vale desde a primeira leitura
+  if (isWindows()) applyMicDevice(process.env, cachedSettings.micDevice); // o rice-audio.exe herda RICE_MIC_DEVICE
+  setTranscriberMode(cachedSettings.asrModel); // só o Windows usa (o Mac ignora o modo)
   return cachedSettings;
 }
 
@@ -311,8 +334,7 @@ const liveNotifications = new Set<Notification>();
 
 /** Mostra uma notificação; `onAction` roda no clique (corpo ou botão). Resolve quando ela some. */
 function notify(opts: { title: string; actionText: string; onAction: () => void; secondaryText?: string; onSecondary?: () => void; onClose?: () => void }): { close: () => void } {
-  const actions = [{ type: 'button' as const, text: opts.actionText }, ...(opts.secondaryText ? [{ type: 'button' as const, text: opts.secondaryText }] : [])];
-  const n = new Notification({ title: opts.title, actions });
+  const n = new Notification(notificationOptions({ title: opts.title, actionText: opts.actionText, secondaryText: opts.secondaryText, windows: isWindows(), clickHint: t('notify.click-hint', { action: opts.actionText.toLowerCase() }) }));
   liveNotifications.add(n);
   let done = false;
   const finish = (act: boolean) => {
@@ -457,6 +479,13 @@ function setupDetector(): void {
     });
   });
   d.on('calendar-changed', () => void refreshEventKit());
+  // Mac: o detector informa a entrada de áudio padrão ({id, name} ou null) ao subir e quando ela muda (o Rice sempre captura a entrada padrão do macOS)
+  d.on('default-input', (input: { id?: string; name?: string } | null) => {
+    const name = normalizeMic({ name: input?.name })?.name;
+    if (!name) return;
+    lastDefaultInput = name;
+    void onMic({ name, isDefault: true });
+  });
   d.on('upcoming', (ev: { id: string; title: string; start: string; end: string; url: string | null }) => {
     calendarFeed.addEventKit(fromEventKit(ev));
   });
@@ -694,7 +723,9 @@ function updateTray(state: SessionState = session?.state ?? 'idle'): void {
 /** Logo monocromático para a barra de menus: o macOS pinta imagens "template" de claro ou escuro conforme a barra. */
 function trayImage(): Electron.NativeImage {
   if (isWindows()) {
-    // Windows: ícone colorido (a bandeja não pinta "template"), no tamanho de 16 DIP
+    // Windows: a bandeja não pinta "template"; usa o ícone preto ou branco conforme a barra de tarefas (claro/escuro do sistema) e, sem ele, o .ico colorido
+    const mono = findWinTrayIcon(__dirname, nativeTheme.shouldUseDarkColorsForSystemIntegratedUI);
+    if (mono) return nativeImage.createFromPath(mono);
     const ico = findWinIcon(__dirname);
     return ico ? nativeImage.createFromPath(ico) : nativeImage.createEmpty();
   }
@@ -709,8 +740,26 @@ function trayImage(): Electron.NativeImage {
 function createTray(): void {
   tray = new Tray(trayImage());
   tray.setToolTip('Rice');
-  if (isWindows()) tray.on('click', createWindow); // no Windows o clique no ícone abre a janela (o menu fica no botão direito)
+  if (isWindows()) {
+    tray.on('click', createWindow); // no Windows o clique no ícone abre a janela (o menu fica no botão direito)
+    nativeTheme.on('updated', () => tray?.setImage(trayImage())); // a barra de tarefas mudou de claro para escuro (ou o contrário)
+  }
   updateTray('idle');
+}
+
+/** Microfone em uso (informado pelo helper no Windows e pelo detector no Mac): grava na reunião, avisa o renderer e marca trocas. */
+type MicNow = { dir: string; name: string; short: string; isDefault: boolean; chosen: boolean; switched: boolean };
+let micNow: MicNow | null = null;
+let lastDefaultInput: string | null = null;
+async function onMic(raw: unknown): Promise<void> {
+  const info = normalizeMic(raw);
+  const dir = session?.currentDir;
+  if (!info || !dir || !session || session.state === 'idle') return;
+  const chosen = info.chosen || (info.id !== undefined && info.id === (await loadSettings()).micDevice);
+  const switched = isMicSwitch(micNow?.dir === dir ? micNow.name : undefined, info.name);
+  micNow = { dir, name: info.name, short: shortMicName(info.name), isDefault: info.isDefault, chosen, switched: false };
+  await updateMeta(dir, (m) => applyMic(m, info, toLocalIso(new Date()))).catch((err) => logError('mic meta', err));
+  send('session:mic', { ...micNow, switched });
 }
 
 function send(channel: string, payload: unknown): void {
@@ -743,6 +792,8 @@ async function runAlertAction(s: MeetingSession, kind: AlertActionKind, dir?: st
   }
 }
 
+let asrService: AsrService | null = null;
+
 function setupSession(runner: AiRunner): AsrService {
   const asr = new AsrService({
     onProgress: (p) => {
@@ -754,6 +805,7 @@ function setupSession(runner: AiRunner): AsrService {
       send('asr:status', st);
     },
   });
+  asrService = asr;
   const s = new MeetingSession({
     root: async () => (await loadSettings()).root,
     createCapture: () => new AudioCapture(riceAudioBinary()),
@@ -794,7 +846,22 @@ function setupSession(runner: AiRunner): AsrService {
   for (const name of ['state', 'segment', 'partial', 'asr-status', 'asr-warning', 'capture-event', 'session-warning', 'notes'] as const) {
     s.on(name, (payload) => send(`session:${name}`, payload));
   }
+  s.on('mic', (info: unknown) => void onMic(info)); // Windows: evento mic-device do helper, repassado pela sessão
+  s.on('state', (st: string) => {
+    if (st === 'idle') micNow = null;
+    else if (st === 'recording' && lastDefaultInput && !micNow) setTimeout(() => void onMic({ name: lastDefaultInput, isDefault: true }), 300).unref(); // Mac: a entrada padrão que o detector já conhecia (a pasta da reunião já existe 300 ms depois)
+    if (st === 'recording' && TEST_INSTANCE && process.env.RICE_TEST_MIC) {
+      // SÓ instância de teste (prints): simula o evento do helper do Windows; RICE_TEST_MIC_SWITCH troca para outro microfone 4 s depois
+      try {
+        setTimeout(() => void onMic(JSON.parse(process.env.RICE_TEST_MIC ?? '{}')), 600).unref();
+        if (process.env.RICE_TEST_MIC_SWITCH) setTimeout(() => void onMic(JSON.parse(process.env.RICE_TEST_MIC_SWITCH ?? '{}')), 4000).unref();
+      } catch {
+        // JSON inválido: sem simulação
+      }
+    }
+  });
   s.on('state', updateTray);
+  s.on('state', (st: string) => { if (st === 'idle') winUpdater.recordingEnded(); });
   s.on('state', updateNub);
   s.on('pause', (e: { dir: string; paused: boolean }) => {
     send('session:pause', e);
@@ -928,11 +995,18 @@ function setupSession(runner: AiRunner): AsrService {
     captureNow: async () => s.state === 'recording' && !s.paused && (await screenshotCapture.captureNow()) !== null,
   });
   let warRoomDir: string | null = null;
-  const warRoomBeat = setInterval(() => warRoom.ensure(s.currentDir), 15_000);
-  warRoomBeat.unref();
+  // o "batimento" do war room só roda enquanto grava (parado, nenhum timer fica acordando o computador)
+  let warRoomBeat: NodeJS.Timeout | null = null;
   s.on('state', (state: string) => {
     if (s.currentDir) warRoomDir = s.currentDir;
     warRoom.onSessionState(state, warRoomDir);
+    if (state === 'recording' && !warRoomBeat) {
+      warRoomBeat = setInterval(() => warRoom.ensure(s.currentDir), 15_000);
+      warRoomBeat.unref();
+    } else if (state === 'idle' && warRoomBeat) {
+      clearInterval(warRoomBeat);
+      warRoomBeat = null;
+    }
   });
   const levels = new LevelThrottle((l) => nub?.sendLevel(l));
   s.on('frame', (frame) => levels.push(frame));
@@ -1299,6 +1373,30 @@ async function sweepRetention(now: Date = new Date()): Promise<SweepAction[]> {
   return done;
 }
 
+/** Windows: atualização automática (electron-updater + GitHub Releases), só no app instalado pelo NSIS. No Mac nunca liga. */
+const winUpdater = createWinUpdater({
+  load: () => {
+    try {
+      return (require('electron-updater') as { autoUpdater: UpdaterLike }).autoUpdater;
+    } catch {
+      return null;
+    }
+  },
+  supported: () => (TEST_INSTANCE ? process.env.RICE_TEST_WINUPDATE !== undefined : nsisInstall({ platform: process.platform, packaged: app.isPackaged, resourcesPath: process.resourcesPath })),
+  enabled: async () => (await loadSettings()).checkUpdates !== false && !isLocalMode(),
+  isRecording: () => session !== null && session.state !== 'idle',
+  onChange: (st) => send('winupdate:changed', st),
+});
+/** SÓ instância de teste (RICE_TEST_WINUPDATE=available|downloading|downloaded|waiting): estado fixo para os prints, sem consultar nada. */
+const fakeWinUpdate = (): WinUpdateState | null => {
+  const f = TEST_INSTANCE ? process.env.RICE_TEST_WINUPDATE : undefined;
+  if (f === 'available') return { supported: true, phase: 'available', version: '0.5.0' };
+  if (f === 'downloading') return { supported: true, phase: 'downloading', version: '0.5.0', percent: 42 };
+  if (f === 'downloaded') return { supported: true, phase: 'downloaded', version: '0.5.0' };
+  if (f === 'waiting') return { supported: true, phase: 'downloaded', version: '0.5.0', waitingForRecording: true };
+  return null;
+};
+
 /** Versão do build (commit, remote público, clone de origem); lida uma vez ao abrir. Instância de teste nunca consulta nada. */
 let buildInfo: BuildInfo | null = null;
 const updateChecker = createUpdateChecker({
@@ -1371,6 +1469,9 @@ function registerIpc(runner: AiRunner): void {
       screenshots: settings.screenshots === true,
       chatTools: settings.chatTools === true,
       checkUpdates: settings.checkUpdates !== false,
+      launchAtLogin: settings.launchAtLogin === true,
+      micDevice: settings.micDevice ?? null,
+      asrModel: asrChoiceOf(settings.asrModel),
       fullyLocal: settings.fullyLocal === true,
       redactPii: settings.redactPii === true,
       retentionDefault: settings.retentionDefault ?? {},
@@ -1509,6 +1610,18 @@ function registerIpc(runner: AiRunner): void {
   });
   // qual cópia do Rice está aberta (versão, commit do build e caminho do app): ajuda a ver se o que roda é o que acabou de ser instalado
   handle('update:about', async () => appAbout({ version: app.getVersion(), commit: buildInfo?.commit, exePath: app.getPath('exe') }));
+  // Windows: procurar / baixar / reiniciar e atualizar (nada disso roda no Mac; o estado só diz que não há suporte)
+  handle('winupdate:status', async () => fakeWinUpdate() ?? winUpdater.status());
+  handle('winupdate:check', async () => fakeWinUpdate() ?? winUpdater.check(true));
+  handle('winupdate:download', async () => fakeWinUpdate() ?? winUpdater.download());
+  handle('winupdate:install', async () => (fakeWinUpdate() ? { ok: true as const } : winUpdater.install()));
+  // Windows: "Iniciar com o Windows" (desligado por padrão); só grava a opção e o item de login; instância de teste nunca mexe no sistema
+  handle('settings:set-launch-at-login', async (_e, on: unknown) => {
+    const value = on === true;
+    await saveSettings({ ...(await loadSettings()), launchAtLogin: value });
+    if (loginItemApplicable(process.platform, TEST_INSTANCE)) app.setLoginItemSettings(loginItemOptions(value));
+    return { ok: true as const, launchAtLogin: value };
+  });
   handle('settings:set-check-updates', async (_e, on: unknown) => {
     await saveSettings({ ...(await loadSettings()), checkUpdates: on !== false });
     const status = await updateChecker.maybeCheck();
@@ -1549,6 +1662,50 @@ function registerIpc(runner: AiRunner): void {
   });
 
   handle('asr:status', () => asrStatus);
+
+  // microfone: o que está em uso (para o chip depois de recarregar a tela), a lista de entradas (Windows) e a escolha
+  handle('audio:mic-current', () => (micNow && session && session.state !== 'idle' && session.currentDir === micNow.dir ? micNow : null));
+  handle('audio:list-inputs', async () => {
+    if (TEST_INSTANCE && process.env.RICE_TEST_MIC_INPUTS) {
+      try {
+        return { supported: true, inputs: JSON.parse(process.env.RICE_TEST_MIC_INPUTS) as unknown[] }; // só instância de teste: lista fictícia para os prints
+      } catch {
+        return { supported: false, inputs: [] };
+      }
+    }
+    if (!isWindows()) return { supported: false, inputs: [] };
+    const inputs = cleanInputs(await listMicInputs(riceAudioBinary())); // rice-audio.exe --list-inputs (processo curto, fora da captura)
+    return { supported: inputs.length > 0, inputs };
+  });
+  handle('audio:set-mic', async (_e, id: unknown) => {
+    if (!isWindows() && !TEST_INSTANCE) return { ok: false as const };
+    const value = typeof id === 'string' && id.length > 0 && id.length < 512 ? id : undefined; // vazio = padrão do Windows
+    const { micDevice: _old, ...rest } = await loadSettings();
+    await saveSettings({ ...rest, ...(value ? { micDevice: value } : {}) });
+    if (isWindows()) applyMicDevice(process.env, value); // o rice-audio.exe herda RICE_MIC_DEVICE na próxima abertura do microfone
+    return { ok: true as const, micDevice: value ?? null };
+  });
+  // modelo de transcrição em uso e o motivo (modo leve com pouca memória); o usuário pode forçar Leve ou Completo
+  const profileNow = async () => {
+    const choice = asrChoiceOf((await loadSettings()).asrModel);
+    const fake = TEST_INSTANCE ? { gb: Number(process.env.RICE_TEST_RAM_GB), cores: Number(process.env.RICE_TEST_CORES) } : { gb: 0, cores: 0 }; // só instância de teste (prints)
+    return { choice, ...machineProfile({ platform: PLATFORM_FOR_UI, totalMemBytes: fake.gb > 0 ? fake.gb * 1024 ** 3 : totalmem(), logicalCores: fake.cores > 0 ? fake.cores : availableParallelism(), choice }) };
+  };
+  handle('audio:profile', () => profileNow());
+  handle('audio:set-asr-model', async (_e, choice: unknown) => {
+    if (!isWindows() && !TEST_INSTANCE) return { ok: false as const }; // o Mac ignora o modo (sempre o modelo grande quantizado)
+    const next = asrChoiceOf(choice);
+    await saveSettings({ ...(await loadSettings()), asrModel: next });
+    setTranscriberMode(next);
+    const p = await profileNow();
+    setLightFactor(p.light ? 2 : 1);
+    const recording = session !== null && session.state !== 'idle';
+    if (asrService && !recording && isWindows()) {
+      await asrService.stop().catch(() => {}); // a troca vale já, se não há gravação; baixa o modelo escolhido em segundo plano
+      void asrService.warmup();
+    }
+    return { ok: true as const, appliedNow: !recording, ...p };
+  });
 
   // `headings`: idioma dos nomes das seções dos embutidos (a página da reunião passa o idioma dela; senão vale o do app)
   const displayLanguage = async (headings: unknown): Promise<UiLanguage> => (headings === 'en' || headings === 'pt-BR' ? headings : currentUiLanguage());
@@ -1714,6 +1871,23 @@ function registerIpc(runner: AiRunner): void {
     error: calendarFeed.lastError,
     ...(isLocalMode() ? { blocked: t('local.mode.blocked.google') } : {}),
   }));
+  // Agenda por link (ICS): o renderer só recebe o domínio e a contagem; o link inteiro nunca sai do main
+  handle('calendar:ics-status', () => icsSub.status());
+  handle('calendar:ics-save', async (_e, url: unknown) => {
+    const r = await icsSub.save(typeof url === 'string' ? url : '');
+    if (!r.ok) return r;
+    calendarFeed.setIcs(r.events);
+    return { ok: true as const, count: r.count };
+  });
+  handle('calendar:ics-remove', async () => {
+    await icsSub.remove();
+    calendarFeed.setIcs([]);
+    return { ok: true as const };
+  });
+  handle('calendar:ics-refresh', async () => {
+    await refreshIcs();
+    return icsSub.status();
+  });
   handle('calendar:google-save-client', (_e, id: string, secret: string) => googleAuth.saveClient(String(id ?? ''), String(secret ?? '')));
   handle('calendar:google-connect', async () => {
     if (isLocalMode()) return { ok: false as const, message: t('local.mode.blocked.google') };
@@ -1854,6 +2028,7 @@ function registerIpc(runner: AiRunner): void {
     await saveSettings({ ...(await loadSettings()), fullyLocal: on === true });
     invalidateAiStatus();
     send('privacy:changed', { fullyLocal: isLocalMode() });
+    void refreshIcs().catch(() => {}); // ligar o Modo 100% local tira os eventos do link; desligar volta a ler
     return { ok: true as const, fullyLocal: isLocalMode() };
   });
   handle('ai:set-model', async (_e, provider: unknown, model: unknown) => {
@@ -2147,7 +2322,9 @@ app.whenReady().then(async () => {
   } catch (err) {
     logError('recovery failed', err);
   }
-  createWindow();
+  setLightFactor(machineProfile({ platform: PLATFORM_FOR_UI, totalMemBytes: totalmem(), logicalCores: availableParallelism(), choice: (await loadSettings()).asrModel }).light ? 2 : 1); // modo leve: IA ao vivo mais contida
+  if (loginItemApplicable(process.platform, TEST_INSTANCE)) app.setLoginItemSettings(loginItemOptions((await loadSettings()).launchAtLogin === true)); // mantém o item do Windows em dia com a opção
+  if (!startedAtLogin(process.argv) || !isWindows()) createWindow(); // aberto pelo Windows ao entrar: só a bandeja (o clique no ícone, um aviso ou o atalho abrem a janela)
   setupDetector();
   const sendCalendar = (channel: string) => window && !window.isDestroyed() && window.webContents.send(channel, null);
   calendarFeed.on('change', () => sendCalendar('calendar:changed'));
@@ -2181,6 +2358,8 @@ app.whenReady().then(async () => {
     }
   }
   calendarFeed.start();
+  void refreshIcs().catch(() => {});
+  setInterval(() => void refreshIcs().catch(() => {}), ICS_REFRESH_MS).unref(); // a cada 10 min, só o link assinado
   setInterval(() => void refreshEventKit(), 5 * 60_000).unref();
   setTimeout(() => void asr.warmup(), 2000);
   shortcutManager.init((await loadSettings()).recordShortcut);
@@ -2189,7 +2368,10 @@ app.whenReady().then(async () => {
   setInterval(() => void sweepRetention().catch((err) => logError('retention', err)), 24 * 3_600_000).unref();
   // versão nova: lê o build-info e consulta (no máximo uma vez por dia) pouco depois de abrir e a cada 6 h com o app aberto
   buildInfo = await readBuildInfo(join(__dirname, 'build-info.json'));
-  const checkUpdate = () => void updateChecker.maybeCheck().then((status) => send('update:changed', status)).catch(() => {});
+  const checkUpdate = () => {
+    void updateChecker.maybeCheck().then((status) => send('update:changed', status)).catch(() => {});
+    if (!TEST_INSTANCE) void winUpdater.check(false).catch(() => {}); // Windows instalado pelo NSIS; no Mac o estado fica sem suporte
+  };
   setTimeout(checkUpdate, 20_000).unref();
   setInterval(checkUpdate, 6 * 3_600_000).unref();
   // monta o índice de busca em segundo plano, para a primeira busca já encontrar tudo

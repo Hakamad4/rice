@@ -114,12 +114,30 @@ int main(int argc, char** argv) {
 
   RecorderOptions options;
   // O AEC só entra se o build o inclui; --no-aec sempre desliga.
+  // Microfone escolhido: --mic-device <id do endpoint> ou RICE_MIC_DEVICE (o main do Electron lança o helper sem argumentos extras).
+  // Sem nenhum dos dois, vale o padrão do sistema e as trocas dele.
+  options.micDevice = args.hasValue("--mic-device") ? args.value("--mic-device") : "";
+  if (options.micDevice.empty()) {
+    const char* micEnv = std::getenv("RICE_MIC_DEVICE");
+    if (micEnv && *micEnv) options.micDevice = micEnv;
+  }
   options.echoCancellation = EchoCanceller::compiledIn() && !args.has("--no-aec");
   for (size_t i = 0; i + 1 < args.all.size(); i++) {
     if (args.all[i] == "--exclude-pid") options.excludePids.push_back(std::strtol(args.all[i + 1].c_str(), nullptr, 10));
   }
 
   std::unique_ptr<Platform> platform = makePlatform(args, events);
+
+  // Entradas ativas, uma linha JSON no stdout e sai: {"inputs":[{"id","isDefault","name","state"}]}.
+  if (args.has("--list-inputs")) {
+    json::Value reply = json::Value::object();
+    reply.set("inputs", inputsToJson(platform->listInputs()));
+    std::string line = reply.dump();
+    std::fwrite(line.data(), 1, line.size(), stdout);
+    std::fputc('\n', stdout);
+    std::fflush(stdout);
+    return 0;
+  }
 
   // Modo manual: grava N segundos em arquivos.
   if (args.hasValue("--seconds") && args.hasValue("--out-dir")) {
@@ -169,6 +187,10 @@ int main(int argc, char** argv) {
     if (command->name == "start") {
       // Não espera o start: stop/EOF precisam ser vistos mesmo com um start preso.
       std::thread([&] { recorder.start(); }).detach();
+    } else if (command->name == "list-inputs") {
+      json::Value f = json::Value::object();
+      f.set("inputs", inputsToJson(platform->listInputs()));
+      events.emit("inputs", std::move(f));
     } else if (command->name == "stop") {
       shutdown();
     } else {

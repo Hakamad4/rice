@@ -101,39 +101,38 @@ ou clique em **Atualizar** em **Configurações > Atualizações** quando o Rice
 
 **Instalou pelo .dmg:** baixe o `.dmg` mais novo em **Releases**, arraste o **Rice** para **Aplicativos** substituindo o antigo e rode de novo o `xattr` acima.
 
-**Windows:** baixe o instalador mais novo em **Releases** e rode por cima; ele substitui a versão anterior.
+**Windows:** automática: **Configurações › Atualizações** mostra "Nova versão disponível" › **Baixar e instalar** › **Reiniciar e atualizar** (veja a seção Windows abaixo). Também dá para rodar o instalador mais novo das **Releases** por cima do antigo; ele substitui a versão anterior.
 
 Depois de atualizar, o macOS pode pedir de novo as permissões (microfone, áudio do sistema, Gravação de Tela, Calendário), porque o app não é assinado pela Apple.
 
-### Windows (x64, Windows 10 22H2 ou 11) — em andamento
+### Windows (x64, Windows 10 22H2 ou 11) — pronto para testar
 
-O port para Windows é compilado e testado no CI, mas ainda não foi experimentado num PC de verdade. No PowerShell, na pasta do repositório:
+O port para Windows é compilado e testado no CI (e a interface é conferida numa instância de teste que simula o Windows), mas **ainda não foi testado num PC de verdade**: trate como uma versão candidata e conte o que encontrar.
+
+**Instalar (recomendado): o `.exe` da última release.** Baixe o `Rice-Setup-<versão>-x64.exe` em **Releases** e execute. Instala só para o seu usuário (sem administrador) e não é assinado: o SmartScreen pode mostrar "O Windows protegeu o seu computador"; escolha "Mais informações" e "Executar assim mesmo".
+
+**Instalar em uma linha (PowerShell).** Baixa o instalador da última release no GitHub, confere o hash com o `latest.yml` da release (se não bater, apaga o arquivo e não instala nada) e roda:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File install.ps1 -Check   # confere o Windows, o Node 22, o CMake e as ferramentas C++ do Visual Studio
+irm https://raw.githubusercontent.com/WalissonCF/rice/main/install-win.ps1 | iex
+```
+
+(Quando o site publicar, `irm https://ricenotes.app/install.ps1 | iex` fará o mesmo.)
+
+**A atualização é automática.** Em **Configurações › Atualizações** o Rice mostra "Nova versão X disponível" › **Baixar e instalar** (com progresso) › **Reiniciar e atualizar**; o instalador roda e o Rice abre de novo. Nunca atualiza no meio de uma gravação (espera ela acabar), respeita **Procurar atualizações** (desligado, nada é consultado nem baixado) e o Modo 100% local bloqueia a verificação. Só vale no app instalado pelo `.exe`, e a release precisa levar o `latest.yml` e o `.blockmap` (o workflow `release-windows` anexa).
+
+**Iniciar com o Windows** (Configurações › Inicialização, desligado por padrão) abre o Rice na bandeja, sem janela, com o atalho e os avisos de reunião prontos. **Microfone** (Configurações › Áudio): "Padrão do Windows (recomendado)" ou uma entrada específica; use o mesmo microfone que você escolheu no Teams ou no Zoom. Um chip perto do **Parar** mostra qual microfone está sendo gravado. Com 8 GB de RAM ou menos o Rice escolhe o modelo de transcrição **leve** (Configurações › Áudio mostra qual está em uso e por quê, e deixa forçar) e mantém a IA ao vivo (ideias e war room) mais contida.
+
+**Agenda sem o Calendário do sistema:** em **Configurações › Agenda** use **Assinar por link (ICS)** (Outlook/Microsoft 365: Publicar um calendário; Google: "Endereço secreto no formato iCal"; iCloud e Fastmail também servem) ou conecte o Google direto.
+
+**Diferenças do Mac:** sem Antigravity, sem Lembretes, sem Calendário do sistema; o áudio do sistema vem do loopback do WASAPI (o cancelamento de eco é a parte ainda em acabamento); as notificações nativas não têm botões de ação (clicar no aviso faz a ação principal); as chaves ficam protegidas pelo Windows (DPAPI) e os atalhos usam Ctrl.
+
+**Só para quem desenvolve:** o `install.ps1` compila o Rice a partir do código (precisa de Node 22, CMake e das ferramentas C++ do Visual Studio):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -Check   # confere Windows, Node 22, CMake e as ferramentas C++ do Visual Studio
 powershell -ExecutionPolicy Bypass -File install.ps1           # compila os helpers e o instalador (dist\Rice-Setup-*.exe) e o abre
 ```
-
-O instalador é por usuário (sem administrador) e não é assinado: o SmartScreen pode avisar "O Windows protegeu o computador"; escolha "Mais informações" e "Executar assim mesmo". Diferenças do Mac: sem Antigravity, sem Lembretes, sem o Calendário do sistema (a agenda vem do Google), as chaves ficam protegidas pelo Windows (DPAPI) e os atalhos usam Ctrl.
-
-### Rodar a partir do código (desenvolvimento)
-
-```bash
-brew install whisper.cpp meson ninja pkg-config
-npm install
-node node_modules/electron/install.js   # baixa o Electron (a "casca" do app)
-scripts/build-native.sh                 # programas nativos de áudio (precisa de internet na primeira vez)
-npm run app                             # compile e abra o Rice
-```
-
-Bom saber:
-
-- O `scripts/build-native.sh` compila primeiro o cancelador de eco (WebRTC audio processing, baixado e conferido com um SHA-256 fixo) e depois os dois programas em Swift. As próximas execuções são rápidas.
-- O servidor de transcrição é o `whisper-server` do Homebrew. O Rice espera encontrá-lo em `/opt/homebrew/bin/whisper-server`. Se o seu estiver em outro lugar, abra o Rice com `RICE_WHISPER_SERVER=/caminho/whisper-server npm run app`.
-- O modelo de transcrição é baixado sozinho na primeira abertura para `~/Library/Application Support/Rice/models` e conferido com SHA-256. Por padrão o Rice usa o `large-v3-turbo` quantizado (cerca de 0,6 GB). `RICE_WHISPER_MODEL=f16` troca para o modelo completo (cerca de 1,6 GB).
-- Para abrir o Rice depois, abra o **Rice** em Aplicativos (instalado pelo .dmg ou pelo `install.sh`) ou, rodando do código, `npm run app` dentro da pasta `rice`.
-
-**Dock e Aplicativos.** Ainda não existe um `.app` empacotado. Enquanto o Rice está aberto, você pode mantê-lo no Dock com clique direito no ícone › Opções › Manter no Dock. *Em breve: um `.dmg` e um cask do Homebrew.*
 
 ## Primeiros passos
 
@@ -232,6 +231,8 @@ Cada opção preenche a porta padrão acima (conferida na documentação oficial
 
 Clique em **Nova reunião** e depois em **Gravar**. Ao parar, o Rice escreve as notas. Se a reunião não acabou, abra-a depois e clique em **Continuar gravação**: o novo áudio e a transcrição entram na mesma reunião.
 
+**Qual microfone?** Durante a gravação, um chip perto do **Parar** mostra o microfone capturado (passe o mouse para ver o nome completo e se é o padrão do sistema ou o que você escolheu); se mudar no meio da reunião, o Rice avisa "Microfone trocado para X". O nome fica salvo na reunião (aparece nos detalhes e no recibo de privacidade). No Mac o Rice grava a entrada padrão do macOS (Ajustes do Sistema › Som › Entrada); no Windows dá para escolher o microfone em **Configurações › Áudio**.
+
 O Rice também percebe reuniões (Zoom, Meet, Teams) e eventos da agenda e sugere gravar.
 
 ![Início com a reunião acontecendo agora e Gravar agora](docs/images/pt-BR/31-record-now.webp)
@@ -251,6 +252,8 @@ Gerar as notas de novo (outro template ou transcrição nova) não perde mais as
 ### Agenda
 
 O **Início** mostra os próximos 7 dias agrupados por dia (Hoje, Amanhã, "sex., 17 de out."). Eventos de dia inteiro ficam numa linha discreta por dia; os com horário mostram o intervalo ("09:00–09:30") e **Entrar** / **Fazer notas** só quando são reuniões (link de chamada ou participantes). Conecte o **Calendário do macOS** (recomendado: adicione sua conta Google em Ajustes do Sistema › Contas de Internet) ou o Google direto em **Configurações › Agenda**. Os títulos dos eventos ficam no seu Mac: só o título da reunião que você grava é usado, e eventos de dia inteiro nunca geram convite de gravação.
+
+**Assinar por link (ICS)** (Mac e Windows): em **Configurações › Agenda** cole o link privado do seu calendário (Outlook/Microsoft 365: Configurações › Calendário › Calendários compartilhados › Publicar um calendário; Google: Configurações › o seu calendário › Integrar agenda › "Endereço secreto no formato iCal"; iCloud e Fastmail também servem; `webcal://` vale). O Rice lê só esse link, a cada 10 minutos, por https e com limite de tamanho, e entende eventos que se repetem (com exceções), fusos, dia inteiro e cancelados. O link é um segredo: fica cifrado (DPAPI no Windows, Keychain no Mac), nunca é mostrado de volta e nunca vai inteiro para a interface. O Modo 100% local bloqueia a leitura.
 
 ![Início com a agenda](docs/images/pt-BR/24-calendar.webp)
 

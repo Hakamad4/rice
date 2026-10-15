@@ -24,6 +24,12 @@ if arguments.contains("--print-mic-processes") {
     exit(0)
 }
 
+if arguments.contains("--print-input") {
+    // Entrada padrão atual: {"id":…,"name":…} (ou nulos se não houver). Só consulta o CoreAudio.
+    printJSON(InputDevice.fields(InputDevice.current()).mapValues { $0 ?? NSNull() })
+    exit(0)
+}
+
 if let stepsJSON = value(after: "--simulate-mic") {
     let steps = (try? JSONSerialization.jsonObject(with: Data(stepsJSON.utf8))) as? [[String]] ?? []
     let watcher = MicWatcher()
@@ -88,6 +94,10 @@ Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
     calendar.tick(now: Date())
 }.fire()
 
+let inputWatcher = InputDeviceWatcher()
+inputWatcher.announce()
+inputWatcher.observeChanges()
+
 calendar.observeChanges { Output.emit("calendar-changed", [:]) }
 reminders.observeChanges { Output.emit("reminders-changed", [:]) }
 
@@ -123,6 +133,12 @@ Thread {
             inFlightCommands.enter()
             DispatchQueue.main.async {
                 Output.emit("events-list", ["events": calendar.events(from: from, to: to, includeAllDay: true).map(\.listJSON)])
+                inFlightCommands.leave()
+            }
+        case "current-input":
+            inFlightCommands.enter()
+            DispatchQueue.main.async {
+                inputWatcher.announce(force: true)
                 inFlightCommands.leave()
             }
         case "request-calendar-access":

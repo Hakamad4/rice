@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, join, posix, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { exeName, findCli, isWindows } from '../platform';
+import { findCli, isWindows } from '../platform';
 
 /** Sobe a partir deste arquivo até achar o package.json do Rice (funciona em src/ e em out/). */
 export function repoRoot(): string {
@@ -20,14 +20,18 @@ export function repoRoot(): string {
  * Binário nativo. Mac: o compilado no repositório (`native/<nome>/.build/release`) ou, no app empacotado, o de `native-bin/`.
  * Windows: o do build CMake (`native/win/build/Release`) ou, empacotado, `native-bin/win/<nome>.exe`.
  */
-export function nativeBinary(name: string, exists: (path: string) => boolean = existsSync, root: string = repoRoot()): string {
-  if (isWindows()) {
-    const dev = [join(root, 'native', 'win', 'build', 'Release', exeName(name)), join(root, 'native', 'win', 'build', exeName(name))].find((p) => exists(p));
-    return dev ?? join(root, 'native-bin', 'win', exeName(name));
+export function nativeBinary(name: string, exists: (path: string) => boolean = existsSync, root: string = repoRoot(), flavor: typeof posix = pathFlavor()): string {
+  if (flavor === win32) {
+    const exe = `${name}.exe`;
+    const dev = [flavor.join(root, 'native', 'win', 'build', 'Release', exe), flavor.join(root, 'native', 'win', 'build', exe)].find((p) => exists(p));
+    return dev ?? flavor.join(root, 'native-bin', 'win', exe);
   }
-  const built = join(root, 'native', name, '.build', 'release', name);
-  return exists(built) ? built : join(root, 'native-bin', name);
+  const built = flavor.join(root, 'native', name, '.build', 'release', name);
+  return exists(built) ? built : flavor.join(root, 'native-bin', name);
 }
+
+/** As regras de caminho da plataforma (`C:\\Users\\José da Silva\\…` no Windows, `/Users/…` no Mac); injetável para testar uma plataforma na outra. */
+export const pathFlavor = (): typeof posix => (isWindows() ? win32 : posix);
 
 export function riceAudioBinary(): string {
   return process.env.RICE_AUDIO_BIN ?? nativeBinary('rice-audio');
@@ -63,13 +67,15 @@ export function opencodeBinary(): string {
 }
 
 /** `/Users/ana/Rice` → `~/Rice` (só para mostrar; o caminho real continua o completo). */
-export function tildify(path: string, home: string = homedir()): string {
-  if (path === home) return '~';
-  return path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
+export function tildify(path: string, home: string = homedir(), flavor: typeof posix = pathFlavor()): string {
+  const norm = (p: string) => (flavor === win32 ? p.toLowerCase() : p); // no Windows C:\\Users\\Ana e c:\\users\\ana são a mesma pasta
+  if (norm(path) === norm(home)) return '~';
+  return norm(path).startsWith(norm(home) + flavor.sep) ? `~${path.slice(home.length)}` : path;
 }
 
 /** Verdadeiro se `dir` é a própria raiz ou está dentro dela (sem seguir symlinks). */
-export function isInsideRoot(root: string, dir: string): boolean {
-  const rel = relative(resolve(root), resolve(dir));
-  return rel === '' || (rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel));
+export function isInsideRoot(root: string, dir: string, flavor: typeof posix = pathFlavor()): boolean {
+  const norm = (p: string) => flavor.resolve(flavor === win32 ? p.toLowerCase() : p);
+  const rel = flavor.relative(norm(root), norm(dir));
+  return rel === '' || (rel !== '..' && !rel.startsWith('..' + flavor.sep) && !flavor.isAbsolute(rel));
 }

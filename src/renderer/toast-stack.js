@@ -11,5 +11,16 @@
     }
     return node;
   }
-  window.RiceToastStack = { get };
+  /** Aviso curto e discreto (some sozinho); vários se empilham com os outros. */
+  function notice(text, ms) {
+    const node = document.createElement('div');
+    node.className = 'toast show';
+    node.setAttribute('role', 'status');
+    node.setAttribute('aria-live', 'polite');
+    node.textContent = text;
+    get().append(node);
+    setTimeout(() => node.remove(), ms || 4000);
+    return node;
+  }
+  window.RiceToastStack = { get, notice };
 })();

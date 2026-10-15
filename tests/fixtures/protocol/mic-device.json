@@ -1,0 +1,59 @@
+{
+  "comment": "Evento aditivo mic-device (só Windows; o helper do Mac não emite e o app tem que funcionar sem ele) e a saída de --list-inputs. Cenário: escolhido b (FIFINE), desplugado, plugado de novo.",
+  "events": [
+    {
+      "event": "mic-device",
+      "id": "b",
+      "isDefault": false,
+      "name": "Microfone (FIFINE K669)",
+      "reason": "open",
+      "chosen": true
+    },
+    {
+      "event": "mic-device",
+      "id": "a",
+      "isDefault": true,
+      "name": "Microfone (Realtek)",
+      "reason": "preferred-missing",
+      "chosen": false
+    },
+    {
+      "event": "mic-device",
+      "id": "b",
+      "isDefault": false,
+      "name": "Microfone (FIFINE K669)",
+      "reason": "preferred-returned",
+      "chosen": true
+    }
+  ],
+  "inputs": [
+    {
+      "id": "{0.0.1.00000000}.{aaa}",
+      "isDefault": true,
+      "name": "Microfone (Realtek)",
+      "state": "active"
+    },
+    {
+      "id": "{0.0.1.00000000}.{bbb}",
+      "isDefault": false,
+      "name": "Microfone (FIFINE K669)",
+      "state": "active"
+    }
+  ],
+  "listInputsLine": {
+    "inputs": [
+      {
+        "id": "{0.0.1.00000000}.{aaa}",
+        "isDefault": true,
+        "name": "Microfone (Realtek)",
+        "state": "active"
+      },
+      {
+        "id": "{0.0.1.00000000}.{bbb}",
+        "isDefault": false,
+        "name": "Microfone (FIFINE K669)",
+        "state": "active"
+      }
+    ]
+  }
+}

@@ -26,6 +26,7 @@
 #include <thread>
 #include <vector>
 
+#include "../mic_device.hpp"
 #include "../output_classify.hpp"
 
 using Microsoft::WRL::ComPtr;
@@ -49,6 +50,59 @@ std::string hr(HRESULT code) {
   char buf[32];
   std::snprintf(buf, sizeof buf, "0x%08lX", static_cast<unsigned long>(code));
   return buf;
+}
+
+std::wstring toWide(const std::string& s) {
+  if (s.empty()) return {};
+  int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+  std::wstring out(static_cast<size_t>(n), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), out.data(), n);
+  return out;
+}
+
+std::string endpointId(IMMDevice* device) {
+  LPWSTR raw = nullptr;
+  if (!device || FAILED(device->GetId(&raw)) || !raw) return {};
+  std::string id = toUtf8(raw);
+  CoTaskMemFree(raw);
+  return id;
+}
+
+std::string friendlyName(IMMDevice* device) {
+  ComPtr<IPropertyStore> props;
+  std::string name;
+  if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &props))) {
+    PROPVARIANT v;
+    PropVariantInit(&v);
+    if (SUCCEEDED(props->GetValue(PKEY_Device_FriendlyName, &v)) && v.vt == VT_LPWSTR) name = toUtf8(v.pwszVal);
+    PropVariantClear(&v);
+  }
+  return name;
+}
+
+/// Entradas (microfones) ativas, com a marcação do padrão (eConsole). Precisa de COM inicializado na thread.
+std::vector<InputDevice> activeInputs() {
+  std::vector<InputDevice> out;
+  ComPtr<IMMDeviceEnumerator> enumerator;
+  if (FAILED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator)))) return out;
+  std::string defaultId;
+  ComPtr<IMMDevice> def;
+  if (SUCCEEDED(enumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &def))) defaultId = endpointId(def.Get());
+  ComPtr<IMMDeviceCollection> collection;
+  if (FAILED(enumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection))) return out;
+  UINT count = 0;
+  collection->GetCount(&count);
+  for (UINT i = 0; i < count; i++) {
+    ComPtr<IMMDevice> device;
+    if (FAILED(collection->Item(i, &device))) continue;
+    InputDevice d;
+    d.id = endpointId(device.Get());
+    if (d.id.empty()) continue;
+    d.name = friendlyName(device.Get());
+    d.isDefault = d.id == defaultId;
+    out.push_back(std::move(d));
+  }
+  return out;
 }
 
 /// Chave de privacidade do Windows: "Deny" em HKCU...\ConsentStore\microphone (ou em NonPackaged) = apps de desktop sem mic.
@@ -103,7 +157,7 @@ bool toFloat(const BYTE* data, UINT32 frames, const WAVEFORMATEX* fmt, bool sile
 /// Recebe OnDefaultDeviceChanged numa thread do COM e repassa a uma thread própria (nada pesado dentro do callback).
 class DeviceMonitor final : public IMMNotificationClient {
  public:
-  enum Flow { Capture = 0, Render = 1 };
+  enum Flow { Capture = 0, Render = 1, CaptureDevices = 2 };  // CaptureDevices: entrou/saiu/mudou de estado qualquer entrada
   using Listener = std::function<void()>;
 
   static DeviceMonitor& instance() {
@@ -138,9 +192,9 @@ class DeviceMonitor final : public IMMNotificationClient {
     if (role == eConsole) post(flow == eCapture ? Capture : Render);
     return S_OK;
   }
-  HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { return S_OK; }  // trocas do padrão chegam em OnDefaultDeviceChanged
-  HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { return S_OK; }
-  HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override { post(CaptureDevices); return S_OK; }  // trocas do padrão chegam em OnDefaultDeviceChanged
+  HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override { post(CaptureDevices); return S_OK; }
+  HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override { post(CaptureDevices); return S_OK; }
   HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override { return S_OK; }
 
  private:
@@ -168,8 +222,8 @@ class DeviceMonitor final : public IMMNotificationClient {
   void run() {
     std::unique_lock<std::mutex> lock(mutex_);
     for (;;) {
-      wake_.wait(lock, [this] { return pending_[0] || pending_[1]; });
-      for (int flow = 0; flow < 2; flow++) {
+      wake_.wait(lock, [this] { return pending_[0] || pending_[1] || pending_[2]; });
+      for (int flow = 0; flow < 3; flow++) {
         if (!pending_[flow]) continue;
         pending_[flow] = false;
         std::vector<Listener> toCall;
@@ -186,7 +240,7 @@ class DeviceMonitor final : public IMMNotificationClient {
   std::mutex mutex_;
   std::condition_variable wake_, keepAlive_;
   std::map<int, std::pair<Flow, Listener>> listeners_;
-  bool pending_[2] = {false, false};
+  bool pending_[3] = {false, false, false};
   int next_ = 0;
   std::thread worker_;
 };
@@ -202,12 +256,22 @@ class WasapiCapture final : public CaptureHandle {
 
   ~WasapiCapture() override { stop(); }
 
+  /// Só para o microfone: endpoint escolhido (vazio = padrão) e quem recebe cada mudança do dispositivo em uso.
+  void configureMic(std::string preferred, std::function<void(const MicDeviceInfo&)> onDevice) {
+    preferred_ = std::move(preferred);
+    onDevice_ = std::move(onDevice);
+  }
+
   /// Abre o dispositivo e começa a capturar. Em falha devolve false e preenche `error`/`failure`.
   bool start(std::string& error, CaptureFailure& failure) {
     std::promise<bool> opened;
     auto result = opened.get_future();
     DeviceMonitor::Flow flow = kind_ == Kind::Microphone ? DeviceMonitor::Capture : DeviceMonitor::Render;
     subscription_ = DeviceMonitor::instance().subscribe(flow, [this] { restartRequested_ = true; wakeEvent(); });
+    // Com microfone escolhido, também reavalia quando QUALQUER entrada entra, sai ou muda de estado (o escolhido some ou volta).
+    if (kind_ == Kind::Microphone && !preferred_.empty()) {
+      devicesSubscription_ = DeviceMonitor::instance().subscribe(DeviceMonitor::CaptureDevices, [this] { restartRequested_ = true; wakeEvent(); });
+    }
     thread_ = std::thread([this, &opened, &error, &failure] { run(opened, error, failure); });
     bool ok = result.wait_for(std::chrono::seconds(8)) == std::future_status::ready && result.get();
     if (!ok) {
@@ -220,6 +284,8 @@ class WasapiCapture final : public CaptureHandle {
   void stop() override {
     if (subscription_ >= 0) DeviceMonitor::instance().unsubscribe(subscription_);
     subscription_ = -1;
+    if (devicesSubscription_ >= 0) DeviceMonitor::instance().unsubscribe(devicesSubscription_);
+    devicesSubscription_ = -1;
     stopping_ = true;
     wakeEvent();
     if (thread_.joinable() && std::this_thread::get_id() != thread_.get_id()) thread_.join();
@@ -237,8 +303,21 @@ class WasapiCapture final : public CaptureHandle {
     HRESULT rc = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, IID_PPV_ARGS(&enumerator));
     if (FAILED(rc)) { error = "MMDeviceEnumerator " + hr(rc); return false; }
     const bool loopback = kind_ == Kind::Loopback;
-    rc = enumerator->GetDefaultAudioEndpoint(loopback ? eRender : eCapture, eConsole, &device_);
-    if (FAILED(rc)) { error = std::string(loopback ? "sem dispositivo de saída padrão " : "sem microfone padrão ") + hr(rc); return false; }
+    MicChoice choice;
+    bool picked = false;
+    if (!loopback && !preferred_.empty()) {
+      // Microfone escolhido: abre aquele endpoint se ele estiver ativo; senão (desplugado) cai no padrão.
+      choice = chooseMic(preferred_, activeInputs());
+      if (choice.preferredActive) {
+        std::wstring wide = toWide(choice.id);
+        picked = SUCCEEDED(enumerator->GetDevice(wide.c_str(), &device_));
+      }
+    }
+    if (!picked) {
+      rc = enumerator->GetDefaultAudioEndpoint(loopback ? eRender : eCapture, eConsole, &device_);
+      if (FAILED(rc)) { error = std::string(loopback ? "sem dispositivo de saída padrão " : "sem microfone padrão ") + hr(rc); return false; }
+    }
+    if (!loopback) announceMic();
     rc = device_->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(client_.GetAddressOf()));
     if (FAILED(rc)) {
       if (rc == E_ACCESSDENIED) failure = CaptureFailure::PermissionDenied;
@@ -270,6 +349,22 @@ class WasapiCapture final : public CaptureHandle {
     rc = client_->Start();
     if (FAILED(rc)) { error = "IAudioClient::Start " + hr(rc); return false; }
     return true;
+  }
+
+  /// Reavalia a escolha com as entradas de agora e, se o dispositivo em uso mudou, avisa (evento `mic-device`).
+  void announceMic() {
+    std::vector<InputDevice> inputs = activeInputs();
+    MicDeviceInfo info;
+    if (tracker_.update(preferred_, inputs, info)) {
+      currentMicId_ = info.id;
+      if (onDevice_ && !info.id.empty()) onDevice_(info);
+    }
+  }
+
+  /// Há mudança que exija reabrir? Sem microfone escolhido, qualquer troca do padrão reabre (como sempre foi).
+  bool needsReopen() {
+    if (kind_ != Kind::Microphone || preferred_.empty()) return true;
+    return chooseMic(preferred_, activeInputs()).id != currentMicId_;
   }
 
   HANDLE readyEvent() { return ready_ ? ready_ : (ready_ = CreateEventW(nullptr, FALSE, FALSE, nullptr)); }
@@ -352,6 +447,7 @@ class WasapiCapture final : public CaptureHandle {
     const bool loopback = kind_ == Kind::Loopback;
     while (!stopping_) {
       bool invalid = restartRequested_.exchange(false);
+      if (invalid && !needsReopen()) invalid = false;
       if (!invalid) {
         if (loopback) {
           keepSilentRenderFed();
@@ -361,7 +457,7 @@ class WasapiCapture final : public CaptureHandle {
           WaitForMultipleObjects(2, handles, FALSE, 100);
         }
         if (stopping_) break;
-        if (restartRequested_.exchange(false)) invalid = true;
+        if (restartRequested_.exchange(false) && needsReopen()) invalid = true;
         else if (!drain()) invalid = true;
         else if (failedFormat_) { onFatal_("formato de áudio não suportado"); break; }
       }
@@ -401,6 +497,11 @@ class WasapiCapture final : public CaptureHandle {
   std::atomic<bool> stopping_{false};
   std::atomic<bool> restartRequested_{false};
   int subscription_ = -1;
+  int devicesSubscription_ = -1;
+  std::string preferred_;
+  std::function<void(const MicDeviceInfo&)> onDevice_;
+  MicDeviceTracker tracker_;
+  std::string currentMicId_;
   std::mutex eventMutex_;
   HANDLE wake_ = nullptr;   // pedido de parar/reabrir
   HANDLE ready_ = nullptr;  // dados prontos (só mic)
@@ -428,8 +529,18 @@ class WindowsPlatform final : public Platform {
       return nullptr;
     }
     auto capture = std::make_unique<WasapiCapture>(WasapiCapture::Kind::Microphone, std::move(onBlock), std::move(onDeviceChanged), std::move(onFatal));
+    capture->configureMic(preferred_, micListener_);
     if (!capture->start(error, failure)) return nullptr;
     return capture;
+  }
+
+  void setPreferredInput(const std::string& id) override { preferred_ = id; }
+  void setMicDeviceListener(std::function<void(const MicDeviceInfo&)> listener) override { micListener_ = std::move(listener); }
+  std::vector<InputDevice> listInputs() override {
+    HRESULT init = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    std::vector<InputDevice> inputs = activeInputs();
+    if (SUCCEEDED(init)) CoUninitialize();
+    return inputs;
   }
 
   std::unique_ptr<CaptureHandle> startSystem(BlockCallback onBlock, std::function<void(std::string)> onStopped, const std::vector<long>&, std::string& error) override {
@@ -505,6 +616,8 @@ class WindowsPlatform final : public Platform {
 
  private:
   HANDLE power_ = INVALID_HANDLE_VALUE;
+  std::string preferred_;
+  std::function<void(const MicDeviceInfo&)> micListener_;
 };
 
 }  // namespace

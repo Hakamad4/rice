@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -17,6 +18,7 @@
 #include "app_matcher.hpp"
 #include "mic_monitor.hpp"
 #include "mic_watcher.hpp"
+#include "window_list.hpp"
 
 using namespace rice;
 
@@ -69,6 +71,37 @@ json::Value stringArray(const std::vector<std::string>& values) {
   return out;
 }
 
+/// Todos os valores de `flag` (repetível): --app Zoom --app "Google Chrome".
+std::vector<std::string> allValuesAfter(const std::vector<std::string>& args, const std::string& flag) {
+  std::vector<std::string> out;
+  for (size_t i = 0; i + 1 < args.size(); i++) {
+    if (args[i] == flag) out.push_back(args[i + 1]);
+  }
+  return out;
+}
+
+/// Janelas simuladas (--fake-windows '<json>' ou RICE_DETECTOR_FAKE_WINDOWS): no lugar do EnumWindows, para os testes.
+std::optional<std::vector<WindowInfo>> fakeWindows(const std::vector<std::string>& args) {
+  bool found = false;
+  std::string text = valueAfter(args, "--fake-windows", found);
+  if (!found) {
+    const char* env = std::getenv("RICE_DETECTOR_FAKE_WINDOWS");
+    if (!env || !*env) return std::nullopt;
+    text = env;
+  }
+  auto parsed = json::parse(text);
+  return parsed ? windowsFromJson(*parsed) : std::vector<WindowInfo>{};
+}
+
+std::vector<WindowInfo> currentWindows(const std::vector<std::string>& args) {
+  if (auto fake = fakeWindows(args)) return *fake;
+  return enumerateWindows();
+}
+
+json::Value listWindowsJson(const std::vector<WindowInfo>& windows, const WindowFilter& filter) {
+  return windowsToJson(filterWindows(windows, filter));
+}
+
 json::Value accessFields() {
   json::Value f = json::Value::object();
   f.set("status", "unsupported");
@@ -95,6 +128,16 @@ int main(int argc, char** argv) {
     printLine(stringArray(identifiersUsingMic()).dump());
     return 0;
   }
+  if (hasFlag(args, "--list-windows")) {
+    // Resposta única: array de janelas visíveis (da frente para trás) dos apps/processos pedidos; sem filtro, todas.
+    WindowFilter filter;
+    filter.apps = allValuesAfter(args, "--app");
+    filter.exes = allValuesAfter(args, "--exe");
+    for (const auto& pid : allValuesAfter(args, "--pid")) filter.pids.push_back(std::strtoul(pid.c_str(), nullptr, 10));
+    enableDpiAwareness();
+    printLine(listWindowsJson(currentWindows(args), filter).dump());
+    return 0;
+  }
   std::string stepsText = valueAfter(args, "--simulate-mic", found);
   if (found) {
     MicWatcher watcher(out);
@@ -108,6 +151,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  enableDpiAwareness();
   // Modo watch (usado pelo Rice).
   out.emit("calendar-access", accessFields());
   out.emit("reminders-access", accessFields());
@@ -169,6 +213,27 @@ int main(int argc, char** argv) {
     } else if (name == "list-events") {
       f.set("events", json::Value::array());
       out.emit("events-list", std::move(f));
+    } else if (name == "list-windows") {
+      // Pedido do Rice (só Windows): {"cmd":"list-windows","apps":["Zoom"],"exes":["chrome.exe"],"pids":[123]}.
+      WindowFilter filter;
+      auto strings = [&](const char* key) {
+        std::vector<std::string> v;
+        if (const json::Value* a = command->body.get(key); a && a->isArray()) {
+          for (const auto& item : a->items()) {
+            if (item.isString()) v.push_back(item.str());
+          }
+        }
+        return v;
+      };
+      filter.apps = strings("apps");
+      filter.exes = strings("exes");
+      if (const json::Value* a = command->body.get("pids"); a && a->isArray()) {
+        for (const auto& item : a->items()) {
+          if (item.isNumber()) filter.pids.push_back(static_cast<unsigned long>(item.integer()));
+        }
+      }
+      f.set("windows", listWindowsJson(currentWindows(args), filter));
+      out.emit("windows-list", std::move(f));
     } else if (name == "request-calendar-access") {
       out.emit("calendar-access", accessFields());
     } else if (name == "list-reminders") {

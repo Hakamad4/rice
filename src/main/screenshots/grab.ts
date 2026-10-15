@@ -4,7 +4,10 @@ import { promisify } from 'node:util';
 import { join } from 'node:path';
 import { BrowserWindow, desktopCapturer, nativeImage, screen, systemPreferences } from 'electron';
 import type { Frame } from './capture';
-import { chooseTarget, LIST_WINDOWS_JXA, parseWindows, type WinInfo } from './target';
+import { chooseTarget, findWindowSource, LIST_WINDOWS_JXA, parseWindows, type WinInfo } from './target';
+import { listWindowsWin } from './win-windows';
+import { isWindows } from '../platform';
+import { riceDetectorBinary } from '../app/paths';
 import { dHash, grayFromBitmap, HASH_H, HASH_W } from './phash';
 
 /** Largura máxima guardada (o brief pede ~1280 px) e a qualidade do JPEG. */
@@ -27,8 +30,9 @@ export type GrabHint = { apps?: readonly string[]; preferWindow?: boolean };
 
 const execFileAsync = promisify(execFile);
 
-/** Janelas na tela (macOS, da frente para trás). No Windows o `desktopCapturer` não diz onde a janela está: a lista vem vazia e vale a tela do cursor. */
-async function listWindows(): Promise<WinInfo[]> {
+/** Janelas na tela, da frente para trás: macOS pelo CoreGraphics (JXA), Windows pelo rice-detector. Outros sistemas: vazio (vale a tela do cursor). */
+async function listWindows(apps: readonly string[]): Promise<WinInfo[]> {
+  if (isWindows()) return listWindowsWin(apps, riceDetectorBinary(), (r) => screen.screenToDipRect(null, r));
   if (process.platform !== 'darwin') return [];
   try {
     const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', LIST_WINDOWS_JXA], { timeout: 3000, maxBuffer: 4 * 1024 * 1024 });
@@ -47,8 +51,9 @@ export async function grabScreen(hint: GrabHint = {}): Promise<Frame | null> {
   if (screenPermission() !== 'granted') return null;
   const displays = screen.getAllDisplays();
   const cursor = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) ?? screen.getPrimaryDisplay();
+  const windowList = hint.apps?.length ? await listWindows(hint.apps) : [];
   const target = chooseTarget({
-    windows: hint.apps?.length ? await listWindows() : [],
+    windows: windowList,
     displays: displays.map((d) => ({ id: d.id, bounds: d.bounds })),
     apps: hint.apps ?? [],
     cursorDisplayId: cursor.id,
@@ -56,6 +61,7 @@ export async function grabScreen(hint: GrabHint = {}): Promise<Frame | null> {
     preferWindow: hint.preferWindow === true,
   });
   const display = displays.find((d) => d.id === target.displayId) ?? cursor;
+  const chosen = target.kind === 'window' ? windowList.find((w) => w.id === target.windowId) : undefined;
   const width = Math.min(SHOT_WIDTH, Math.round(display.size.width * display.scaleFactor));
   const height = Math.max(1, Math.round((width * display.size.height) / display.size.width));
   const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && w.isVisible());
@@ -63,7 +69,8 @@ export async function grabScreen(hint: GrabHint = {}): Promise<Frame | null> {
   try {
     if (target.kind === 'window') {
       const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: SHOT_WIDTH, height: SHOT_WIDTH } });
-      const source = sources.find((s) => s.id === `window:${target.windowId}:0`);
+      const wanted = chosen && isWindows() ? findWindowSource(sources, chosen) : sources.find((s) => s.id === `window:${target.windowId}:0`);
+      const source = wanted ?? undefined;
       const frame = source && !source.thumbnail.isEmpty() ? frameFromImage(source.thumbnail) : null;
       if (frame) return frame; // senão cai na tela que contém a janela
     }
