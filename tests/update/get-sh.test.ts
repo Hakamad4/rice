@@ -10,7 +10,7 @@ const mac = test.skipIf(process.platform !== 'darwin');
 mac('pasta que existe e não é clone: para sem tocar em nada', async () => {
   const dir = join(await makeTmpDir(), 'rice');
   mkdirSync(dir);
-  const r = spawnSync('bash', [script], { env: { ...process.env, RICE_DIR: dir, LANG: 'pt_BR.UTF-8' }, encoding: 'utf8' });
+  const r = spawnSync('bash', [script], { env: { ...process.env, RICE_DIR: dir, LC_ALL: '', LANG: 'pt_BR.UTF-8' }, encoding: 'utf8' });
   expect(r.status).toBe(1);
   expect(r.stderr).toContain('não é um clone do Rice');
 });
@@ -48,7 +48,7 @@ function fakeGit(dir: string) {
 mac('pasta de notas do Rice (padrão ~/Rice): não clona nem atualiza lá, explica e indica RICE_DIR', async () => {
   const home = await fakeHome();
   mkdirSync(join(home, 'Rice'));
-  const r = spawnSync('bash', [script], { env: { ...process.env, HOME: home, RICE_DIR: join(home, 'Rice'), LANG: 'pt_BR.UTF-8' }, encoding: 'utf8' });
+  const r = spawnSync('bash', [script], { env: { ...process.env, HOME: home, RICE_DIR: join(home, 'Rice'), LC_ALL: '', LANG: 'pt_BR.UTF-8' }, encoding: 'utf8' });
   expect(r.status).toBe(1);
   expect(r.stderr).toContain('pasta das suas notas');
   expect(r.stderr).toContain('RICE_DIR=');
@@ -59,7 +59,7 @@ mac('pasta de notas escolhida nas configurações: também recusa', async () => 
   const notes = join(home, 'Notas');
   mkdirSync(notes);
   writeFileSync(join(home, 'Library', 'Application Support', 'Rice', 'settings.json'), JSON.stringify({ root: notes }));
-  const r = spawnSync('bash', [script], { env: { ...process.env, HOME: home, RICE_DIR: notes, LANG: 'en_US.UTF-8' }, encoding: 'utf8' });
+  const r = spawnSync('bash', [script], { env: { ...process.env, HOME: home, RICE_DIR: notes, LC_ALL: '', LANG: 'en_US.UTF-8' }, encoding: 'utf8' });
   expect(r.status).toBe(1);
   expect(r.stderr).toContain('notes folder');
 });
@@ -67,7 +67,7 @@ mac('pasta de notas escolhida nas configurações: também recusa', async () => 
 mac('sem RICE_DIR: baixa em ~/rice-src (não em ~/rice, que no APFS é a pasta de notas ~/Rice)', async () => {
   const home = await fakeHome();
   const g = fakeGit(home);
-  const r = spawnSync('bash', [script], { env: { ...process.env, HOME: home, PATH: g.path, LANG: 'pt_BR.UTF-8' }, encoding: 'utf8' });
+  const r = spawnSync('bash', [script], { env: { ...process.env, HOME: home, PATH: g.path, LC_ALL: '', LANG: 'pt_BR.UTF-8' }, encoding: 'utf8' });
   expect(r.stdout).toContain(`baixando o Rice em ${join(home, 'rice-src')}`);
   expect(readFileSync(g.log, 'utf8')).toContain(`clone --filter=blob:none https://github.com/WalissonCF/rice.git ${join(home, 'rice-src')}`);
 });
