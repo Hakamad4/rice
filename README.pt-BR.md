@@ -48,7 +48,7 @@ Precisa de um Mac com Apple Silicon (arm64) e macOS 14 ou mais novo. A transcri�
 
 ### Opção 1 — recomendada: instalar pelo Terminal
 
-Uma linha só. Ela baixa o código em `~/rice`, compila e coloca o **Rice.app** em `/Applications`. Como o app é gerado no seu Mac, o macOS não bloqueia a abertura (sem `xattr` nem "Abrir Mesmo Assim"). Rodar de novo atualiza.
+Uma linha só. Ela baixa o código em `~/rice-src`, compila e coloca o **Rice.app** em `/Applications`. Como o app é gerado no seu Mac, o macOS não bloqueia a abertura (sem `xattr` nem "Abrir Mesmo Assim"). Rodar de novo atualiza.
 
 ```bash
 curl -fsSL https://ricenotes.app/install | bash

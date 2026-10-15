@@ -57,3 +57,22 @@ test('tightenAppData: reuniões, .rice e dados do app; a pasta raiz escolhida pe
   expect(await mode(join(userData, 'spool', 'x', 'transcricao.md'))).toBe(0o600);
   expect(await mode(root)).toBe(0o755);
 });
+
+test('tightenAppData: pasta sem meta.json (ex.: o clone do código) e arquivos soltos na raiz ficam como estão', async () => {
+  const root = await makeTmpDir();
+  const userData = await makeTmpDir();
+  await mkdir(join(root, '2026-10-08 1400 - Daily'));
+  await writeFile(join(root, '2026-10-08 1400 - Daily', 'meta.json'), '{}');
+  await mkdir(join(root, 'scripts'));
+  await writeFile(join(root, 'scripts', 'build.sh'), '#!/bin/bash\n');
+  await writeFile(join(root, 'install.sh'), '#!/bin/bash\n');
+  for (const p of [join(root, '2026-10-08 1400 - Daily', 'meta.json')]) await chmod(p, 0o644);
+  await chmod(join(root, 'scripts'), 0o755);
+  await chmod(join(root, 'scripts', 'build.sh'), 0o755);
+  await chmod(join(root, 'install.sh'), 0o755);
+  await tightenAppData(root, userData);
+  expect(await mode(join(root, '2026-10-08 1400 - Daily', 'meta.json'))).toBe(0o600);
+  expect(await mode(join(root, 'scripts'))).toBe(0o755);
+  expect(await mode(join(root, 'scripts', 'build.sh'))).toBe(0o755);
+  expect(await mode(join(root, 'install.sh'))).toBe(0o755);
+});
