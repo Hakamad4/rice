@@ -52,6 +52,7 @@ import { appAbout } from '../update/about';
 import { createWinUpdater, nsisInstall, type UpdaterLike, type WinUpdateState } from '../update/win-updater';
 import { readBuildInfo, type BuildInfo } from '../update/build-info';
 import { createUpdateChecker, RELEASES_URL, type UpdateState } from '../update/check';
+import { createCheckNow } from '../update/check-now';
 import { openUpdateInTerminal } from '../update/terminal';
 import { consentOffer, normalizeConsentText } from '../privacy/consent';
 import { isSensitiveFolder } from '../privacy/folder-rules';
@@ -1384,6 +1385,7 @@ const winUpdater = createWinUpdater({
   },
   supported: () => (TEST_INSTANCE ? process.env.RICE_TEST_WINUPDATE !== undefined : nsisInstall({ platform: process.platform, packaged: app.isPackaged, resourcesPath: process.resourcesPath })),
   enabled: async () => (await loadSettings()).checkUpdates !== false && !isLocalMode(),
+  allowed: async () => !isLocalMode(), // baixar e instalar valem com a consulta automática desligada (o usuário pediu); só o Modo 100% local barra
   isRecording: () => session !== null && session.state !== 'idle',
   onChange: (st) => send('winupdate:changed', st),
 });
@@ -1406,6 +1408,20 @@ const updateChecker = createUpdateChecker({
   setState: async (state) => saveSettings({ ...(await loadSettings()), updateCheck: state }),
   disabled: () => TEST_INSTANCE,
   cloneUsable: (path) => process.platform === 'darwin' && existsSync(join(path, 'update.sh')),
+  localMode: () => isLocalMode(),
+});
+/** Windows: a consulta do electron-updater deu certo agora (a do Mac grava sozinha em check.ts). */
+const markChecked = async () => {
+  const s = await loadSettings();
+  await saveSettings({ ...s, updateCheck: { ...(s.updateCheck ?? {}), lastCheckAt: new Date().toISOString() } });
+};
+/** "Buscar atualização agora" (Configurações › Atualizações). */
+const checkNowRunner = createCheckNow({
+  localMode: async () => isLocalMode(),
+  win: async () => ((await winUpdater.status()).supported ? winUpdater.check(true) : null),
+  commit: () => updateChecker.checkNow(),
+  lastCheckAt: async () => (await loadSettings()).updateCheck?.lastCheckAt,
+  markChecked,
 });
 
 function registerIpc(runner: AiRunner): void {
@@ -1609,6 +1625,18 @@ function registerIpc(runner: AiRunner): void {
     return updateChecker.status();
   });
   // qual cópia do Rice está aberta (versão, commit do build e caminho do app): ajuda a ver se o que roda é o que acabou de ser instalado
+  // "Buscar atualização agora": pedido do usuário (funciona com a consulta automática desligada; no Modo 100% local não consulta); no máx. 1 a cada 10 s
+  handle('update:check-now', async () => {
+    const fake = TEST_INSTANCE ? process.env.RICE_TEST_CHECKNOW : undefined; // SÓ instância de teste: resultado fixo para os prints
+    if (fake === 'latest' || fake === 'available' || fake === 'error') {
+      const lastCheckAt = new Date().toISOString();
+      return fake === 'error' ? { phase: 'error', error: 'network' } : fake === 'available' ? { phase: 'available', newVersion: 'e4f5a6b', lastCheckAt } : { phase: 'latest', lastCheckAt };
+    }
+    const result = await checkNowRunner.checkNow();
+    if (result.status) send('update:changed', result.status);
+    return result;
+  });
+  handle('update:last-check', async () => (await loadSettings()).updateCheck?.lastCheckAt ?? null);
   handle('update:about', async () => appAbout({ version: app.getVersion(), commit: buildInfo?.commit, exePath: app.getPath('exe') }));
   // Windows: procurar / baixar / reiniciar e atualizar (nada disso roda no Mac; o estado só diz que não há suporte)
   handle('winupdate:status', async () => fakeWinUpdate() ?? winUpdater.status());
@@ -2370,7 +2398,7 @@ app.whenReady().then(async () => {
   buildInfo = await readBuildInfo(join(__dirname, 'build-info.json'));
   const checkUpdate = () => {
     void updateChecker.maybeCheck().then((status) => send('update:changed', status)).catch(() => {});
-    if (!TEST_INSTANCE) void winUpdater.check(false).catch(() => {}); // Windows instalado pelo NSIS; no Mac o estado fica sem suporte
+    if (!TEST_INSTANCE) void winUpdater.check(false).then((st) => (st.supported && st.error === undefined ? markChecked() : undefined)).catch(() => {}); // Windows instalado pelo NSIS; no Mac o estado fica sem suporte
   };
   setTimeout(checkUpdate, 20_000).unref();
   setInterval(checkUpdate, 6 * 3_600_000).unref();

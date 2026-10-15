@@ -37,8 +37,10 @@ export type WinUpdaterDeps = {
   load: () => UpdaterLike | null;
   /** Windows + app empacotado + `app-update.yml` do NSIS ao lado do app. */
   supported: () => boolean;
-  /** Opção "Procurar atualizações" e Modo 100% local. */
+  /** Opção "Procurar atualizações" e Modo 100% local (a consulta automática só roda com isto). */
   enabled: () => Promise<boolean>;
+  /** Só o Modo 100% local fora (busca manual, baixar e instalar funcionam com a opção automática desligada); padrão: `enabled`. */
+  allowed?: () => Promise<boolean>;
   isRecording: () => boolean;
   onChange: (state: WinUpdateState) => void;
 };
@@ -85,7 +87,7 @@ export function createWinUpdater(deps: WinUpdaterDeps) {
 
   /** Estado para a tela: `supported` reflete as regras de agora (opção ligada, fora do Modo 100% local, instalado pelo NSIS). */
   async function status(): Promise<WinUpdateState> {
-    const supported = deps.supported() && (await deps.enabled());
+    const supported = deps.supported() && (await (deps.allowed ?? deps.enabled)());
     if (supported !== state.supported) state = { ...state, supported };
     if (!supported && state.phase !== 'idle') state = { supported, phase: 'idle' };
     return { ...state, waitingForRecording: installRequested && deps.isRecording() };
@@ -94,7 +96,7 @@ export function createWinUpdater(deps: WinUpdaterDeps) {
   /** Procura versão nova. `byUser`: se falhar, mostra o erro; automática: falha em silêncio. */
   async function check(byUser = false): Promise<WinUpdateState> {
     manual = byUser;
-    if (!(await status()).supported) return status();
+    if (!(await status()).supported || (!byUser && !(await deps.enabled()))) return status();
     if (state.phase === 'downloading' || state.phase === 'downloaded') return status();
     const u = lib();
     if (!u) return status();

@@ -116,6 +116,8 @@ contextBridge.exposeInMainWorld('rice', {
   setFolderPrivacy: (id, patch) => ipcRenderer.invoke('folders:set-privacy', id, patch),
   updateStatus: () => ipcRenderer.invoke('update:status'),
   updateAbout: () => ipcRenderer.invoke('update:about'),
+  updateCheckNow: () => ipcRenderer.invoke('update:check-now'),
+  updateLastCheck: () => ipcRenderer.invoke('update:last-check'),
   micCurrent: () => ipcRenderer.invoke('audio:mic-current'),
   setMic: (id) => ipcRenderer.invoke('audio:set-mic', id),
   audioProfile: () => ipcRenderer.invoke('audio:profile'),

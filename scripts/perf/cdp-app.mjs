@@ -44,6 +44,14 @@ export async function launch({ settings = {}, env = {}, size = [1180, 760], seed
       await send('Page.navigate', { url });
       await sleep(1500);
     },
+    /** Relógio fixo da página (reproduzível): `Date` passa a andar a partir de `fixedMs` em todas as páginas abertas daqui em diante; recarrega a atual. */
+    clock: async (fixedMs) => {
+      await send('Page.enable');
+      const source = `(() => { const R = Date; const off = ${fixedMs} - R.now(); class D extends R { constructor(...a) { if (a.length === 0) super(R.now() + off); else super(...a); } static now() { return R.now() + off; } } window.Date = D; })();`;
+      await send('Page.addScriptToEvaluateOnNewDocument', { source });
+      await send('Page.reload');
+      await sleep(2500);
+    },
     shot: async (file, clip) => {
       const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
       writeFileSync(file, Buffer.from(r.data, 'base64'));

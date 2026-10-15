@@ -770,6 +770,8 @@
   .win-update-bar { width:100%; height:6px; margin:8px 0 2px; accent-color:var(--ink); } .win-update-error { color:var(--warn); }
   .update-about { margin:8px 0 14px; user-select:text; -webkit-user-select:text; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
   .update-line { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; min-width:0; }
+  .update-now { margin:0 0 6px; } .update-now .update-line { margin:0 0 4px; } .update-now-status { flex:1 1 180px; min-width:0; margin:0; overflow-wrap:anywhere; } .update-now-status.update-now-error { color:var(--warn); }
+  .update-now .btn:disabled { opacity:.55; cursor:default; } .update-now-line { margin:4px 0 12px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
   .update-text { flex:1 1 180px; min-width:0; font-size:13px; font-weight:500; overflow-wrap:anywhere; }
   /* Buscar na web: interruptor discreto ao lado dos chips; ligado ganha cor de destaque e o rótulo "Web" */
   .web-chip { flex:none; display:inline-flex; align-items:center; gap:5px; height:28px; min-width:28px; justify-content:center; padding:0 7px; border-radius:8px; font-size:12px; line-height:1.4; background:var(--hover); color:var(--muted); }
@@ -1042,6 +1044,7 @@
   <script src="web-search.js"></script>
   <script src="update-notice.js"></script>
   <script src="win-update.js"></script>
+  <script src="update-now.js"></script>
   <script src="retention-dialog.js"></script>
   <script src="consent-toast.js"></script>
   <script src="receipt-card.js"></script>

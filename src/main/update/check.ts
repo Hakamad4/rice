@@ -7,7 +7,8 @@ export const RELEASES_URL = `https://${PUBLIC_REPO}/releases`;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 const TIMEOUT_MS = 8000;
 
-export type UpdateState = { at?: string; sha?: string; date?: string };
+/** `at`: última tentativa (segura o limite de 1 por dia); `lastCheckAt`: última consulta que deu certo (a linha "Última verificação" da tela). */
+export type UpdateState = { at?: string; sha?: string; date?: string; lastCheckAt?: string };
 export type UpdateStatus = {
   enabled: boolean;
   available: boolean;
@@ -57,6 +58,8 @@ export type CheckerDeps = {
   now?: () => Date;
   /** O clone ainda existe e tem o `update.sh`. */
   cloneUsable: (path: string) => boolean;
+  /** Modo 100% local: nem a busca manual consulta. */
+  localMode?: () => Promise<boolean> | boolean;
 };
 
 export function createUpdateChecker(deps: CheckerDeps) {
@@ -85,7 +88,8 @@ export function createUpdateChecker(deps: CheckerDeps) {
       const res = await doFetch(COMMITS_URL, { headers: { accept: 'application/vnd.github+json' }, signal: controller.signal });
       const commit = res.ok ? parseCommit(await res.json()) : null;
       // a data da tentativa vale mesmo se falhar: sem martelar a API quando ela está fora do ar
-      await deps.setState({ ...state, at: now().toISOString(), ...(commit ? { sha: commit.sha, date: commit.date } : {}) });
+      const at = now().toISOString();
+      await deps.setState({ ...state, at, ...(commit ? { sha: commit.sha, date: commit.date, lastCheckAt: at } : {}) });
     } catch {
       await deps.setState({ ...state, at: now().toISOString() }).catch(() => {});
     } finally {
@@ -94,5 +98,31 @@ export function createUpdateChecker(deps: CheckerDeps) {
     return status();
   }
 
-  return { status, maybeCheck };
+  /** Busca pedida pelo usuário: ignora a opção automática e o limite diário (quem limita é quem chama), mas nunca no Modo 100% local. */
+  async function checkNow(): Promise<{ kind: 'local' | 'unavailable' | 'error' | 'done'; status: UpdateStatus }> {
+    const enabled = await deps.enabled();
+    const info = deps.info();
+    const fromClone = Boolean(info?.clonePath && deps.cloneUsable(info.clonePath));
+    const idle: UpdateStatus = { enabled, available: false, fromClone };
+    if (await deps.localMode?.()) return { kind: 'local', status: idle };
+    if (!info?.remote || deps.disabled?.()) return { kind: 'unavailable', status: idle };
+    const state = await deps.getState();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const res = await doFetch(COMMITS_URL, { headers: { accept: 'application/vnd.github+json' }, signal: controller.signal });
+      const commit = res.ok ? parseCommit(await res.json()) : null;
+      if (!commit) throw new Error('resposta inesperada');
+      const at = now().toISOString();
+      await deps.setState({ ...state, at, sha: commit.sha, date: commit.date, lastCheckAt: at });
+      const available = isNewer(info, commit);
+      return { kind: 'done', status: { enabled, available, fromClone, ...(available ? { from: short(info.commit), to: short(commit.sha) } : {}) } };
+    } catch {
+      return { kind: 'error', status: idle };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return { status, maybeCheck, checkNow };
 }

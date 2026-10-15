@@ -3,7 +3,7 @@
 // Uso: node scripts/docs-shots.mjs [pt-BR|en]   (sem argumento: os dois idiomas)
 // Site: DOCS_RAW=1 DOCS_OUT=/pasta node scripts/docs-shots.mjs (PNG 2x originais, sem reduzir a paleta, fora do repositório).
 // Reproduzível: a mesma pasta de dados fictícios é montada a cada execução. Datas da agenda e dos lembretes são
-// relativas a hoje (a agenda mostra "hoje"), então o conteúdo é o mesmo, mas as horas dependem do dia da execução.
+// relativas a um relógio fixo (CLOCK: quinta-feira, 15/10/2026, 10:20 local), também aplicado à página via CDP: as horas não dependem de quando se roda.
 // Cada cena que não consegue capturar é reportada no final (não some em silêncio).
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -24,15 +24,17 @@ const T = {
   en: { plan: 'Quarter planning', kick: 'Campaign kickoff', contract: 'Acme contract review', oneone: '1:1 with Ana', weekly: 'Weekly Product', nego: 'Acme negotiation', folders: ['Product', 'Roadmap', 'Clients', 'Acme', 'People'], home: 'Home' },
 };
 
+/** Relógio dos prints: quinta-feira, 15/10/2026, 10:20 (hora local), sempre o mesmo, para a agenda, o "agora" e os avisos ficarem em horário comercial. */
+const CLOCK = new Date(2026, 9, 15, 10, 20, 0, 0);
 const day = (offsetDays, hh, mm) => {
-  const d = new Date();
+  const d = new Date(CLOCK);
   d.setDate(d.getDate() + offsetDays);
   d.setHours(hh, mm, 0, 0);
   return d;
 };
 const iso = (d) => d.toISOString();
 /** Horas à frente de agora: a agenda do Início só lista o que ainda não passou. */
-const ahead = (hours) => new Date(Date.now() + hours * 3600000);
+const ahead = (hours) => new Date(CLOCK.getTime() + hours * 3600000);
 /** ISO com o fuso local (o formato que o app grava nos registros e nas capturas). */
 const localIso = (d) => {
   const two = (n) => String(n).padStart(2, '0');
@@ -640,6 +642,7 @@ async function runLang(lang, groupName) {
   });
   const failed = [];
   try {
+    await app.clock(CLOCK.getTime()); // a página também enxerga 15/10/2026 10:20
     await app.sleep(2000);
     // espera a lista da barra lateral carregar (no primeiro lançamento de um idioma ela pode demorar)
     for (let i = 0; i < 20 && Number(await app.eval(`document.querySelectorAll('.meeting').length`)) < 6; i++) await app.sleep(1000);
