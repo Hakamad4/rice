@@ -1,5 +1,6 @@
 import { lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MEETING_FILES } from './meeting-files';
 import { restrictMode } from '../platform/fs';
 import { isWindows } from '../platform';
 
@@ -39,13 +40,29 @@ export async function tightenTree(path: string, depth = 3): Promise<number> {
   return changed;
 }
 
-/** Reuniões e `.rice` da pasta escolhida (a pasta em si é do usuário e não é mexida) e os dados do app em `userData`. */
+/** Uma pasta de reunião é a que tem `meta.json` (mesma regra de `listMeetingDirs`). */
+async function isMeetingDir(dir: string): Promise<boolean> {
+  try {
+    return (await lstat(join(dir, MEETING_FILES.meta))).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reuniões (pastas com `meta.json`) e `.rice` da pasta escolhida, e os dados do app em `userData`. A pasta em si e o que mais o
+ * usuário guardar nela não são mexidos: `~/Rice` pode ser também o clone do código (no APFS `~/rice` é a mesma pasta), e trancar
+ * `install.sh`, `update.sh` e `node_modules` com 0600 quebra o update.
+ * Meetings (folders with `meta.json`) and `.rice` in the chosen folder, plus the app data in `userData`. The folder itself and anything
+ * else the user keeps there are left alone: `~/Rice` may also be the source clone (on APFS `~/rice` is the same folder), and locking
+ * `install.sh`, `update.sh` and `node_modules` to 0600 breaks the update.
+ */
 export async function tightenAppData(root: string, userData: string): Promise<number> {
   let changed = 0;
   try {
     for (const name of await readdir(root)) {
-      if (name.startsWith('.') && name !== '.rice') continue;
-      changed += await tightenTree(join(root, name), 3);
+      const path = join(root, name);
+      if (name === '.rice' || (!name.startsWith('.') && (await isMeetingDir(path)))) changed += await tightenTree(path, 3);
     }
   } catch {
     // pasta ainda não existe
