@@ -31,7 +31,7 @@ fi
 
 [ -e "$DIR" ] && die "$DIR já existe e não é um clone do Rice. Escolha outra pasta: RICE_DIR=/outra/pasta" "$DIR exists and is not a Rice clone. Pick another folder: RICE_DIR=/another/folder"
 
-say "baixando o Rice em $DIR…" "downloading Rice into $DIR…"
+say "baixando o Rice em ${DIR}…" "downloading Rice into ${DIR}…"
 git clone --filter=blob:none "$REPO" "$DIR" || die "não consegui baixar o código (confira a internet)." "could not download the source (check your connection)."
 cd "$DIR"
 # </dev/tty: o install.sh pode pedir algo ao usuário mesmo com este script vindo de um pipe
