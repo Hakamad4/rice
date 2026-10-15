@@ -19,7 +19,17 @@ done
 rm -rf "$WORK" "$PREFIX"
 mkdir -p "$WORK" "$PREFIX"
 cd "$WORK"
-curl -fsSL -o src.tar.xz "$URL"
+# O tarball vem junto com o código (native/vendor): o freedesktop.org bloqueia downloads de vez em quando (HTTP 418) e o build parava aí.
+# O download só acontece se a cópia local não existir; a SHA-256 é conferida nos dois casos.
+# The tarball ships with the source (native/vendor): freedesktop.org blocks downloads now and then (HTTP 418) and the build stopped there.
+# The download only happens when the local copy is missing; the SHA-256 is checked either way.
+VENDORED="$ROOT/native/vendor/webrtc-audio-processing-${VERSION}.tar.xz"
+if [ -f "$VENDORED" ]; then
+  echo "using vendored $VENDORED"
+  cp "$VENDORED" src.tar.xz
+else
+  curl -fsSL -o src.tar.xz "$URL"
+fi
 echo "$SHA256  src.tar.xz" | shasum -a 256 -c -
 mkdir src && tar -xf src.tar.xz -C src --strip-components=1
 
