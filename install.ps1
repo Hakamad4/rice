@@ -19,7 +19,7 @@ Say "Windows build ${build}: ok" "Windows build ${build}: ok"
 # 2) Node 22 ou mais
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { Die 'Node não encontrado. Instale o Node 22 ou mais novo (winget install OpenJS.NodeJS.LTS) e rode de novo.' 'Node not found. Install Node 22 or newer (winget install OpenJS.NodeJS.LTS) and run again.' }
-$nodeMajor = [int]((node -p 'process.versions.node.split(".")[0]'))
+$nodeMajor = [int]((node -p "process.versions.node.split('.')[0]"))
 if ($nodeMajor -lt 22) { Die "é preciso o Node 22 ou mais novo (você tem $(node -v))." "Node 22 or newer is required (you have $(node -v))." }
 Say "Node $(node -v): ok" "Node $(node -v): ok"
 
