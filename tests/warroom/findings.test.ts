@@ -6,6 +6,7 @@ import { contextFacts, defaultConfig, normalizeConfig, readConfig, writeConfig, 
 import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { makeTmpDir } from '../helpers/tmp';
+import { until } from '../helpers/until';
 
 const f = (id: string, over: Partial<Fact> = {}): Fact => ({ id, at: '', text: `achado ${id}`, source: { type: 'audio', ref: '' }, ...over });
 
@@ -125,8 +126,7 @@ describe('Parar e pausar no motor', () => {
       language: async () => 'pt-BR', support: async () => ({ web: false, mcp: false, folder: false }), emit: () => {},
     });
     const running = engine.tick(dir, { manual: true, track: 'investigation' });
-    await new Promise((r) => setTimeout(r, 30));
-    expect(engine.state(dir).running).toBe(true);
+    await until(() => expect(engine.state(dir).running).toBe(true));
     engine.abort(dir);
     expect(await running).toBe('skipped');
     expect(engine.state(dir).investigation.error).toBe('');

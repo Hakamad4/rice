@@ -1,5 +1,6 @@
 import type { BuildInfo } from './build-info';
 import { PUBLIC_REPO } from './build-info';
+import { isDismissed } from './notice';
 
 /** Consulta anônima: sem token, sem cabeçalho que identifique quem pergunta. */
 export const COMMITS_URL = `https://api.github.com/repos/${PUBLIC_REPO.replace('github.com/', '')}/commits/main`;
@@ -8,7 +9,7 @@ export const DAY_MS = 24 * 60 * 60 * 1000;
 const TIMEOUT_MS = 8000;
 
 /** `at`: última tentativa (segura o limite de 1 por dia); `lastCheckAt`: última consulta que deu certo (a linha "Última verificação" da tela). */
-export type UpdateState = { at?: string; sha?: string; date?: string; lastCheckAt?: string };
+export type UpdateState = { at?: string; sha?: string; date?: string; lastCheckAt?: string; /** sha já avisado por notificação (uma vez por versão nova). */ notifiedSha?: string; /** "Depois" na faixa: o sha e quando (esconde por 24 h ou até um sha mais novo). */ dismissedSha?: string; dismissedAt?: string };
 export type UpdateStatus = {
   enabled: boolean;
   available: boolean;
@@ -16,6 +17,8 @@ export type UpdateStatus = {
   to?: string;
   /** O app veio de um clone com o `update.sh` (o botão "Atualizar" roda lá); senão só a página de releases. */
   fromClone: boolean;
+  /** "Depois" ainda vale para esta versão: a faixa da janela fica escondida (o ponto e Configurações continuam). */
+  dismissed?: boolean;
 };
 
 export type FetchLike = (url: string, init: { headers: Record<string, string>; signal: AbortSignal }) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
@@ -73,7 +76,7 @@ export function createUpdateChecker(deps: CheckerDeps) {
     if (!info || !info.remote || !enabled || deps.disabled?.()) return { enabled, available: false, fromClone };
     const state = await deps.getState();
     const available = Boolean(state.sha && state.date && isNewer(info, { sha: state.sha, date: state.date }));
-    return { enabled, available, fromClone, ...(available ? { from: short(info.commit), to: short(state.sha!) } : {}) };
+    return { enabled, available, fromClone, ...(available ? { from: short(info.commit), to: short(state.sha!), dismissed: isDismissed(state, now().getTime()) } : {}) };
   }
 
   /** Consulta se já passou um dia; qualquer falha (rede, limite da API, resposta estranha) é silenciosa. Devolve o status atual. */
@@ -116,7 +119,7 @@ export function createUpdateChecker(deps: CheckerDeps) {
       const at = now().toISOString();
       await deps.setState({ ...state, at, sha: commit.sha, date: commit.date, lastCheckAt: at });
       const available = isNewer(info, commit);
-      return { kind: 'done', status: { enabled, available, fromClone, ...(available ? { from: short(info.commit), to: short(commit.sha) } : {}) } };
+      return { kind: 'done', status: { enabled, available, fromClone, ...(available ? { from: short(info.commit), to: short(commit.sha), dismissed: isDismissed({ ...state, sha: commit.sha }, now().getTime()) } : {}) } };
     } catch {
       return { kind: 'error', status: idle };
     } finally {

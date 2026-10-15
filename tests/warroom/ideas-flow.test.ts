@@ -3,6 +3,7 @@ import { WarRoomEngine } from '../../src/main/warroom/engine';
 import { createWarRoom } from '../../src/main/warroom/ipc';
 import { defaultConfig, readConfig, readIdeas, writeConfig } from '../../src/main/warroom/store';
 import { makeTmpDir } from '../helpers/tmp';
+import { until } from '../helpers/until';
 
 afterEach(() => vi.useRealTimers());
 
@@ -40,11 +41,12 @@ describe('ideias ligadas no MEIO da gravação (regressão)', () => {
     expect(f.engine.isScheduled(dir)).toBe(false);
     await writeConfig(dir, { ...defaultConfig(), kind: 'warroom', ideas: { on: true, intervalMin: 2 }, investigation: { intervalMin: 2, paused: false } }); // 23:10: usuário liga no meio
     await f.engine.start(dir);
-    await vi.waitFor(async () => expect((await readIdeas(dir)).length).toBe(1));
-    await vi.waitFor(async () => { const c = await readConfig(dir); expect([c.ideasCycles, c.investigationCycles]).toEqual([1, 1]); }); // uma trilha de ideias e uma de investigação, cada uma com o seu ciclo e contagem própria
+    await until(async () => expect((await readIdeas(dir)).length).toBe(1));
+    await until(async () => { const c = await readConfig(dir); expect([c.ideasCycles, c.investigationCycles]).toEqual([1, 1]); }); // uma trilha de ideias e uma de investigação, cada uma com o seu ciclo e contagem própria
     expect(f.engine.isScheduled(dir)).toBe(true);
     expect(f.engine.state(dir).nextAt).toBe(1_000_000 + 2 * 60_000);
     expect(f.engine.state(dir).investigation.nextAt).toBe(1_000_000 + 2 * 60_000);
+    f.engine.stop(dir);
   });
 
   test('o relógio de parede dispara o ciclo seguinte quando passa o intervalo e há fala nova', async () => {
@@ -53,12 +55,14 @@ describe('ideias ligadas no MEIO da gravação (regressão)', () => {
     const f = setup(async (n) => `[{"text":"ideia ${n}"}]`);
     await writeConfig(dir, { ...defaultConfig(), ideas: { on: true, intervalMin: 2 } });
     await f.engine.start(dir);
-    await vi.waitFor(() => expect(f.calls()).toBe(1));
+    await until(() => expect(f.calls()).toBe(1));
+    await until(() => expect(f.engine.state(dir).running).toBe(false)); // ciclo 1 fechado (o runner ter sido chamado não basta), antes de o relógio andar
     f.say(10);
     f.advance(2 * 60_000 + 1);
     await vi.advanceTimersByTimeAsync(1500);
-    await vi.waitFor(() => expect(f.calls()).toBe(2));
-    expect((await readIdeas(dir)).map((i) => i.text)).toEqual(['ideia 1', 'ideia 2']);
+    await until(async () => expect((await readIdeas(dir)).map((i) => i.text)).toEqual(['ideia 1', 'ideia 2'])); // o runner ser chamado não é o ciclo gravado
+    await until(() => expect(f.engine.state(dir).running).toBe(false));
+    f.engine.stop(dir);
   });
 
   test('erro do ciclo fica no estado (visível), não repete sozinho antes do intervalo e some no sucesso', async () => {
@@ -71,7 +75,7 @@ describe('ideias ligadas no MEIO da gravação (regressão)', () => {
     });
     await writeConfig(dir, { ...defaultConfig(), ideas: { on: true, intervalMin: 2 } });
     await f.engine.start(dir);
-    await vi.waitFor(() => expect(f.engine.state(dir).error).toContain('limite do modelo'));
+    await until(() => expect(f.engine.state(dir).error).toContain('limite do modelo'));
     expect(f.engine.state(dir).running).toBe(false);
     await vi.advanceTimersByTimeAsync(5000);
     expect(f.calls()).toBe(1); // sem martelar o provedor
@@ -79,6 +83,7 @@ describe('ideias ligadas no MEIO da gravação (regressão)', () => {
     expect(await f.engine.tick(dir, { manual: true })).toBe('ran'); // "Tentar agora"
     expect(f.engine.state(dir).error).toBe('');
     expect((await readIdeas(dir)).length).toBe(1);
+    f.engine.stop(dir);
   });
 
   test('resposta em prosa (modelo que não segue o formato) vira erro visível, não ciclo vazio calado', async () => {
@@ -117,7 +122,7 @@ describe('ideias ligadas no MEIO da gravação (regressão)', () => {
     } as any);
     expect(wr.engine.isScheduled(dir)).toBe(false);
     wr.ensure(dir);
-    await vi.waitFor(() => expect(wr.engine.isScheduled(dir)).toBe(true));
+    await until(() => expect(wr.engine.isScheduled(dir)).toBe(true));
     wr.engine.stop(dir);
   });
 });

@@ -53,6 +53,7 @@ import { createWinUpdater, nsisInstall, type UpdaterLike, type WinUpdateState } 
 import { readBuildInfo, type BuildInfo } from '../update/build-info';
 import { createUpdateChecker, RELEASES_URL, type UpdateState } from '../update/check';
 import { createCheckNow } from '../update/check-now';
+import { shouldNotify } from '../update/notice';
 import { openUpdateInTerminal } from '../update/terminal';
 import { consentOffer, normalizeConsentText } from '../privacy/consent';
 import { isSensitiveFolder } from '../privacy/folder-rules';
@@ -862,7 +863,7 @@ function setupSession(runner: AiRunner): AsrService {
     }
   });
   s.on('state', updateTray);
-  s.on('state', (st: string) => { if (st === 'idle') winUpdater.recordingEnded(); });
+  s.on('state', (st: string) => { if (st === 'idle') { winUpdater.recordingEnded(); void maybeNotifyUpdate(); } }); // aviso de versão nova adiado pela gravação
   s.on('state', updateNub);
   s.on('pause', (e: { dir: string; paused: boolean }) => {
     send('session:pause', e);
@@ -1410,6 +1411,31 @@ const updateChecker = createUpdateChecker({
   cloneUsable: (path) => process.platform === 'darwin' && existsSync(join(path, 'update.sh')),
   localMode: () => isLocalMode(),
 });
+/** Mac: notificação UMA vez por versão nova (guarda o sha avisado); nunca durante a gravação (tenta de novo quando ela acaba). O clique traz a janela com a faixa. */
+async function maybeNotifyUpdate(): Promise<void> {
+  if (process.platform !== 'darwin' || TEST_INSTANCE || !Notification.isSupported()) return;
+  const status = await updateChecker.status(); // já respeita "Procurar atualizações" desligado, Modo 100% local e build sem remoto público
+  const settings = await loadSettings();
+  const state = settings.updateCheck ?? {};
+  if (!shouldNotify({ available: status.available, state, recording: session !== null && session.state !== 'idle' })) return;
+  await saveSettings({ ...settings, updateCheck: { ...state, notifiedSha: state.sha } }); // grava antes: nunca repete, mesmo que a notificação falhe
+  const n = new Notification({ title: t('update.notif.title'), body: t('update.notif.body'), silent: true });
+  liveNotifications.add(n);
+  const done = () => liveNotifications.delete(n);
+  n.on('click', () => {
+    done();
+    void (async () => {
+      const cur = await loadSettings();
+      const { dismissedSha, dismissedAt, ...rest } = cur.updateCheck ?? {};
+      void dismissedSha; void dismissedAt;
+      await saveSettings({ ...cur, updateCheck: rest }); // o clique reabre a faixa, mesmo que tenha dado "Depois" antes
+      send('update:changed', await updateChecker.status());
+      showMainWindow();
+    })();
+  });
+  n.on('close', done);
+  n.show();
+}
 /** Windows: a consulta do electron-updater deu certo agora (a do Mac grava sozinha em check.ts). */
 const markChecked = async () => {
   const s = await loadSettings();
@@ -1621,7 +1647,7 @@ function registerIpc(runner: AiRunner): void {
   handle('update:status', async () => {
     // SÓ instância de teste: força o aviso para os prints ("clone" = veio de um clone; "release" = veio de uma release)
     const fake = TEST_INSTANCE ? process.env.RICE_TEST_UPDATE : undefined;
-    if (fake === 'clone' || fake === 'release') return { enabled: true, available: true, from: 'a1b2c3d', to: 'e4f5a6b', fromClone: fake === 'clone' };
+    if (fake === 'clone' || fake === 'release') return { enabled: true, available: true, from: 'a1b2c3d', to: 'e4f5a6b', fromClone: fake === 'clone', dismissed: false };
     return updateChecker.status();
   });
   // qual cópia do Rice está aberta (versão, commit do build e caminho do app): ajuda a ver se o que roda é o que acabou de ser instalado
@@ -1633,8 +1659,20 @@ function registerIpc(runner: AiRunner): void {
       return fake === 'error' ? { phase: 'error', error: 'network' } : fake === 'available' ? { phase: 'available', newVersion: 'e4f5a6b', lastCheckAt } : { phase: 'latest', lastCheckAt };
     }
     const result = await checkNowRunner.checkNow();
-    if (result.status) send('update:changed', result.status);
+    if (result.status) {
+      send('update:changed', result.status);
+      void maybeNotifyUpdate().catch(() => {});
+    }
     return result;
+  });
+  // "Depois" na faixa: esconde por 24 h ou até um sha mais novo
+  handle('update:dismiss', async () => {
+    const s = await loadSettings();
+    const state = s.updateCheck ?? {};
+    if (state.sha) await saveSettings({ ...s, updateCheck: { ...state, dismissedSha: state.sha, dismissedAt: new Date().toISOString() } });
+    const status = await updateChecker.status();
+    send('update:changed', status);
+    return status;
   });
   handle('update:last-check', async () => (await loadSettings()).updateCheck?.lastCheckAt ?? null);
   handle('update:about', async () => appAbout({ version: app.getVersion(), commit: buildInfo?.commit, exePath: app.getPath('exe') }));
@@ -2397,7 +2435,7 @@ app.whenReady().then(async () => {
   // versão nova: lê o build-info e consulta (no máximo uma vez por dia) pouco depois de abrir e a cada 6 h com o app aberto
   buildInfo = await readBuildInfo(join(__dirname, 'build-info.json'));
   const checkUpdate = () => {
-    void updateChecker.maybeCheck().then((status) => send('update:changed', status)).catch(() => {});
+    void updateChecker.maybeCheck().then((status) => { send('update:changed', status); void maybeNotifyUpdate().catch(() => {}); }).catch(() => {});
     if (!TEST_INSTANCE) void winUpdater.check(false).then((st) => (st.supported && st.error === undefined ? markChecked() : undefined)).catch(() => {}); // Windows instalado pelo NSIS; no Mac o estado fica sem suporte
   };
   setTimeout(checkUpdate, 20_000).unref();

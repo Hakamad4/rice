@@ -10,6 +10,7 @@ import { checkWorkFolder } from '../../src/main/warroom/folder';
 import { addIdeaToAnnotations, defaultConfig, MORE_CYCLES, normalizeConfig, readConfig, readIdeas, writeConfig } from '../../src/main/warroom/store';
 import { sourcesNote, supportFor } from '../../src/main/warroom/ipc';
 import { makeTmpDir } from '../helpers/tmp';
+import { until } from '../helpers/until';
 
 const after = (args: string[], flag: string) => args.slice(args.indexOf(flag) + 1);
 
@@ -221,7 +222,7 @@ describe('ciclos', () => {
       }),
     });
     const first = engine.tick(dir);
-    await vi.waitFor(() => expect(engine.state(dir).running).toBe(true));
+    await until(() => expect(engine.state(dir).running).toBe(true));
     expect(await engine.tick(dir)).toBe('busy');
     release();
     await first;

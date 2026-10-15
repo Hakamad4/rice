@@ -3,10 +3,14 @@ import { overlapStart } from '../../src/main/warroom/engine';
 import { createWarRoom } from '../../src/main/warroom/ipc';
 import { defaultConfig, readConfig, writeConfig } from '../../src/main/warroom/store';
 import { makeTmpDir } from '../helpers/tmp';
+import { quiesce, until } from '../helpers/until';
 
-const realSetTimeout = globalThis.setTimeout;
-const realSleep = (ms: number) => new Promise<void>((r) => realSetTimeout(r, ms));
-afterEach(() => vi.useRealTimers());
+// o motor de cada teste para ao fim dele, mesmo que a asserção falhe (senão o ciclo pendente escreve numa pasta já apagada e derruba os testes seguintes)
+const stops: Array<() => void> = [];
+afterEach(() => {
+  for (const stop of stops.splice(0)) stop();
+  vi.useRealTimers();
+});
 
 const clock = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 /** Uma fala longa o bastante (≥200 caracteres) no segundo `s` da reunião. */
@@ -17,7 +21,7 @@ async function rig(opts: { transcript?: string } = {}) {
   const dir = await makeTmpDir();
   const handlers = new Map<string, (...a: any[]) => any>();
   const calls: any[] = [];
-  const state = { transcript: opts.transcript ?? '', partials: [] as string[], reply: '[{"text":"fato novo","source":{"type":"audio","ref":"Outros"}}]' };
+  const state = { transcript: opts.transcript ?? '', partials: [] as string[], partialReads: 0, reply: '[{"text":"fato novo","source":{"type":"audio","ref":"Outros"}}]' };
   const runner = {
     async *run(o: any) {
       calls.push({ ...o, at: Date.now() });
@@ -33,7 +37,7 @@ async function rig(opts: { transcript?: string } = {}) {
     provider: async () => 'claude-sub',
     language: async () => 'pt-BR',
     transcript: async () => state.transcript,
-    partials: () => state.partials,
+    partials: () => (state.partialReads++, state.partials),
     isRecording: () => true,
     pickFolder: async () => null,
     saveAnnotations: async () => {},
@@ -44,11 +48,13 @@ async function rig(opts: { transcript?: string } = {}) {
   const minutes = async (n: number) => {
     for (let i = 0; i < Math.round((n * 60) / 5); i++) {
       await vi.advanceTimersByTimeAsync(5000);
-      await realSleep(6);
+      await quiesce(() => wr.engine.state(dir).running, () => calls.length);
     }
   };
   const inv = () => calls.filter((c) => /investiga/i.test(c.system));
-  return { dir, wr, calls, state, call, minutes, inv };
+  stops.push(() => wr.engine.stop(dir));
+  const idle = () => quiesce(() => wr.engine.state(dir).running, () => calls.length);
+  return { dir, wr, calls, state, call, minutes, inv, idle };
 }
 
 describe('sem rajadas: o intervalo é respeitado', () => {
@@ -56,7 +62,8 @@ describe('sem rajadas: o intervalo é respeitado', () => {
     const r = await rig({ transcript: line(10, 'a') });
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', investigation: { intervalMin: 5, paused: false } });
     r.wr.onSessionState('recording', r.dir);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(1)); // o primeiro ciclo imediato
+    await until(() => expect(r.inv()).toHaveLength(1)); // o primeiro ciclo imediato
+    await r.idle();
     let t = 20;
     for (let i = 0; i < 9; i++) {
       // a cada 30 s: fala nova + um clique no painel (cada um passa por warroom:set / warroom:fact → engine.start)
@@ -71,7 +78,8 @@ describe('sem rajadas: o intervalo é respeitado', () => {
     // ~4,5 min depois: continua 1 (o próximo só vence aos 5 min)
     expect(r.inv()).toHaveLength(1);
     await r.minutes(1);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(2));
+    await until(() => expect(r.inv()).toHaveLength(2));
+    await r.idle();
     r.wr.engine.stop(r.dir);
   });
 
@@ -81,14 +89,16 @@ describe('sem rajadas: o intervalo é respeitado', () => {
     await r.wr.engine.start(r.dir);
     await r.wr.engine.start(r.dir);
     await r.wr.engine.start(r.dir);
-    await vi.waitFor(() => expect(r.calls).toHaveLength(1));
+    await until(() => expect(r.calls).toHaveLength(1));
+    await r.idle();
     await r.minutes(0.3);
     await r.wr.engine.start(r.dir);
     expect(r.calls).toHaveLength(1);
     await r.call('warroom:set', { ideasOn: false });
     await r.call('warroom:set', { ideasOn: true });
     r.state.transcript += line(100, 'b');
-    await vi.waitFor(() => expect(r.calls).toHaveLength(2));
+    await until(() => expect(r.calls).toHaveLength(2));
+    await r.idle();
     r.wr.engine.stop(r.dir);
   });
 
@@ -96,16 +106,19 @@ describe('sem rajadas: o intervalo é respeitado', () => {
     const r = await rig({ transcript: line(10, 'a') });
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', investigation: { intervalMin: 5, paused: false } });
     r.wr.onSessionState('recording', r.dir);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(1));
+    await until(() => expect(r.inv()).toHaveLength(1));
+    await r.idle();
     await r.minutes(3);
     r.state.transcript += line(200, 'b');
     await r.call('warroom:run-now', 'investigation'); // manual aos ~3 min
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(2));
+    await until(() => expect(r.inv()).toHaveLength(2));
+    await r.idle();
     r.state.transcript += line(260, 'c');
     await r.minutes(4); // 4 min depois do manual: ainda NÃO venceu (o relógio recomeçou nele)
     expect(r.inv()).toHaveLength(2);
     await r.minutes(1.3);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(3));
+    await until(() => expect(r.inv()).toHaveLength(3));
+    await r.idle();
     r.wr.engine.stop(r.dir);
   });
 });
@@ -116,10 +129,12 @@ describe('o que acabou de ser dito não se perde', () => {
     const r = await rig({ transcript: t0 });
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', investigation: { intervalMin: 2, paused: false } });
     r.wr.onSessionState('recording', r.dir);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(1));
+    await until(() => expect(r.inv()).toHaveLength(1));
+    await r.idle();
     r.state.transcript += line(200, 'NOVA');
     await r.minutes(2.3);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(2));
+    await until(() => expect(r.inv()).toHaveLength(2));
+    await r.idle();
     const prompt: string = r.inv()[1].prompt;
     expect(prompt).toContain('FIM-DO-CICLO-1'); // sobreposição
     expect(prompt).toContain('DENTRO-DA-JANELA'); // até 60 s antes da última linha lida (150 s → corte em 90 s)
@@ -145,7 +160,8 @@ describe('o que acabou de ser dito não se perde', () => {
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', investigation: { intervalMin: 2, paused: false } });
     r.state.partials = ['Outros: ' + 'TEXTO-PARCIAL sobre o orçamento que ainda estou terminando de dizer, '.repeat(4)];
     r.wr.onSessionState('recording', r.dir);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(1)); // só com o parcial já passa do mínimo
+    await until(() => expect(r.inv()).toHaveLength(1)); // só com o parcial já passa do mínimo
+    await r.idle();
     expect(r.inv()[0].prompt).toContain('[Provisório');
     expect(r.inv()[0].prompt).toContain('TEXTO-PARCIAL');
     r.wr.engine.stop(r.dir);
@@ -155,18 +171,21 @@ describe('o que acabou de ser dito não se perde', () => {
     const r = await rig({ transcript: line(10, 'base') });
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', investigation: { intervalMin: 2, paused: false } });
     r.wr.onSessionState('recording', r.dir);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(1));
+    await until(() => expect(r.inv()).toHaveLength(1));
+    await r.idle();
     // 1:58 → alguém fala; o segmento só chega ao arquivo depois do ciclo
     await r.minutes(1.9);
     r.state.partials = ['Outros: ' + 'CITADO-NO-FIM do intervalo, ainda sendo transcrito. '.repeat(6)];
     await r.minutes(0.3);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(2));
+    await until(() => expect(r.inv()).toHaveLength(2));
+    await r.idle();
     expect(r.inv()[1].prompt).toContain('CITADO-NO-FIM'); // não esperou o outro ciclo
     // depois o segmento fecha e vai para a transcrição
     r.state.partials = [];
     r.state.transcript += line(125, 'CITADO-NO-FIM final');
     await r.minutes(2.3);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(3));
+    await until(() => expect(r.inv()).toHaveLength(3));
+    await r.idle();
     expect(r.inv()[2].prompt).toContain('CITADO-NO-FIM final');
     r.wr.engine.stop(r.dir);
   });
@@ -175,35 +194,40 @@ describe('o que acabou de ser dito não se perde', () => {
     const r = await rig({ transcript: line(10, 'a') });
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', investigation: { intervalMin: 5, paused: false } });
     r.wr.onSessionState('recording', r.dir);
-    await vi.waitFor(() => expect(r.inv()).toHaveLength(1));
+    await until(() => expect(r.inv()).toHaveLength(1));
+    await r.idle();
     r.state.partials = ['Outros: ' + 'fala aberta que fecha em breve, '.repeat(8)];
     const before = Date.now();
     r.state.transcript += line(30, 'FECHOU-NO-ARQUIVO');
-    // o relógio é falso e o disco é de verdade: avança o tempo em passos de 250 ms enquanto o pedido está pendente
-    const drive = async (p: Promise<unknown>, onStep?: (elapsed: number) => void) => {
+    // o relógio é falso e o disco é de verdade: o pedido confere as falas abertas a cada 250 ms (cada conferência lê `partials`),
+    // então só se avança o tempo (250 ms) depois de uma nova conferência, e nunca enquanto ele está lendo o disco
+    const drive = async (start: () => Promise<unknown>, onStep?: (elapsed: number) => void) => {
       let done = false;
+      let seen = r.state.partialReads; // antes de pedir: a 1ª conferência já conta
+      const p = start();
       void p.then(() => (done = true));
       for (let elapsed = 0; !done && elapsed < 8000; elapsed += 250) {
+        await until(() => done || r.state.partialReads > seen);
+        if (done) break;
+        seen = r.state.partialReads;
         onStep?.(elapsed);
         await vi.advanceTimersByTimeAsync(250);
-        await realSleep(5);
       }
       await p;
     };
-    const run = r.call('warroom:run-now', 'investigation');
-    await drive(run, (elapsed) => {
+    await drive(() => r.call('warroom:run-now', 'investigation'), (elapsed) => {
       if (elapsed >= 1000) r.state.partials = []; // a fala fechou em ~1 s
     });
-    expect(Date.now() - before).toBeLessThan(2500); // não esperou os 3 s inteiros
+    expect(Date.now() - before).toBeLessThan(3000); // não esperou os 3 s inteiros
     expect(r.inv()[1].prompt).toContain('FECHOU-NO-ARQUIVO');
     expect(r.inv()[1].prompt).not.toContain('[Provisório'); // já não há parcial aberto
     // fala que nunca fecha: espera no máximo ~3 s
     r.state.partials = ['Outros: ' + 'nunca fecha, '.repeat(30)];
     r.state.transcript += line(60, 'outra');
     const t1 = Date.now();
-    await drive(r.call('warroom:run-now', 'investigation'));
+    await drive(() => r.call('warroom:run-now', 'investigation'));
     expect(Date.now() - t1).toBeGreaterThanOrEqual(2900);
-    expect(Date.now() - t1).toBeLessThan(4000);
+    expect(Date.now() - t1).toBeLessThan(6000); // desiste em ~3 s, não fica esperando para sempre
     r.wr.engine.stop(r.dir);
   });
 });

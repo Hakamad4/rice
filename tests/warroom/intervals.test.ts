@@ -2,10 +2,14 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createWarRoom } from '../../src/main/warroom/ipc';
 import { defaultConfig, normalizeConfig, readConfig, writeConfig } from '../../src/main/warroom/store';
 import { makeTmpDir } from '../helpers/tmp';
+import { quiesce, realSleep, until } from '../helpers/until';
 
-const realSetTimeout = globalThis.setTimeout;
-const realSleep = (ms: number) => new Promise<void>((r) => realSetTimeout(r, ms));
-afterEach(() => vi.useRealTimers());
+// o motor de cada teste para ao fim dele, mesmo que a asserção falhe (senão o ciclo pendente escreve numa pasta já apagada e derruba os testes seguintes)
+const stops: Array<() => void> = [];
+afterEach(() => {
+  for (const stop of stops.splice(0)) stop();
+  vi.useRealTimers();
+});
 
 const speech = (tag: string) => `**[00:00:00] Outros:** ${`${tag} precisamos decidir o preço do plano. `.repeat(8)}\n`;
 const IDEAS = '[{"kind":"idea","text":"ideia nova"}]';
@@ -25,7 +29,7 @@ async function rig() {
       calls.push({ kind, at: Date.now() });
       concurrent++;
       maxConcurrent = Math.max(maxConcurrent, concurrent);
-      await new Promise<void>((r) => realSetTimeout(r, 20)); // um ciclo leva um tempinho: dois ao mesmo tempo seriam vistos
+      await realSleep(20); // um ciclo leva um tempinho: dois ao mesmo tempo seriam vistos
       concurrent--;
       yield '';
       return kind === 'investigation' ? FACTS : IDEAS;
@@ -38,11 +42,13 @@ async function rig() {
   const minutes = async (n: number) => {
     for (let i = 0; i < Math.round((n * 60) / 5); i++) {
       await vi.advanceTimersByTimeAsync(5000);
-      await realSleep(25);
+      await quiesce(() => wr.engine.state(dir).running, () => calls.length);
     }
   };
   const count = (kind: string) => calls.filter((c) => c.kind === kind).length;
-  return { dir, wr, handlers, state, minutes, count, maxConcurrent: () => maxConcurrent };
+  stops.push(() => wr.engine.stop(dir));
+  const idle = () => quiesce(() => wr.engine.state(dir).running, () => calls.length);
+  return { dir, wr, handlers, state, minutes, count, idle, maxConcurrent: () => maxConcurrent };
 }
 
 describe('ideias e investigação com intervalos independentes', () => {
@@ -50,7 +56,8 @@ describe('ideias e investigação com intervalos independentes', () => {
     const r = await rig();
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', ideas: { on: true, intervalMin: 2 }, investigation: { intervalMin: 10, paused: false } });
     r.wr.onSessionState('recording', r.dir);
-    await vi.waitFor(() => expect([r.count('ideas'), r.count('investigation')]).toEqual([1, 1])); // primeiro ciclo de cada uma, logo
+    await until(() => expect([r.count('ideas'), r.count('investigation')]).toEqual([1, 1])); // primeiro ciclo de cada uma, logo
+    await r.idle();
     r.state.transcript += speech('b');
     await r.minutes(2.5);
     expect([r.count('ideas'), r.count('investigation')]).toEqual([2, 1]); // só as ideias venceram
@@ -65,7 +72,8 @@ describe('ideias e investigação com intervalos independentes', () => {
     const r = await rig();
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', ideas: { on: true, intervalMin: 2 }, investigation: { intervalMin: 2, paused: false } });
     r.wr.onSessionState('recording', r.dir);
-    await vi.waitFor(() => expect([r.count('ideas'), r.count('investigation')]).toEqual([1, 1]));
+    await until(() => expect([r.count('ideas'), r.count('investigation')]).toEqual([1, 1]));
+    await r.idle();
     r.state.transcript += speech('b');
     await r.minutes(2.6);
     expect([r.count('ideas'), r.count('investigation')]).toEqual([2, 2]);

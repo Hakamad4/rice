@@ -2082,6 +2082,7 @@ window.rice.on('session:state', async (state) => {
     pausedTotal = 0;
   }
   renderRecButton();
+  if (typeof renderUpdateBanner === 'function') renderUpdateBanner();
   if (state === 'idle') {
     recDir = null;
   } else {
@@ -2232,8 +2233,20 @@ webSearch = window.RiceWebSearch.create({
   status: () => (window.rice.aiWebStatus ? window.rice.aiWebStatus() : Promise.resolve({ available: false, hint: t('chat.web.unavailable') })),
 });
 // versão nova: ponto no item Configurações; o aviso completo fica em Configurações › Atualizações
+// faixa no topo: só com versão nova, sem "Depois" valendo e fora da gravação (volta quando ela termina)
+let lastUpdateStatus = null;
+function renderUpdateBanner() {
+  const node = $('update-banner');
+  if (!node) return;
+  window.RiceUpdate.banner(node, lastUpdateStatus, {
+    recording: recState !== 'idle',
+    windows: window.rice.platform === 'win32',
+    onRun: () => window.rice.updateRun(),
+    onLater: () => window.rice.updateDismiss().then((status) => applyUpdate(status)).catch(() => {}),
+  });
+}
 const applyUpdate = (status) => window.dispatchEvent(new CustomEvent('rice:update-changed', { detail: status })); // a tela de Configurações ouve o mesmo evento
-window.addEventListener('rice:update-changed', (e) => window.RiceUpdate.applyDot($('settings-link'), e.detail));
+window.addEventListener('rice:update-changed', (e) => { window.RiceUpdate.applyDot($('settings-link'), e.detail); lastUpdateStatus = e.detail; renderUpdateBanner(); });
 if (window.rice.updateStatus) window.rice.updateStatus().then(applyUpdate).catch(() => {});
 window.rice.on('update:changed', applyUpdate);
 // Windows: o estado da atualização automática (ponto em Configurações e a tela de Atualizações ouvem o mesmo evento)

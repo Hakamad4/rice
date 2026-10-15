@@ -5,6 +5,7 @@ import { forEachStereoFrame, recoverOrphanAudio, repairWavHeader, wavDataRange }
 import { StereoWavWriter } from '../../src/main/session/wav-writer';
 import type { AudioFrame } from '../../src/shared/frames';
 import { makeTmpDir } from '../helpers/tmp';
+import { until } from '../helpers/until';
 
 const frame = (source: 'mic' | 'sys', ts: number, value: number): AudioFrame => ({ source, timestampMs: ts, pcm: Buffer.alloc(3200, 0).fill(Buffer.from(Int16Array.of(value).buffer)) });
 
@@ -15,7 +16,8 @@ async function orphanWav(dir: string, seconds: number, name = 'audio.wav') {
     w.write(frame('mic', i * 100, 1000));
     w.write(frame('sys', i * 100, -1000));
   }
-  await new Promise((r) => setTimeout(r, 50));
+  // espera os blocos de 1 s (já completos) chegarem ao disco: a escrita é assíncrona; o último bloco pode ficar no buffer, como numa queda
+  await until(async () => (await stat(join(dir, name))).size >= 44 + (seconds - 1) * 64_000);
   return w;
 }
 

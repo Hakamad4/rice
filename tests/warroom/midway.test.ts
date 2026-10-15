@@ -2,10 +2,14 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { createWarRoom } from '../../src/main/warroom/ipc';
 import { defaultConfig, readConfig, readIdeas, writeConfig } from '../../src/main/warroom/store';
 import { makeTmpDir } from '../helpers/tmp';
+import { quiesce, until } from '../helpers/until';
 
-const realSetTimeout = globalThis.setTimeout; // capturado antes de os timers falsos entrarem
-const realSleep = (ms: number) => new Promise<void>((r) => realSetTimeout(r, ms));
-afterEach(() => vi.useRealTimers());
+// o motor de cada teste para ao fim dele, mesmo que a asserção falhe (senão o ciclo pendente escreve numa pasta já apagada e derruba os testes seguintes)
+const stops: Array<() => void> = [];
+afterEach(() => {
+  for (const stop of stops.splice(0)) stop();
+  vi.useRealTimers();
+});
 
 const speech = (tag: string, n = 8) => `**[00:00:00] Outros:** ${`${tag} precisamos decidir o preço do plano. `.repeat(n)}\n`;
 const IDEAS = '[{"kind":"idea","text":"ideia nova"}]';
@@ -46,16 +50,19 @@ async function rig(opts: { recording?: boolean; transcript?: string; hang?: bool
   } as any);
   const set = (patch: Record<string, unknown>) => handlers.get('warroom:set')!(null, dir, patch);
   const session = (s: string) => wr.onSessionState(s, dir);
-  // o relógio é falso, o disco é de verdade: avança de 5 em 5 s e dá tempo real para as leituras e escritas terminarem
+  // o relógio é falso, o disco é de verdade: avança de 5 em 5 s e espera as leituras e escritas assentarem
   const minutes = async (n: number) => {
     for (let i = 0; i < Math.round((n * 60) / 5); i++) {
       await vi.advanceTimersByTimeAsync(5000);
-      await realSleep(8);
+      await quiesce(() => wr.engine.state(dir).running, () => calls.length);
     }
   };
   const investigations = () => calls.filter((c) => /investiga/i.test(c.system));
   const ideas = () => calls.filter((c) => !/investiga/i.test(c.system));
-  return { dir, wr, calls, state, set, session, minutes, investigations, ideas };
+  // ciclo FECHADO: nada rodando e nada mudando (o runner já ter sido chamado não quer dizer que o ciclo terminou e agendou o próximo)
+  stops.push(() => wr.engine.stop(dir));
+  const idle = () => quiesce(() => wr.engine.state(dir).running, () => calls.length);
+  return { dir, wr, calls, state, set, session, minutes, investigations, ideas, idle };
 }
 
 describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
@@ -66,11 +73,13 @@ describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
     await r.minutes(0.17);
     expect(r.calls).toHaveLength(0);
     await r.set({ kind: 'warroom' }); // 23:10: ativa no meio
-    await vi.waitFor(() => expect(r.investigations()).toHaveLength(1)); // logo, sem esperar o intervalo
+    await until(() => expect(r.investigations()).toHaveLength(1)); // logo, sem esperar o intervalo
+    await r.idle();
     expect((await readConfig(r.dir)).facts.map((f) => f.text)).toEqual(['fato checado']);
     r.state.transcript += speech('depois');
     await r.minutes(2.7);
-    await vi.waitFor(() => expect(r.investigations()).toHaveLength(2)); // e de novo no intervalo
+    await until(() => expect(r.investigations()).toHaveLength(2)); // e de novo no intervalo
+    await r.idle();
     r.wr.engine.stop(r.dir);
   });
 
@@ -78,13 +87,15 @@ describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
     const r = await rig({ transcript: speech('a') });
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', ideas: { on: false, intervalMin: 2 }, investigation: { intervalMin: 2, paused: false } });
     r.session('recording');
-    await vi.waitFor(() => expect(r.investigations()).toHaveLength(1));
+    await until(() => expect(r.investigations()).toHaveLength(1));
+    await r.idle();
     expect(r.investigations()[0].tools).toBeUndefined(); // começou sem fontes
     await r.set({ web: true });
     await r.set({ mcp: true });
     r.state.transcript += speech('b');
     await r.minutes(2.7);
-    await vi.waitFor(() => expect(r.investigations()).toHaveLength(2));
+    await until(() => expect(r.investigations()).toHaveLength(2));
+    await r.idle();
     expect(r.investigations()[1].tools).toMatchObject({ web: true, mcp: true });
     r.wr.engine.stop(r.dir);
   });
@@ -95,11 +106,11 @@ describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
     r.session('recording');
     await r.set({ ideasOn: true });
     await r.set({ intervalMin: 2 });
-    await vi.waitFor(async () => expect((await readIdeas(r.dir)).length).toBe(1));
-    await vi.waitFor(() => expect(r.wr.engine.state(r.dir).running).toBe(false)); // ciclo 1 fechado e próximo agendado: conta 2 min a partir daqui
+    await until(async () => expect((await readIdeas(r.dir)).length).toBe(1));
+    await until(() => expect(r.wr.engine.state(r.dir).running).toBe(false)); // ciclo 1 fechado e próximo agendado: conta 2 min a partir daqui
     r.state.transcript += speech('b');
     await r.minutes(2.7);
-    await vi.waitFor(async () => expect((await readIdeas(r.dir)).length).toBe(2));
+    await until(async () => expect((await readIdeas(r.dir)).length).toBe(2));
     r.wr.engine.stop(r.dir);
   });
 
@@ -113,7 +124,8 @@ describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
     await r.minutes(0.1);
     r.state.transcript = speech('primeira fala');
     await r.minutes(2.7);
-    await vi.waitFor(() => expect(r.investigations()).toHaveLength(1));
+    await until(() => expect(r.investigations()).toHaveLength(1));
+    await r.idle();
     r.wr.engine.stop(r.dir);
   });
 
@@ -121,7 +133,8 @@ describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
     const r = await rig({ transcript: speech('parte 1') });
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', ideas: { on: true, intervalMin: 2 } });
     r.session('recording');
-    await vi.waitFor(() => expect(r.investigations()).toHaveLength(1));
+    await until(() => expect(r.investigations()).toHaveLength(1));
+    await r.idle();
     r.session('finishing');
     r.session('idle');
     r.state.recording = false;
@@ -129,7 +142,8 @@ describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
     r.state.recording = true; // retomou
     r.state.transcript += speech('parte 2');
     r.session('recording');
-    await vi.waitFor(() => expect(r.investigations()).toHaveLength(2));
+    await until(() => expect(r.investigations()).toHaveLength(2));
+    await r.idle();
     expect(r.wr.engine.isScheduled(r.dir)).toBe(true);
     r.wr.engine.stop(r.dir);
   });
@@ -138,7 +152,8 @@ describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
     const r = await rig({ transcript: speech('ASSUNTO-ANTIGO', 30) });
     r.session('recording');
     await r.set({ kind: 'warroom' });
-    await vi.waitFor(() => expect(r.investigations()).toHaveLength(1));
+    await until(() => expect(r.investigations()).toHaveLength(1));
+    await r.idle();
     expect(r.investigations()[0].prompt).toContain('ASSUNTO-ANTIGO');
     r.wr.engine.stop(r.dir);
   });
@@ -147,9 +162,9 @@ describe('Ideias e Investigação ativadas no MEIO da reunião', () => {
     const r = await rig({ transcript: speech('a'), hang: true });
     await writeConfig(r.dir, { ...defaultConfig(), kind: 'warroom', ideas: { on: true, intervalMin: 2 } });
     r.session('recording');
-    await vi.waitFor(() => expect(r.wr.engine.state(r.dir).running).toBe(true));
+    await until(() => expect(r.wr.engine.state(r.dir).running).toBe(true));
     await r.set({ kind: 'meeting', ideasOn: false });
-    await vi.waitFor(() => expect(r.wr.engine.state(r.dir).running).toBe(false));
+    await until(() => expect(r.wr.engine.state(r.dir).running).toBe(false));
     expect(r.wr.engine.isScheduled(r.dir)).toBe(false);
     expect(r.wr.engine.state(r.dir).error).toBe(''); // cancelado por escolha: sem erro
     const before = r.calls.length;

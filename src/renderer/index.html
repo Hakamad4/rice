@@ -764,6 +764,12 @@
   /* aviso de versão nova: ponto discreto no item Configurações e a linha com o botão em Configurações › Atualizações */
   .nav-item.has-update::after { content:''; flex:none; width:7px; height:7px; margin-left:auto; border-radius:50%; background:var(--accent, currentColor); }
   .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+  #update-banner { display:flex; align-items:center; gap:10px; flex-wrap:wrap; min-width:0; padding:8px 16px; border-bottom:1px solid var(--line); background:var(--hover); font-size:13px; }
+  #update-banner[hidden] { display:none; }
+  #update-banner .ico { flex:none; display:inline-flex; color:var(--accent, currentColor); }
+  #update-banner .update-banner-text { flex:1 1 200px; min-width:0; font-weight:500; overflow-wrap:anywhere; }
+  #update-banner .update-banner-actions { display:flex; gap:8px; flex:none; margin-left:auto; }
+  #update-banner .btn { padding:4px 12px; font-size:13px; }
   .update-notice { margin:0 0 14px; padding:12px 14px; border-radius:10px; background:var(--hover); }
   .update-notice[hidden] { display:none; } .update-notice .set-help { margin:8px 0 0; }
   .mic-feedback:empty { display:none; } .mic-mac-note { margin:0 0 14px; }
@@ -988,6 +994,7 @@
     </div>
   </aside>
   <div id="center">
+    <div id="update-banner" role="status" hidden></div>
     <div id="rec-bar">
       <span id="status" class="empty"></span>
       <div id="mic-chip" class="mic-chip" role="status" hidden></div>
