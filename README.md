@@ -59,8 +59,8 @@ Or directly from GitHub: `curl -fsSL https://raw.githubusercontent.com/WalissonC
 Or, step by step:
 
 ```bash
-git clone https://github.com/WalissonCF/rice.git
-cd rice
+git clone https://github.com/WalissonCF/rice.git rice-src
+cd rice-src
 ./install.sh
 ```
 
@@ -87,7 +87,7 @@ You still need `brew install whisper.cpp` for the transcription server; the tran
 **Installed with `git clone` + `./install.sh`:** run, in the clone folder:
 
 ```bash
-cd rice
+cd rice-src   # or ~/rice if you installed before 0.5.1
 ./update.sh
 ```
 
@@ -498,7 +498,7 @@ Run `brew install whisper.cpp`, or point `RICE_WHISPER_SERVER` to the binary.
 
 **Updating in development mode (`npm run app`).** For the installed app, see [Updating](#updating).
 ```bash
-cd rice
+cd rice-src
 git pull
 npm install
 scripts/build-native.sh
