@@ -48,6 +48,7 @@
     'dialog.choose-root': 'Where should meetings be saved?',
     'err.already-recording': 'a recording is already in progress',
     'err.meeting-recording': 'this meeting is already being recorded',
+    'warn.step-timeout': 'A step while finishing the meeting took too long and was abandoned; the transcript or audio may be incomplete.',
     'warn.transcription-cut': 'The final transcription took too long and was cut; the stretch was marked incomplete.',
     'warn.audio-merge-failed': 'Could not merge the audio with the previous one; the new recording was saved as {name}.',
     'err.capture-no-restart': 'capture will not restart',

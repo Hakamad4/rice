@@ -51,6 +51,11 @@ export class AudioCapture extends EventEmitter {
     child.stdin.write('{"cmd":"start"}\n');
   }
 
+  /** Mata o processo helper agora (rede de segurança do fim da gravação: nunca sobra órfão). */
+  kill(): void {
+    this.child?.kill('SIGKILL');
+  }
+
   /** Troca o microfone durante a gravação (Mac): `uid` vazio/undefined = entrada padrão do macOS. O helper reabre a entrada pelo caminho da troca de dispositivo. */
   setMicDevice(uid?: string): void {
     this.child?.stdin.write(`${JSON.stringify({ cmd: 'mic-device', id: uid ?? '' })}\n`);
@@ -62,9 +67,16 @@ export class AudioCapture extends EventEmitter {
     if (!child) return Promise.resolve();
     this.expectedExit = true;
     this.stopping = new Promise<void>((resolve) => {
-      const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+      let hard: NodeJS.Timeout | undefined;
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        // processo que nem o SIGKILL derruba (travado no kernel): o stop() resolve mesmo assim, nunca fica pendurado
+        hard = setTimeout(resolve, 2000);
+        hard.unref?.();
+      }, timeoutMs);
       child.once('close', () => {
         clearTimeout(timer);
+        clearTimeout(hard);
         resolve();
       });
       child.stdin.write('{"cmd":"stop"}\n');

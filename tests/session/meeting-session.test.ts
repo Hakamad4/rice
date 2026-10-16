@@ -12,6 +12,8 @@ class FakeCapture extends EventEmitter {
   started = 0;
   stopped = 0;
   micDevices: Array<string | undefined> = [];
+  killed = 0;
+  kill() { this.killed++; }
   start() { this.started++; }
   setMicDevice(uid?: string) { this.micDevices.push(uid); }
   async stop() { this.stopped++; this.emit('exit', { code: 0, signal: null, expected: true }); }
@@ -1211,4 +1213,64 @@ describe('escolha do microfone (Mac)', () => {
     expect(captures[0]!.micDevices).toEqual(['uid-fifine', undefined]);
     await session.stop();
   });
+});
+
+describe('parar nunca trava (prazos duros e nenhum helper órfão)', () => {
+  const fast = { captureStopMs: 60, stepDeadlineMs: 80, writesDeadlineMs: 80, finishDeadlineMs: 80 };
+
+  it('captura que não responde ao stop: stop() resolve no prazo, avisa e a reunião fecha', async () => {
+    const warnings: string[] = [];
+    const { session, captures } = await setup({ deps: fast, makeCapture: () => { const c = new FakeCapture(); c.stop = () => new Promise<void>(() => {}); return c; } });
+    session.on('session-warning', (w: string) => warnings.push(String(w)));
+    session.on('warning', (w: string) => warnings.push(String(w)));
+    const dir = await session.start({ title: 'Trava captura', trigger: 'manual' });
+    const t0 = Date.now();
+    await session.stop();
+    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(captures[0]!.killed).toBeGreaterThan(0); // e o helper é morto na marra
+    expect((await readMeta(dir)).state).toBe('done');
+  });
+
+  it('TODA captura criada na gravação é parada e morta ao parar (reiniciadas ou que escaparam), inclusive uma que o stop normal não alcança', async () => {
+    const { session, captures } = await setup({ restartDelayMs: 1, deps: fast });
+    await session.start({ title: 'Órfãos', trigger: 'manual' });
+    session.suspend();
+    session.resume(); // 2ª captura; a 1ª já foi mandada parar, mas pode seguir viva
+    session.suspend();
+    session.resume(); // 3ª
+    expect(captures.length).toBeGreaterThanOrEqual(3);
+    await session.stop();
+    for (const c of captures) expect(c.killed).toBeGreaterThan(0);
+  });
+
+  it('frames que chegam depois de parar são descartados (nem WAV nem pipeline)', async () => {
+    const { session, captures, pipeline } = await setup(true);
+    await session.start({ title: 'Depois do stop', trigger: 'manual' });
+    captures[0]!.emitFrames(3, 0);
+    await session.stop();
+    const before = pipeline.frames.length;
+    captures[0]!.emitFrames(50, 5000); // um helper que escapou continua mandando
+    expect(pipeline.frames.length).toBe(before);
+  });
+
+  it('escrita da transcrição que nunca termina não trava o stop(): estoura o prazo, marca incompleta e fecha', async () => {
+    const { session, captures } = await setup({ deps: fast });
+    const dir = await session.start({ title: 'Escrita travada', trigger: 'manual' });
+    const internals = session as unknown as { active: { writes: Promise<void> } };
+    internals.active.writes = new Promise<void>(() => {}); // uma escrita que nunca resolve
+    captures[0]!.emitFrames(2, 0);
+    const t0 = Date.now();
+    await session.stop();
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect((await readMeta(dir)).state).toBe('done');
+  });
+
+  it('codificação do áudio que trava (afconvert) tem prazo: o WAV fica e o stop() resolve', async () => {
+    const { session } = await setup({ keepAudio: true, deps: { ...fast, encodeDeadlineMs: 100 }, encode: () => new Promise<void>(() => {}) });
+    const dir = await session.start({ title: 'Encode travado', trigger: 'manual' });
+    const t0 = Date.now();
+    await session.stop();
+    expect(Date.now() - t0).toBeLessThan(3000);
+    expect((await readMeta(dir)).state).toBe('done');
+  }, 15000);
 });

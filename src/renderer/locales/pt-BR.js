@@ -48,6 +48,7 @@
     'dialog.choose-root': 'Onde salvar as reuniões?',
     'err.already-recording': 'já existe uma gravação em andamento',
     'err.meeting-recording': 'esta reunião já está sendo gravada',
+    'warn.step-timeout': 'Uma etapa ao finalizar a reunião demorou demais e foi abandonada; a transcrição ou o áudio podem estar incompletos.',
     'warn.transcription-cut': 'A transcrição final demorou demais e foi cortada; o trecho foi marcado como incompleto.',
     'warn.audio-merge-failed': 'Não foi possível juntar o áudio com o anterior; a nova gravação ficou em {name}.',
     'err.capture-no-restart': 'captura não reinicia',

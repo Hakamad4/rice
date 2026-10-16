@@ -29,6 +29,11 @@ export type SessionDeps = {
   speakers?: (dir: string) => Promise<SpeakerIdentifier | null>;
   /** Initial prompt do whisper com o vocabulário da reunião (do usuário + participantes da agenda); falha vira ''. */
   vocabulary?: (dir: string) => Promise<string>;
+  /** Prazos duros do `stop()` (padrões: captura 8 s, etapa 30 s, escritas 15 s); só os testes mudam. */
+  captureStopMs?: number;
+  stepDeadlineMs?: number;
+  writesDeadlineMs?: number;
+  encodeDeadlineMs?: number;
   /** Idioma das reuniões sem `meta.language` (padrão `pt`). */
   defaultLanguage?: () => TranscriptionLanguage | Promise<TranscriptionLanguage>;
   /** `resume`: a reunião já tinha gravação; as notas são regeneradas sobre a transcrição inteira. */
@@ -129,11 +134,20 @@ type Active = {
   sealed: boolean;
   restartTimer: NodeJS.Timeout | null;
   writes: Promise<void>;
+  /** TODAS as capturas (processos helper) criadas nesta gravação: parar mata cada uma, nunca sobra órfão. */
+  captures: Set<AudioCapture>;
+  /** A captura já foi parada: frames que ainda chegarem são descartados. */
+  captureClosed: boolean;
 };
 
 const MAX_RESTARTS_WITHOUT_FRAMES = 3;
 const FINISH_DEADLINE_MS = 30_000;
 const QUICK_FINISH_MS = 4000;
+/** Prazos duros ao parar: nenhuma etapa trava o `stop()` (a etapa que estoura é abandonada, avisada e a reunião fica marcada como incompleta). */
+const CAPTURE_STOP_MS = 8000;
+const STEP_DEADLINE_MS = 30_000;
+const ENCODE_DEADLINE_MS = 5 * 60_000;
+const WRITES_DEADLINE_MS = 15_000;
 const DEFAULT_INACTIVITY_MS = 15 * 60_000;
 const FORGOTTEN_AFTER_MS = 3 * 3_600_000;
 const FORGOTTEN_EVERY_MS = 3_600_000;
@@ -263,7 +277,7 @@ export class MeetingSession extends EventEmitter {
       }),
       audioGapFrom: null, suspendedAtMs: null, pausedAtMs: null, pausedAtWall: 0, pauseAlerted: false, watchdog: new SourceWatchdog(), lastSpeechAt: startedAt.getTime(), idlePromptAt: null, nextReminderAt: null, watchTimer: null, sourceGapFrom: {}, micRevoked: false, spaceTimer: null,
       offsetMs: 0, lastMs: 0, lastStatus: 'idle', restartsWithoutFrames: 0,
-      hasSegments: false, othersSpoke: false, incomplete: false, retrying: false, closing: false, sealed: false, restartTimer: null, writes: Promise.resolve(),
+      hasSegments: false, othersSpoke: false, incomplete: false, retrying: false, closing: false, sealed: false, restartTimer: null, writes: Promise.resolve(), captures: new Set(), captureClosed: false,
     };
     this.active = active;
     this.emit('active', dir); // o 'recording' saiu antes de a reunião existir: quem leu o currentDir lá viu null
@@ -441,9 +455,11 @@ export class MeetingSession extends EventEmitter {
   private attachCapture(active: Active): void {
     const capture = this.deps.createCapture();
     active.capture = capture;
+    active.captures.add(capture);
     const offset = active.offsetMs;
     active.watchdog.captureStarted(this.now().getTime());
     capture.on('frame', (frame: AudioFrame) => {
+      if (active.captureClosed || active.sealed) return; // a gravação já parou: nada entra depois (nem de um helper que escapou)
       if (active.pausedAtMs !== null) return; // pausado: nada é gravado nem transcrito (nem um quadro atrasado da captura que acabou de parar)
       active.restartsWithoutFrames = 0;
       this.watchEvents(active, active.watchdog.onFrame(frame.source, frame.pcm, this.now().getTime()));
@@ -746,9 +762,30 @@ export class MeetingSession extends EventEmitter {
     }
   }
 
+  /** Espera `promise` no máximo `WRITES_DEADLINE_MS`; estourou: avisa, marca como incompleta e segue (devolve undefined). */
+  private async bounded<T>(active: Active, promise: Promise<T>, ms = this.deps.writesDeadlineMs ?? WRITES_DEADLINE_MS): Promise<T | undefined> {
+    let timer: NodeJS.Timeout | undefined;
+    const cut = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), ms);
+      timer.unref?.();
+    });
+    try {
+      const out = await Promise.race([promise, cut]);
+      if (out === 'timeout') {
+        active.incomplete = true;
+        this.warn(t('warn.step-timeout'));
+        return undefined;
+      }
+      return out;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Última tentativa de gravar a transcrição; se a pasta continua indisponível, diz onde ficou a cópia. */
   private async closeTranscript(active: Active): Promise<void> {
-    const result = await active.sink.close();
+    const result = await this.bounded(active, active.sink.close());
+    if (!result) return; // estourou o prazo: segue sem travar o fim da reunião
     if (result.complete) {
       this.alerts.clear('storage:transcript');
     } else if (result.spoolPath) {
@@ -757,7 +794,7 @@ export class MeetingSession extends EventEmitter {
   }
 
   /** Fecha o WAV, codifica para m4a e, numa retomada, junta com o áudio anterior (sem nunca perder nenhum). */
-  private async finishAudio(active: Active, step: (fn: () => Promise<unknown> | unknown) => Promise<boolean>): Promise<void> {
+  private async finishAudio(active: Active, step: (fn: () => Promise<unknown> | unknown, ms?: number) => Promise<boolean>): Promise<void> {
     const { dir } = active;
     const keep = this.deps.keepAudio();
     const encode = this.deps.encode ?? encodeM4a;
@@ -774,7 +811,7 @@ export class MeetingSession extends EventEmitter {
       return;
     }
     if (!hadAudio) {
-      const encoded = wavClosed && (await step(() => encode(wavPath, m4aPath)));
+      const encoded = wavClosed && (await step(() => encode(wavPath, m4aPath), this.deps.encodeDeadlineMs ?? ENCODE_DEADLINE_MS));
       if (encoded) {
         await step(() => rm(wavPath, { force: true }));
         if (!keep) await step(() => rm(m4aPath, { force: true }));
@@ -787,11 +824,11 @@ export class MeetingSession extends EventEmitter {
       return;
     }
     const part = join(dir, '.audio-retomada.m4a');
-    if (!wavClosed || !(await step(() => encode(wavPath, part)))) return; // o WAV fica na pasta
+    if (!wavClosed || !(await step(() => encode(wavPath, part), this.deps.encodeDeadlineMs ?? ENCODE_DEADLINE_MS))) return; // o WAV fica na pasta
     await step(() => rm(wavPath, { force: true }));
     const merged = join(dir, '.audio-junto.m4a');
     const concat = this.deps.concat ?? concatM4a;
-    if ((await step(() => concat(m4aPath, part, merged))) && (await step(() => rename(merged, m4aPath)))) {
+    if ((await step(() => concat(m4aPath, part, merged), this.deps.encodeDeadlineMs ?? ENCODE_DEADLINE_MS)) && (await step(() => rename(merged, m4aPath)))) {
       await step(() => rm(part, { force: true }));
       return;
     }
@@ -818,16 +855,34 @@ export class MeetingSession extends EventEmitter {
     if (active.restartTimer) clearTimeout(active.restartTimer);
     if (active.spaceTimer) clearInterval(active.spaceTimer);
     if (active.watchTimer) clearInterval(active.watchTimer);
-    const step = async (fn: () => Promise<unknown> | unknown): Promise<boolean> => {
+    const step = async (fn: () => Promise<unknown> | unknown, ms?: number): Promise<boolean> => {
+      let timer: NodeJS.Timeout | undefined;
       try {
-        await fn();
+        const limit = ms ?? this.deps.stepDeadlineMs ?? STEP_DEADLINE_MS;
+        await Promise.race([
+          Promise.resolve().then(fn),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new StepTimeout()), limit);
+            timer.unref?.();
+          }),
+        ]);
         return true;
       } catch (err) {
-        this.warn((err as Error).message);
+        if (err instanceof StepTimeout) {
+          active.incomplete = true;
+          this.warn(t('warn.step-timeout'));
+        } else this.warn((err as Error).message);
         return false;
+      } finally {
+        clearTimeout(timer);
       }
     };
-    await step(() => active.capture.stop());
+    const captureMs = this.deps.captureStopMs ?? CAPTURE_STOP_MS;
+    await step(() => active.capture.stop(), captureMs);
+    // qualquer outra captura desta gravação (reiniciada, retomada ou que escapou): para e, se preciso, é morta; nunca sobra helper vivo
+    await step(() => Promise.all([...active.captures].filter((c) => c !== active.capture).map((c) => c.stop(1500).catch(() => {}))), captureMs);
+    for (const c of active.captures) c.kill?.();
+    active.captureClosed = true;
     await step(() => updateMeta(active.dir, (meta) => ({ ...meta, state: 'finishing' })));
     // a captura parou: daqui para a frente nada mais depende da gravação ativa
     this.active = null;
@@ -847,7 +902,7 @@ export class MeetingSession extends EventEmitter {
     await Promise.allSettled([...this.finalizing.values()]);
   }
 
-  private async finalize(active: Active, step: (fn: () => Promise<unknown> | unknown) => Promise<boolean>, endedAt: string, options: { quick?: boolean }): Promise<void> {
+  private async finalize(active: Active, step: (fn: () => Promise<unknown> | unknown, ms?: number) => Promise<boolean>, endedAt: string, options: { quick?: boolean }): Promise<void> {
     // R-45: a fila de transcrição tem prazo; passado ele o trecho final é marcado como incompleto e a reunião fecha
     const deadlineMs = options.quick ? QUICK_FINISH_MS : (this.deps.finishDeadlineMs ?? FINISH_DEADLINE_MS);
     if (active.pipeline) {
@@ -864,10 +919,10 @@ export class MeetingSession extends EventEmitter {
       }
     }
     active.sealed = true; // segmentos que ainda chegarem depois do prazo são descartados
-    await active.writes;
+    await this.bounded(active, active.writes);
     this.closeAudioGap(active);
     for (const source of ['mic', 'sys'] as const) this.closeSourceGap(active, source);
-    await active.writes;
+    await this.bounded(active, active.writes);
     if (!active.pipeline || active.lastStatus === 'failed' || active.incomplete) {
       await step(async () => {
         await this.writeResumeMark(active);
@@ -883,6 +938,12 @@ export class MeetingSession extends EventEmitter {
       () => this.emit('notes', { dir, ok: true }),
       (err: Error) => this.emit('notes', { dir, ok: false, error: err.message }),
     );
+  }
+}
+
+class StepTimeout extends Error {
+  constructor() {
+    super('step timeout');
   }
 }
 
