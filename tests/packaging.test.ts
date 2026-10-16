@@ -98,6 +98,7 @@ describe('empacotamento do Windows (nsis x64)', () => {
     for (const k of ['19045', 'PROCESSOR_ARCHITECTURE', 'nodeMajor -lt 22', 'cmake', 'vswhere', 'param([switch]$Check)', 'dist:win', 'ERRO:', 'ERROR:']) expect(ps, k).toContain(k);
     expect(ps).not.toMatch(/Start-Process[^\n]*RunAs/);
     expect(ps.indexOf('if ($Check)')).toBeLessThan(ps.indexOf('npm ci'));
+    expect(ps, 'PS 5.1 tira as aspas duplas de dentro das simples').not.toMatch(/node(\.exe)? -[pe] '[^'\n]*"/);
   });
 });
 
