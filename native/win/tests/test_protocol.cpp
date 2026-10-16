@@ -663,3 +663,22 @@ TEST(exclude_pid_sobe_ate_a_raiz_do_mesmo_executavel) {
   std::vector<ProcessEntry> loop = {{10, 11, "a.exe"}, {11, 10, "a.exe"}};
   CHECK(excludeTreeRoot({10}, loop) != 0);  // ciclo não trava
 }
+
+TEST(recorder_repassa_todos_os_exclude_pid_na_ordem) {
+  MemoryFrameSink sink;
+  Capture cap;
+  SimulatedPlatform::Script script;
+  script.realTime = false;
+  script.micBlocks = 5;
+  SimulatedPlatform platform(script);
+  RecorderOptions opt;
+  opt.echoCancellation = false;
+  opt.excludePids = {9120, 4242};  // Spotify antes do Rice: o Windows usa o primeiro
+  {
+    Recorder rec(platform, sink, cap.emitter, opt);
+    rec.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    rec.stop();
+  }
+  CHECK(platform.excludedPids() == std::vector<long>({9120, 4242}));
+}
