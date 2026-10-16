@@ -30,6 +30,12 @@ if arguments.contains("--print-input") {
     exit(0)
 }
 
+if arguments.contains("--print-inputs") {
+    // Entradas de áudio com transporte, padrão e "em uso por outro processo": {"inputs":[…]} (só consulta o CoreAudio).
+    printJSON(["inputs": InputList.all().map(InputList.fields)])
+    exit(0)
+}
+
 if let stepsJSON = value(after: "--simulate-mic") {
     let steps = (try? JSONSerialization.jsonObject(with: Data(stepsJSON.utf8))) as? [[String]] ?? []
     let watcher = MicWatcher()
@@ -133,6 +139,13 @@ Thread {
             inFlightCommands.enter()
             DispatchQueue.main.async {
                 Output.emit("events-list", ["events": calendar.events(from: from, to: to, includeAllDay: true).map(\.listJSON)])
+                inFlightCommands.leave()
+            }
+        case "list-inputs":
+            // Escolha do microfone ao gravar e menu do chip: só consulta o CoreAudio
+            inFlightCommands.enter()
+            DispatchQueue.main.async {
+                Output.emit("inputs", ["inputs": InputList.all().map(InputList.fields)])
                 inFlightCommands.leave()
             }
         case "current-input":

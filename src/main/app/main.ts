@@ -51,7 +51,7 @@ import { notificationOptions } from './notification-options';
 import { appAbout } from '../update/about';
 import { createWinUpdater, nsisInstall, type UpdaterLike, type WinUpdateState } from '../update/win-updater';
 import { readBuildInfo, type BuildInfo } from '../update/build-info';
-import { createUpdateChecker, RELEASES_URL, type UpdateState } from '../update/check';
+import { createUpdateChecker, lastCheckOf, RELEASES_URL, type UpdateState } from '../update/check';
 import { createCheckNow } from '../update/check-now';
 import { shouldNotify } from '../update/notice';
 import { openUpdateInTerminal } from '../update/terminal';
@@ -70,7 +70,7 @@ import { normalizeSavedPrompts } from '../../shared/saved-prompts';
 import { webSearchSupported } from '../ai/web-search';
 import { guardedIpc, lockdownWebContents } from './hardening';
 import { decideMeetingEnd } from '../session/stop-policy';
-import { endKey, shouldOfferRecording, shouldPromptEnd, shouldPromptStart, titleFor } from '../session/prompt-policy';
+import { endKey, PromptTracker, shouldOfferRecording, shouldPromptEnd, shouldPromptStart, titleFor } from '../session/prompt-policy';
 import { recoverInterrupted } from '../session/recovery';
 import { damagedEntry, readMetaIfUsable, repairMeta } from '../store/meta-repair';
 import { recoverMeeting } from '../session/recover-meeting';
@@ -80,6 +80,8 @@ import { LevelThrottle, NubController, NUB_BAR_WIDTH, NUB_HEIGHT, type Point } f
 import { findAppIcon, findTrayIcons, findWinIcon, findWinTrayIcon } from './app-icon';
 import { isMac, isWindows, remindersSupported, systemCalendarSupported } from '../platform';
 import { applyMicDevice, listMicInputs } from '../platform/mic-input';
+import { alternatives, isVirtual, parseInputs, pickMic, probeInputs, probeable, type MacInput, type MicPick } from '../platform/mic-pick';
+import { MicMuteMonitor } from '../session/mic-mute';
 import { currentPlan, normalizeMode, setTranscriberMode, type TranscriberMode } from '../asr/transcriber-plan';
 import { systemPanelUrl, titleBarOverlay } from '../platform/system';
 import { fromSystemLocale, locale, setLanguage, t, tn, type UiLanguage } from '../i18n';
@@ -119,7 +121,7 @@ import { configureLongNotes, type NotesProgress } from '../session/long-notes';
 import type { AlertActionKind } from '../session/alerts';
 import { saveAnnotations } from '../store/annotations';
 
-type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Ocultar dados pessoais ao enviar para a IA (as pastas sensíveis ligam por conta própria). */ redactPii?: boolean; /** Guarda padrão (as pastas podem definir a própria). */ retentionDefault?: FolderRetention; /** Aviso de consentimento ao gravar (padrão: ligado) e o texto próprio (vazio = o padrão no idioma da reunião). */ consentRemind?: boolean; consentText?: string; /** Modo 100% local: nada usa a rede (só localhost); só o provedor Modelo local. */ fullyLocal?: boolean; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Windows: abrir com o Windows, só na bandeja (padrão: desligado). */ launchAtLogin?: boolean; /** Windows: id do microfone escolhido (ausente = padrão do Windows). */ micDevice?: string; /** Modelo de transcrição: automático (pela memória), leve ou completo. */ asrModel?: AsrChoice; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean; /** Memória entre reuniões (padrão: ligada). */ memory?: boolean; /** Domínios do próprio usuário (do participante `self` da agenda), para a memória não tratar a própria empresa como cliente. */ memoryOwnDomains?: string[]; /** Aviso local quando uma pendência minha vence (padrão: ligado). */ followupNotify?: boolean; };
+type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Ocultar dados pessoais ao enviar para a IA (as pastas sensíveis ligam por conta própria). */ redactPii?: boolean; /** Guarda padrão (as pastas podem definir a própria). */ retentionDefault?: FolderRetention; /** Aviso de consentimento ao gravar (padrão: ligado) e o texto próprio (vazio = o padrão no idioma da reunião). */ consentRemind?: boolean; consentText?: string; /** Modo 100% local: nada usa a rede (só localhost); só o provedor Modelo local. */ fullyLocal?: boolean; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Mac: escolher o microfone sozinho ao gravar (padrão: ligado). */ micAuto?: boolean; /** Windows: abrir com o Windows, só na bandeja (padrão: desligado). */ launchAtLogin?: boolean; /** Windows: id do microfone escolhido (ausente = padrão do Windows). */ micDevice?: string; /** Modelo de transcrição: automático (pela memória), leve ou completo. */ asrModel?: AsrChoice; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean; /** Memória entre reuniões (padrão: ligada). */ memory?: boolean; /** Domínios do próprio usuário (do participante `self` da agenda), para a memória não tratar a própria empresa como cliente. */ memoryOwnDomains?: string[]; /** Aviso local quando uma pendência minha vence (padrão: ligado). */ followupNotify?: boolean; };
 
 // Modo 100% local: o fetch global só fala com localhost enquanto o modo estiver ligado (rede de segurança por baixo dos bloqueios de cada recurso)
 installNetworkGuard();
@@ -326,16 +328,14 @@ const chats = new Map<number, AbortController>();
 const searchIndex = new SearchIndex();
 
 const END_PROMPT_TIMEOUT_MS = 60_000;
-const pendingPrompts = new Set<string>();
+const pendingPrompts = new PromptTracker();
 /** Apps de reunião usando o microfone agora (fim de um deles com outro ativo não encerra a gravação). */
 const activeMeetingApps = new Set<string>();
-/** Quando cada app de reunião gerou o último convite (evita insistir). */
-const lastPromptAt = new Map<string, number>();
 // Referências fortes: o GC pode descartar a Notification e perder o clique.
 const liveNotifications = new Set<Notification>();
 
 /** Mostra uma notificação; `onAction` roda no clique (corpo ou botão). Resolve quando ela some. */
-function notify(opts: { title: string; actionText: string; onAction: () => void; secondaryText?: string; onSecondary?: () => void; onClose?: () => void }): { close: () => void } {
+function notify(opts: { title: string; actionText: string; onAction: () => void; secondaryText?: string; onSecondary?: () => void; onClose?: (acted: boolean) => void }): { close: () => void } {
   const n = new Notification(notificationOptions({ title: opts.title, actionText: opts.actionText, secondaryText: opts.secondaryText, windows: isWindows(), clickHint: t('notify.click-hint', { action: opts.actionText.toLowerCase() }) }));
   liveNotifications.add(n);
   let done = false;
@@ -344,7 +344,7 @@ function notify(opts: { title: string; actionText: string; onAction: () => void;
     done = true;
     liveNotifications.delete(n);
     if (act) opts.onAction();
-    opts.onClose?.();
+    opts.onClose?.(act);
   };
   n.on('click', () => finish(true));
   n.on('action', (_e, index: number) => {
@@ -465,19 +465,24 @@ function setupDetector(): void {
     if (!session || !shouldPromptStart({ state: session.state, pending: pendingPrompts, key })) return;
     pendingPrompts.add(key);
     const event = await d.currentEvent().catch(() => null);
-    if (session.state !== 'idle' || !shouldOfferRecording({ app: appName, muted: cachedSettings.mutedApps ?? [], calendarEvidence: event !== null, lastPromptAt: lastPromptAt.get(appName), now: Date.now() })) {
+    if (session.state !== 'idle' || !shouldOfferRecording({ app: appName, muted: cachedSettings.mutedApps ?? [], calendarEvidence: event !== null, lastPromptAt: pendingPrompts.lastDeclinedAt(appName), now: Date.now() })) {
       pendingPrompts.delete(key);
       return;
     }
-    lastPromptAt.set(appName, Date.now());
     const title = titleFor({ calendarTitle: event?.title, app: appName });
     notify({
       title: t('notify.record.title', { title }),
       actionText: t('notify.record.action'),
-      onAction: () => startFromPrompt({ title, trigger: 'mic', app: appName, calendarEventId: event?.id }),
+      onAction: () => {
+        pendingPrompts.accepted(appName);
+        startFromPrompt({ title, trigger: 'mic', app: appName, calendarEventId: event?.id });
+      },
       secondaryText: t('notify.record.mute', { app: appName }),
       onSecondary: () => void saveSettings({ ...cachedSettings, mutedApps: [...new Set([...(cachedSettings.mutedApps ?? []), appName])] }),
-      onClose: () => pendingPrompts.delete(key),
+      onClose: (acted) => {
+        pendingPrompts.delete(key);
+        if (!acted) pendingPrompts.declined(appName); // fechou sem aceitar: respeita o intervalo mínimo
+      },
     });
   });
   d.on('calendar-changed', () => void refreshEventKit());
@@ -486,6 +491,7 @@ function setupDetector(): void {
     const name = normalizeMic({ name: input?.name })?.name;
     if (!name) return;
     lastDefaultInput = name;
+    if (micFromHelper && session && session.state !== 'idle') return; // gravando: o helper informa o microfone realmente aberto (pode não ser o padrão)
     void onMic({ name, isDefault: true });
   });
   d.on('upcoming', (ev: { id: string; title: string; start: string; end: string; url: string | null }) => {
@@ -750,8 +756,13 @@ function createTray(): void {
 }
 
 /** Microfone em uso (informado pelo helper no Windows e pelo detector no Mac): grava na reunião, avisa o renderer e marca trocas. */
-type MicNow = { dir: string; name: string; short: string; isDefault: boolean; chosen: boolean; switched: boolean };
+type MicNow = { dir: string; name: string; short: string; isDefault: boolean; chosen: boolean; switched: boolean; detected?: boolean; id?: string };
 let micNow: MicNow | null = null;
+/** Mac: o que a escolha automática decidiu para a gravação atual, e se o helper já informou o microfone aberto. */
+let micPick: MicPick | null = null;
+let micFromHelper = false;
+const muteMonitor = new MicMuteMonitor();
+let muteBusy = false;
 let lastDefaultInput: string | null = null;
 async function onMic(raw: unknown): Promise<void> {
   const info = normalizeMic(raw);
@@ -759,9 +770,57 @@ async function onMic(raw: unknown): Promise<void> {
   if (!info || !dir || !session || session.state === 'idle') return;
   const chosen = info.chosen || (info.id !== undefined && info.id === (await loadSettings()).micDevice);
   const switched = isMicSwitch(micNow?.dir === dir ? micNow.name : undefined, info.name);
-  micNow = { dir, name: info.name, short: shortMicName(info.name), isDefault: info.isDefault, chosen, switched: false };
+  // Mac: "detectado" = o Rice achou este microfone (em uso por outro app ou o que tinha voz) e não foi escolha do usuário
+  const detected = micPick !== null && micPick.uid !== undefined && micPick.uid === info.id && (micPick.reason === 'in-use' || micPick.reason === 'voice');
+  micNow = { dir, name: info.name, short: shortMicName(info.name), isDefault: info.isDefault, chosen, switched: false, detected, ...(info.id ? { id: info.id } : {}) };
   await updateMeta(dir, (m) => applyMic(m, info, toLocalIso(new Date()))).catch((err) => logError('mic meta', err));
   send('session:mic', { ...micNow, switched });
+}
+
+/** Entradas de áudio do CoreAudio (rice-detector); vazio se o detector não responde. */
+async function macInputs(): Promise<MacInput[]> {
+  return detector ? parseInputs(await detector.listInputs().catch(() => null)) : [];
+}
+
+/**
+ * Mac, ao começar a gravar: escolhe o microfone sozinho (em uso por outro app › com voz › padrão) e passa ao rice-audio por RICE_MIC_DEVICE.
+ * O tempo todo cabe em ~2 s; estourou ou falhou, segue com a entrada padrão do macOS (o comportamento de sempre).
+ */
+async function prepareMic(): Promise<void> {
+  micPick = null;
+  micFromHelper = false;
+  delete process.env.RICE_MIC_DEVICE;
+  if (process.platform !== 'darwin' || TEST_INSTANCE) return;
+  const settings = await loadSettings();
+  const work = (async () => {
+    const inputs = await macInputs();
+    return pickMic({ inputs, fixed: settings.micDevice, auto: settings.micAuto !== false, probe: (ids) => probeInputs(riceAudioBinary(), ids), budgetMs: 1600 });
+  })();
+  let timer: NodeJS.Timeout | undefined;
+  const pick = await Promise.race([work.catch(() => null), new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 2000); timer.unref(); })]);
+  clearTimeout(timer);
+  if (!pick) return;
+  micPick = pick;
+  if (pick.uid) process.env.RICE_MIC_DEVICE = pick.uid;
+}
+
+/** Mic ~20 s sem voz com o sistema falando: se OUTRA entrada tem voz agora, avisa (uma vez; de novo só depois de trocar). */
+async function checkMuteMic(): Promise<void> {
+  if (muteBusy || !session || session.state !== 'recording') return;
+  muteBusy = true;
+  try {
+    const inputs = await macInputs();
+    const alts = alternatives(inputs, micNow?.id ?? micPick?.uid ?? inputs.find((i) => i.isDefault)?.id);
+    if (alts.length === 0) return;
+    const levels = await probeInputs(riceAudioBinary(), alts.map((a) => a.id));
+    const best = levels.filter((l) => l.voice === true).sort((a, b) => (b.rmsDb ?? -120) - (a.rmsDb ?? -120))[0];
+    const pick = best ? alts.find((a) => a.id === best.id) : undefined;
+    if (!pick || session.state !== 'recording') return;
+    muteMonitor.markWarned();
+    send('session:mic-mute', { id: pick.id, name: pick.name, short: shortMicName(pick.name) });
+  } finally {
+    muteBusy = false;
+  }
 }
 
 function send(channel: string, payload: unknown): void {
@@ -811,6 +870,7 @@ function setupSession(runner: AiRunner): AsrService {
   const s = new MeetingSession({
     root: async () => (await loadSettings()).root,
     createCapture: () => new AudioCapture(riceAudioBinary()),
+    prepareCapture: prepareMic,
     createPipeline: (language, vocabulary, speakers) => asr.createPipeline(language, vocabulary, speakers),
     vocabulary: whisperVocabularyFor,
     speakers: createSpeakerIdentifier,
@@ -848,14 +908,33 @@ function setupSession(runner: AiRunner): AsrService {
   for (const name of ['state', 'segment', 'partial', 'asr-status', 'asr-warning', 'capture-event', 'session-warning', 'notes'] as const) {
     s.on(name, (payload) => send(`session:${name}`, payload));
   }
-  s.on('mic', (info: unknown) => void onMic(info)); // Windows: evento mic-device do helper, repassado pela sessão
+  s.on('mic', (info: unknown) => {
+    micFromHelper = true;
+    void onMic(info);
+  });
+  s.on('frame', (f: { source: 'mic' | 'sys'; pcm: Buffer }) => {
+    // só o nível por canal que o pipeline já recebe; sem timer próprio: a checagem é disparada pelos próprios frames (no máx. 1 por 20 s)
+    const now = Date.now();
+    muteMonitor.feed(f.source, f.pcm, now);
+    if (process.platform === 'darwin' && !TEST_INSTANCE && !muteBusy && muteMonitor.due(now)) void checkMuteMic().catch(() => {});
+  }); // Windows: evento mic-device do helper, repassado pela sessão
   s.on('state', (st: string) => {
-    if (st === 'idle') micNow = null;
-    else if (st === 'recording' && lastDefaultInput && !micNow) setTimeout(() => void onMic({ name: lastDefaultInput, isDefault: true }), 300).unref(); // Mac: a entrada padrão que o detector já conhecia (a pasta da reunião já existe 300 ms depois)
+    if (st === 'idle') {
+      micNow = null;
+      micFromHelper = false;
+      micPick = null;
+    } else if (st === 'recording') muteMonitor.reset(Date.now());
+    if (st === 'idle') send('session:mic-mute', null);
+    else if (st === 'recording' && lastDefaultInput && !micNow && !micPick?.uid) setTimeout(() => { if (!micNow) void onMic({ name: lastDefaultInput ?? '', isDefault: true }); }, 3000).unref(); // Mac: a entrada padrão que o detector já conhecia, só se o helper não informar o microfone aberto (mic-device) em ~3 s
     if (st === 'recording' && TEST_INSTANCE && process.env.RICE_TEST_MIC) {
       // SÓ instância de teste (prints): simula o evento do helper do Windows; RICE_TEST_MIC_SWITCH troca para outro microfone 4 s depois
       try {
-        setTimeout(() => void onMic(JSON.parse(process.env.RICE_TEST_MIC ?? '{}')), 600).unref();
+        const fake = JSON.parse(process.env.RICE_TEST_MIC ?? '{}') as { id?: string; name?: string; detected?: boolean };
+        setTimeout(() => {
+          if (fake.detected && fake.id) micPick = { uid: fake.id, name: fake.name ?? '', transport: 'usb', reason: 'in-use' }; // prints: "detectado" (o estado "recording" vem antes da escolha real do microfone)
+          void onMic(fake);
+        }, 600).unref();
+        if (process.env.RICE_TEST_MIC_MUTE) setTimeout(() => send('session:mic-mute', JSON.parse(process.env.RICE_TEST_MIC_MUTE ?? 'null')), 1500).unref(); // aviso de mic mudo (prints)
         if (process.env.RICE_TEST_MIC_SWITCH) setTimeout(() => void onMic(JSON.parse(process.env.RICE_TEST_MIC_SWITCH ?? '{}')), 4000).unref();
       } catch {
         // JSON inválido: sem simulação
@@ -863,7 +942,7 @@ function setupSession(runner: AiRunner): AsrService {
     }
   });
   s.on('state', updateTray);
-  s.on('state', (st: string) => { if (st === 'idle') { winUpdater.recordingEnded(); void maybeNotifyUpdate(); } }); // aviso de versão nova adiado pela gravação
+  s.on('state', (st: string) => { if (st === 'idle') { pendingPrompts.recordingEnded(); winUpdater.recordingEnded(); void maybeNotifyUpdate(); } }); // aviso de versão nova adiado pela gravação
   s.on('state', updateNub);
   s.on('pause', (e: { dir: string; paused: boolean }) => {
     send('session:pause', e);
@@ -1446,7 +1525,7 @@ const checkNowRunner = createCheckNow({
   localMode: async () => isLocalMode(),
   win: async () => ((await winUpdater.status()).supported ? winUpdater.check(true) : null),
   commit: () => updateChecker.checkNow(),
-  lastCheckAt: async () => (await loadSettings()).updateCheck?.lastCheckAt,
+  lastCheckAt: async () => lastCheckOf((await loadSettings()).updateCheck),
   markChecked,
 });
 
@@ -1513,6 +1592,7 @@ function registerIpc(runner: AiRunner): void {
       checkUpdates: settings.checkUpdates !== false,
       launchAtLogin: settings.launchAtLogin === true,
       micDevice: settings.micDevice ?? null,
+      micAuto: settings.micAuto !== false,
       asrModel: asrChoiceOf(settings.asrModel),
       fullyLocal: settings.fullyLocal === true,
       redactPii: settings.redactPii === true,
@@ -1674,7 +1754,7 @@ function registerIpc(runner: AiRunner): void {
     send('update:changed', status);
     return status;
   });
-  handle('update:last-check', async () => (await loadSettings()).updateCheck?.lastCheckAt ?? null);
+  handle('update:last-check', async () => lastCheckOf((await loadSettings()).updateCheck) ?? null);
   handle('update:about', async () => appAbout({ version: app.getVersion(), commit: buildInfo?.commit, exePath: app.getPath('exe') }));
   // Windows: procurar / baixar / reiniciar e atualizar (nada disso roda no Mac; o estado só diz que não há suporte)
   handle('winupdate:status', async () => fakeWinUpdate() ?? winUpdater.status());
@@ -1739,17 +1819,60 @@ function registerIpc(runner: AiRunner): void {
         return { supported: false, inputs: [] };
       }
     }
+    if (process.platform === 'darwin') {
+      // Mac: as entradas reais do CoreAudio (sem BlackHole, Loopback, Teams Audio...), com a padrão marcada
+      const real = (await macInputs()).filter((i) => !isVirtual(i));
+      return { supported: real.length > 0, inputs: real.map((i) => ({ id: i.id, name: i.name, isDefault: i.isDefault, state: 'active' })) };
+    }
     if (!isWindows()) return { supported: false, inputs: [] };
     const inputs = cleanInputs(await listMicInputs(riceAudioBinary())); // rice-audio.exe --list-inputs (processo curto, fora da captura)
     return { supported: inputs.length > 0, inputs };
   });
   handle('audio:set-mic', async (_e, id: unknown) => {
-    if (!isWindows() && !TEST_INSTANCE) return { ok: false as const };
+    if (!isWindows() && process.platform !== 'darwin' && !TEST_INSTANCE) return { ok: false as const };
     const value = typeof id === 'string' && id.length > 0 && id.length < 512 ? id : undefined; // vazio = padrão do Windows
     const { micDevice: _old, ...rest } = await loadSettings();
     await saveSettings({ ...rest, ...(value ? { micDevice: value } : {}) });
-    if (isWindows()) applyMicDevice(process.env, value); // o rice-audio.exe herda RICE_MIC_DEVICE na próxima abertura do microfone
+    if (isWindows()) applyMicDevice(process.env, value); // o rice-audio.exe herda RICE_MIC_DEVICE na próxima abertura do microfone (no Mac quem define é a escolha ao gravar)
     return { ok: true as const, micDevice: value ?? null };
+  });
+  // Mac: "Escolher o microfone automaticamente" (padrão: ligado)
+  handle('audio:set-mic-auto', async (_e, on: unknown) => {
+    await saveSettings({ ...(await loadSettings()), micAuto: on !== false });
+    return { ok: true as const, micAuto: on !== false };
+  });
+  // chip do microfone: a lista para o menu (reais, a atual marcada) e a troca na hora, durante a gravação
+  handle('mic:inputs', async () => {
+    if (TEST_INSTANCE && process.env.RICE_TEST_MIC_INPUTS) {
+      try {
+        const list = (JSON.parse(process.env.RICE_TEST_MIC_INPUTS) as Array<{ id: string; name: string; isDefault?: boolean }>).map((i) => ({ id: i.id, name: i.name, short: shortMicName(i.name), isDefault: i.isDefault === true })); // só instância de teste: lista fictícia (prints)
+        return { inputs: list, currentId: micNow?.id ?? list.find((i) => i.isDefault)?.id ?? null };
+      } catch {
+        return { inputs: [], currentId: null };
+      }
+    }
+    const real = (await macInputs()).filter((i) => !isVirtual(i) && (i.transport !== 'bluetooth' || i.inUse || i.isDefault));
+    return { inputs: real.map((i) => ({ id: i.id, name: i.name, short: shortMicName(i.name), isDefault: i.isDefault })), currentId: micNow?.id ?? micPick?.uid ?? real.find((i) => i.isDefault)?.id ?? null };
+  });
+  handle('mic:switch', async (_e, id: unknown) => {
+    if (TEST_INSTANCE && process.env.RICE_TEST_MIC_INPUTS && session && session.state === 'recording') {
+      // só instância de teste (prints): a troca "acontece" sem helper real
+      const list = JSON.parse(process.env.RICE_TEST_MIC_INPUTS) as Array<{ id: string; name: string; isDefault?: boolean }>;
+      const hit = list.find((i) => i.id === id) ?? list.find((i) => i.isDefault);
+      if (hit) void onMic({ id: hit.id, name: hit.name, isDefault: hit.isDefault === true, chosen: typeof id === 'string' && id !== '' });
+      send('session:mic-mute', null);
+      return { ok: true as const };
+    }
+    if (!session || session.state !== 'recording' || process.platform !== 'darwin') return { ok: false as const };
+    const uid = typeof id === 'string' && id.length > 0 && id.length < 512 ? id : undefined; // vazio = Padrão do macOS
+    micPick = { uid, name: '', transport: 'other', reason: uid ? 'fixed' : 'default' }; // trocou na mão: deixa de ser "detectado"
+    muteMonitor.reset(Date.now()); // nova contagem e o aviso de mudo volta a valer
+    session.switchMic(uid);
+    return { ok: true as const };
+  });
+  handle('mic:mute-ignore', async () => {
+    muteMonitor.markWarned();
+    return { ok: true as const };
   });
   // modelo de transcrição em uso e o motivo (modo leve com pouca memória); o usuário pode forçar Leve ou Completo
   const profileNow = async () => {

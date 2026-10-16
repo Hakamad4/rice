@@ -163,6 +163,11 @@ export class DetectorClient extends EventEmitter {
         done?.(line.ok === true);
         break;
       }
+      case 'inputs': {
+        // resposta do `list-inputs` (escolha do microfone ao gravar e menu do chip)
+        this.emit('inputs', line);
+        break;
+      }
       case 'default-input': {
         // Opcional (só o detector do Mac): o nome do microfone em uso. Nulos = sem entrada.
         this.input = typeof line.id === 'string' && typeof line.name === 'string' ? { id: line.id, name: line.name } : null;
@@ -268,6 +273,22 @@ export class DetectorClient extends EventEmitter {
   /** Última entrada de áudio padrão informada pelo detector (null se ainda não veio ou não há). */
   get inputDevice(): InputDeviceInfo | null {
     return this.input;
+  }
+
+  /** As entradas de áudio (CoreAudio) com transporte, padrão e "em uso"; vazio se o detector não responder a tempo. */
+  listInputs(timeoutMs = 1200): Promise<unknown> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.off('inputs', onInputs);
+        resolve(null);
+      }, timeoutMs);
+      const onInputs = (payload: unknown) => {
+        clearTimeout(timer);
+        resolve(payload);
+      };
+      this.once('inputs', onInputs);
+      this.child?.stdin.write('{"cmd":"list-inputs"}\n');
+    });
   }
 
   /** Pede ao detector (Mac) para repetir o `default-input`. */

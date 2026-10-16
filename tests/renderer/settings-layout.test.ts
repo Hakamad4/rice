@@ -38,7 +38,7 @@ it('linhas "rótulo à esquerda, controle à direita" (idioma, participantes, á
   await open();
   const rows = [...g.document.querySelectorAll('.settings-page .set-row')] as any[];
   expect(rows.map((r) => r.querySelector('.set-label').textContent)).toEqual([
-    'Idioma do app', 'Idioma das reuniões', 'Limite de ciclos por reunião', 'Incluir os participantes do evento da agenda', 'Identificar participantes (beta)', 'Capturar a tela durante a gravação', 'Avisar quando uma pendência minha vence', 'Permitir ferramentas e MCPs no chat (por sua conta e risco)', 'Manter o áudio das reuniões', 'Modo 100% local', 'Lembrar de avisar os participantes', 'Ocultar dados pessoais ao enviar para a IA', 'Áudio', 'Reunião inteira', 'Procurar atualizações',
+    'Idioma do app', 'Idioma das reuniões', 'Limite de ciclos por reunião', 'Incluir os participantes do evento da agenda', 'Identificar participantes (beta)', 'Capturar a tela durante a gravação', 'Avisar quando uma pendência minha vence', 'Permitir ferramentas e MCPs no chat (por sua conta e risco)', 'Escolher o microfone automaticamente', 'Manter o áudio das reuniões', 'Modo 100% local', 'Lembrar de avisar os participantes', 'Ocultar dados pessoais ao enviar para a IA', 'Áudio', 'Reunião inteira', 'Procurar atualizações automaticamente',
   ]);
   for (const r of rows) {
     expect(r.firstElementChild.className).toBe('set-text'); // rótulo + ajuda à esquerda
@@ -117,7 +117,7 @@ it('responsivo (≤560px): linhas rótulo+controle viram coluna, segmentado em l
   expect(block).toMatch(/\.folder-actions \.btn \{ flex:1; \}/);
   await open();
   const rows = [...g.document.querySelectorAll('.settings-page .set-row')] as any[];
-  expect(rows.map((r) => r.classList.contains('inline'))).toEqual([false, false, false, true, true, true, true, true, true, true, true, true, false, false, true]); // só os interruptores (e os dois menus da guarda padrão) ficam lado a lado
+  expect(rows.map((r) => r.classList.contains('inline'))).toEqual([false, false, false, true, true, true, true, true, true, true, true, true, true, false, false, true]); // só os interruptores (e os dois menus da guarda padrão) ficam lado a lado
 });
 
 it('responsivo: caminho longo da pasta é cortado no meio (completo no tooltip) e nada quebra palavra por palavra', async () => {

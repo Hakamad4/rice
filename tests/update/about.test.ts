@@ -10,7 +10,7 @@ describe('appAbout', () => {
   });
 
   it('versão, commit curto e caminho; commit ausente ou inválido vira null', () => {
-    expect(appAbout({ version: '0.4.0', commit: 'abc1234def', exePath: '/Applications/Rice.app/Contents/MacOS/Rice' })).toEqual({ version: '0.4.0', commit: 'abc1234', appPath: '/Applications/Rice.app' });
+    expect(appAbout({ version: '0.4.0', commit: 'abc1234def', exePath: '/Applications/Rice.app/Contents/MacOS/Rice' })).toEqual({ version: '0.4.0', commit: 'abc1234', commitFull: 'abc1234def', appPath: '/Applications/Rice.app' });
     expect(appAbout({ version: '0.4.0', commit: null, exePath: '/x/Rice.app/Contents/MacOS/Rice' }).commit).toBeNull();
     expect(appAbout({ version: '0.4.0', commit: 'não é sha', exePath: '/x/Rice.app/Contents/MacOS/Rice' }).commit).toBeNull();
   });

@@ -45,8 +45,9 @@ const screens = window.RiceScreenshots.create({ rice: window.rice, warn: (messag
 const shotsChip = window.RiceScreenshots.chip({ rice: window.rice, node: $('shots-chip'), captureNode: $('shots-capture') });
 const syncShotsChip = () => shotsChip.sync({ recording: recState === 'recording', dir: recDir });
 // microfone em uso (Mac: entrada padrão pelo detector; Windows: evento do helper): chip perto do Parar e aviso quando troca no meio
-const micChip = window.RiceMicChip.create({ node: $('mic-chip'), notice: (text) => window.RiceToastStack.notice(text) });
+const micChip = window.RiceMicChip.create({ node: $('mic-chip'), notice: (text) => window.RiceToastStack.notice(text), api: window.rice.platform === 'darwin' && window.rice.micInputs ? { micInputs: () => window.rice.micInputs(), micSwitch: (id) => window.rice.micSwitch(id), micMuteIgnore: () => window.rice.micMuteIgnore() } : null });
 window.rice.on('session:mic', (info) => micChip.show(info));
+window.rice.on('session:mic-mute', (info) => micChip.mute(info)); // Mac: "Seu microfone parece mudo. Trocar para X?"
 if (window.rice.micCurrent) window.rice.micCurrent().then((info) => info && micChip.show(info)).catch(() => {});
 window.rice.on('screenshots:changed', (p) => {
   screens.changed(p);
@@ -1002,8 +1003,8 @@ async function openMeeting(dir, opts = {}) {
   openAnnotations = annotations;
   openIsDraft = data.meta.state === 'draft';
   openIsRecorded = !openIsDraft;
+  openMeta = data.meta; // antes do rótulo do botão (Continuar x Gravar depende da última sessão)
   renderRecLabel();
-  openMeta = data.meta;
   renderMoreButton(dir, data.meta.title);
   openStartedAt = new Date(data.meta.startedAt);
   speakerNames = data.meta.speakers || {};
@@ -2024,7 +2025,7 @@ window.rice.on('session:pause', ({ dir, paused, line }) => {
 });
 
 function renderRecLabel() {
-  const resume = current !== null && openIsRecorded;
+  const resume = current !== null && openIsRecorded && window.RiceResume.shouldResume(openMeta, new Date());
   const away = liveAway();
   const full = away ? `${elapsedText()} · ${t('live.open')}` : recState === 'recording' ? t('rec.stop') : recState === 'finishing' ? t('rec.finishing') : resume ? t('rec.continue') : t('rec.record');
   $('rec-label').textContent = full;
@@ -2057,16 +2058,43 @@ $('rec').onclick = async () => {
     if (!result.ok) setWarning(t('common.error', { message: result.message }));
     return;
   }
+  // rascunho aberto: usa o rascunho. Reunião já gravada: só retoma o "parei sem querer" (hoje, menos de 60 min); senão, uma nova
+  const resume = openIsRecorded && current !== null && window.RiceResume.shouldResume(openMeta, new Date());
+  if (openIsDraft || resume) {
+    const started = await beginRecording({ title: t('meeting.default-title'), dir: current });
+    if (resume && started) window.RiceResume.toast(startNewInstead);
+    return;
+  }
+  await startNewMeeting();
+};
+
+async function beginRecording(input) {
   setWarning('');
-  const result = await window.rice.startRecording({ title: t('meeting.default-title'), ...(openIsDraft || (openIsRecorded && current) ? { dir: current } : {}) });
+  const result = await window.rice.startRecording(input);
   if (!result.ok) {
     setWarning(t('common.error', { message: result.message }));
-    return;
+    return false;
   }
   recDir = result.dir;
   markRecorded(result.dir);
   await openMeeting(result.dir);
-};
+  return true;
+}
+
+/** Reunião nova: o título vem do evento da agenda em andamento (na nota própria da ocorrência); sem evento, o padrão. */
+async function startNewMeeting() {
+  const events = window.rice.calendarEvents ? await window.rice.calendarEvents().catch(() => []) : [];
+  const ev = window.RiceResume.eventNow(events, new Date());
+  await beginRecording(ev ? { title: ev.title, dir: await draftFor(ev) } : { title: t('meeting.default-title') });
+}
+
+/** "Começar uma nova" do aviso de retomada: encerra a retomada recém-começada e abre outra reunião. */
+async function startNewInstead() {
+  const stopped = await window.rice.stopRecording();
+  if (!stopped.ok) return setWarning(t('common.error', { message: stopped.message }));
+  for (let i = 0; i < 150 && recState !== 'idle'; i++) await new Promise((resolve) => setTimeout(resolve, 100));
+  if (recState === 'idle') await startNewMeeting();
+}
 
 $('retry').onclick = () => window.rice.retryAsr();
 

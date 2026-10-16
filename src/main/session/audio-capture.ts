@@ -51,6 +51,11 @@ export class AudioCapture extends EventEmitter {
     child.stdin.write('{"cmd":"start"}\n');
   }
 
+  /** Troca o microfone durante a gravação (Mac): `uid` vazio/undefined = entrada padrão do macOS. O helper reabre a entrada pelo caminho da troca de dispositivo. */
+  setMicDevice(uid?: string): void {
+    this.child?.stdin.write(`${JSON.stringify({ cmd: 'mic-device', id: uid ?? '' })}\n`);
+  }
+
   stop(timeoutMs = 5000): Promise<void> {
     if (this.stopping) return this.stopping;
     const child = this.child;

@@ -52,6 +52,8 @@ export async function launch({ settings = {}, env = {}, size = [1180, 760], seed
       await send('Page.reload');
       await sleep(2500);
     },
+    /** Move o mouse (coordenadas da página) para ver o :hover real. */
+    hover: (x, y) => send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }),
     shot: async (file, clip) => {
       const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) });
       writeFileSync(file, Buffer.from(r.data, 'base64'));

@@ -133,36 +133,23 @@
     }
     // atualização: opção "Procurar atualizações" (ligada por padrão) e, com versão nova, o aviso com o botão
     const checkUpdates = toggle('check-updates', settings.checkUpdates !== false, t('settings.updates.label'));
-    const updateBox = window.RiceUpdate.box(null, () => rice.updateRun());
-    const paintUpdate = (status) => window.RiceUpdate.paint(updateBox, status, () => rice.updateRun());
-    if (rice.updateStatus) rice.updateStatus().then(paintUpdate).catch(() => {});
-    // Windows (instalado pelo NSIS): baixar e instalar de dentro do app; no Mac continua o aviso do update.sh
-    const winUpdate = rice.winUpdateStatus && rice.platform === 'win32' ? window.RiceWinUpdate.create({ download: () => rice.winUpdateDownload(), install: () => rice.winUpdateInstall() }) : null;
-    if (winUpdate) {
-      rice.winUpdateStatus().then(winUpdate.paint).catch(() => {});
-      const onWinChanged = (e) => {
-        if (!winUpdate.node.isConnected) return window.removeEventListener('rice:winupdate-changed', onWinChanged);
-        winUpdate.paint(e.detail);
-      };
-      window.addEventListener('rice:winupdate-changed', onWinChanged);
-    }
-    // qual cópia está aberta: a versão, o commit do build e o caminho do app (para conferir depois de atualizar)
-    // "Buscar atualização agora" + "Última verificação · Próxima" (Mac e Windows; no Modo 100% local o botão fica desabilitado com o motivo)
-    const updateNow = rice.updateCheckNow ? window.RiceUpdateNow.create({ checkNow: () => rice.updateCheckNow(), lastCheck: () => rice.updateLastCheck() }, { autoOn: settings.checkUpdates !== false, local: Boolean(settings.fullyLocal) }) : null;
-    const aboutLine = el('p', { className: 'set-help update-about' }, []);
-    if (rice.updateAbout) rice.updateAbout().then((about) => { aboutLine.textContent = window.RiceUpdate.aboutText(about); if (updateNow && about) updateNow.setVersion(about.version); }).catch(() => {});
-    const onUpdateChanged = (e) => {
-      if (!updateBox.isConnected) return window.removeEventListener('rice:update-changed', onUpdateChanged); // a tela foi refeita: este ouvinte sai
-      paintUpdate(e.detail);
-    };
-    window.addEventListener('rice:update-changed', onUpdateChanged);
+    // página de Atualizações (Mac e Windows): cartão de versão com selo de estado e UMA ação, a opção automática e os detalhes técnicos
+    const updatePage = window.RiceUpdatePage.create({
+      checkNow: () => (rice.updateCheckNow ? rice.updateCheckNow() : Promise.reject(new Error('sem suporte'))),
+      lastCheck: rice.updateLastCheck ? () => rice.updateLastCheck() : null,
+      updateStatus: rice.updateStatus ? () => rice.updateStatus() : null,
+      about: rice.updateAbout ? () => rice.updateAbout() : null,
+      winStatus: rice.winUpdateStatus ? () => rice.winUpdateStatus() : null,
+      run: () => (rice.updateRun ? rice.updateRun() : undefined),
+      download: rice.winUpdateDownload ? () => rice.winUpdateDownload() : null,
+      install: rice.winUpdateInstall ? () => rice.winUpdateInstall() : null,
+    }, { platform: rice.platform, local: Boolean(settings.fullyLocal), autoRow: row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates), autoToggle: checkUpdates });
     if (settings.fullyLocal) {
       checkUpdates.disabled = true; // Modo 100% local: nenhuma consulta à internet
       checkUpdates.title = t('local.mode.blocked.updates');
     }
     checkUpdates.onchange = async () => {
       const status = await rice.setCheckUpdates(checkUpdates.checked);
-      if (updateNow) updateNow.setAuto(checkUpdates.checked);
       window.dispatchEvent(new CustomEvent('rice:update-changed', { detail: status }));
     };
     // opt-in "por sua conta e risco": ligar pede confirmação destrutiva; o estado do provedor ativo aparece como dica
@@ -346,7 +333,7 @@
       section(t('settings.privacy'), t('settings.privacy.text'), [row(t('settings.localmode.label'), t('settings.localmode.help'), localMode), localExplain, localNote, localGo, row(t('settings.consent.label'), t('settings.consent.help'), consent), row(t('settings.redact.label'), t('settings.redact.help'), redact), el('div', { className: 'retention-default' }, [el('div', { className: 'set-label', textContent: t('settings.retention.title') }, []), el('p', { className: 'set-help', textContent: t('settings.retention.help') }, []), row(t('retention.audio'), null, retentionAudio.root), row(t('retention.meeting'), null, retentionMeeting.root)]), el('div', { className: 'consent-edit-block' }, [el('div', { className: 'set-label', textContent: t('settings.consent.text') }, []), el('p', { className: 'set-help', textContent: t('settings.consent.text-help') }, []), consentText, consentReset]), privBox], 'privacy'),
       section(t('settings.shortcuts'), null, [shortcutBox], 'shortcuts'),
       ...(WIN ? [section(t('settings.startup'), null, [row(t('settings.startup.label'), t('settings.startup.help'), launch)], 'startup')] : []),
-      section(t('settings.updates'), null, [...(winUpdate ? [winUpdate.node] : [updateBox]), ...(updateNow ? [updateNow.node] : []), aboutLine, row(t('settings.updates.label'), t('settings.updates.help'), checkUpdates)], 'updates'),
+      section(t('settings.updates'), null, [updatePage.node], 'updates'),
     ];
     const initial = [ctx && ctx.section, ctx && ctx.focus, remembered()].find((id) => IDS.includes(id) && (id !== 'startup' || WIN)) || 'language';
     const buttons = new Map();

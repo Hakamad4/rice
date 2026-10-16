@@ -20,7 +20,9 @@ const stop = () => {
   process.exit(0);
 };
 createInterface({ input: process.stdin }).on('line', (line) => {
-  const cmd = JSON.parse(line).cmd;
+  const parsed = JSON.parse(line);
+  const cmd = parsed.cmd;
+  if (cmd === 'mic-device') ev({ event: 'mic-device', id: parsed.id || 'default-uid', name: parsed.id ? `Mic ${parsed.id}` : 'Padrão', isDefault: !parsed.id, chosen: Boolean(parsed.id), reason: 'switched' });
   if (cmd === 'start') {
     if (mode === 'garbage-stderr') process.stderr.write('AUHAL: some CoreAudio noise\n');
     if (mode === 'bad-frame') {

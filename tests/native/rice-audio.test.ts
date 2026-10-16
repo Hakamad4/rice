@@ -151,3 +151,33 @@ describeIf('rice-audio --selftest-aec', () => {
     expect(result.reductionDb).toBeGreaterThanOrEqual(15);
   }, 60_000);
 });
+
+describeIf('rice-audio escolha do microfone (Mac)', () => {
+  test('--list-inputs: {"inputs":[…]} com id, nome, padrão e transporte, e sai com 0', async () => {
+    const { stdout } = await run(BIN, ['--list-inputs']);
+    const { inputs } = JSON.parse(stdout) as { inputs: Array<Record<string, unknown>> };
+    expect(Array.isArray(inputs)).toBe(true);
+    for (const i of inputs) {
+      expect(Object.keys(i).sort()).toEqual(['id', 'isDefault', 'name', 'state', 'transport']);
+      expect(i.state).toBe('active');
+    }
+  });
+
+  test('--probe-inputs com UID que não existe: erro por entrada, sem abrir nada, saída 0', async () => {
+    const { stdout } = await run(BIN, ['--probe-inputs', 'uid-que-nao-existe', '--ms', '200']);
+    expect(JSON.parse(stdout)).toEqual({ levels: [{ error: 'not-found', id: 'uid-que-nao-existe' }] });
+  });
+
+  test('o comando mic-device antes do start é aceito (sem "unknown command") e o processo segue vivo', async () => {
+    const child = spawn(BIN, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let err = '';
+    child.stderr.on('data', (c) => (err += c));
+    child.stdin.write('{"cmd":"mic-device","id":"uid-x"}\n');
+    await new Promise((r) => setTimeout(r, 400));
+    expect(err).not.toContain('unknown command');
+    expect(child.exitCode).toBeNull();
+    child.stdin.write('{"cmd":"stop"}\n');
+    child.stdin.end();
+    await new Promise((r) => child.once('close', r));
+  });
+});

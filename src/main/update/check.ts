@@ -23,6 +23,11 @@ export type UpdateStatus = {
 
 export type FetchLike = (url: string, init: { headers: Record<string, string>; signal: AbortSignal }) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
 
+/** A hora da última consulta: `lastCheckAt`; em estados antigos (sem ele), a última tentativa (`at`) — se há sha, houve consulta. */
+export function lastCheckOf(state: UpdateState | undefined): string | undefined {
+  return state?.lastCheckAt ?? (state?.sha ? state.at : undefined);
+}
+
 /** No máximo uma consulta por dia (o relógio voltar atrás não trava a verificação). */
 export function dueForCheck(lastAt: string | undefined, now: Date): boolean {
   const last = lastAt ? Date.parse(lastAt) : NaN;

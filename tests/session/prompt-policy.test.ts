@@ -41,3 +41,40 @@ test('"não perguntar mais" silencia o app; convites do mesmo app respeitam o in
   expect(shouldOfferRecording({ ...base, app: 'Zoom', muted: [], lastPromptAt: base.now - 60_000 })).toBe(false);
   expect(shouldOfferRecording({ ...base, app: 'Zoom', muted: [], lastPromptAt: base.now - PROMPT_COOLDOWN_MS - 1 })).toBe(true);
 });
+
+import { PENDING_PROMPT_TTL_MS, PromptTracker } from '../../src/main/session/prompt-policy';
+
+test('sem o close do macOS o convite pendente expira (TTL) e o 2º convite do mesmo app aparece', () => {
+  let now = 1_000_000;
+  const tracker = new PromptTracker(() => now);
+  const decide = () => shouldPromptStart({ state: 'idle', pending: tracker, key: 'Zoom' }) && shouldOfferRecording({ app: 'Zoom', muted: [], calendarEvidence: true, lastPromptAt: tracker.lastDeclinedAt('Zoom'), now });
+  expect(decide()).toBe(true);
+  tracker.add('Zoom'); // banner mostrado; o close nunca chega
+  now += PENDING_PROMPT_TTL_MS - 1;
+  expect(decide()).toBe(false); // ainda em aberto
+  now += 1;
+  expect(decide()).toBe(true); // expirou sozinho, sem recusa registrada: não há intervalo de 20 min
+});
+
+test('recusa explícita respeita o intervalo de 20 min; aceitar não deixa intervalo', () => {
+  let now = 5 * PROMPT_COOLDOWN_MS;
+  const tracker = new PromptTracker(() => now);
+  const offer = () => shouldOfferRecording({ app: 'Zoom', muted: [], calendarEvidence: true, lastPromptAt: tracker.lastDeclinedAt('Zoom'), now });
+  tracker.declined('Zoom');
+  now += PROMPT_COOLDOWN_MS - 1;
+  expect(offer()).toBe(false);
+  now += 1;
+  expect(offer()).toBe(true);
+  tracker.declined('Zoom');
+  tracker.accepted('Zoom');
+  expect(offer()).toBe(true);
+});
+
+test('ao terminar a gravação os convites de início pendentes caem (os de fim não)', () => {
+  const tracker = new PromptTracker(() => 0);
+  tracker.add('Zoom');
+  tracker.add('end:Zoom');
+  tracker.recordingEnded();
+  expect(tracker.has('Zoom')).toBe(false);
+  expect(tracker.has('end:Zoom')).toBe(true);
+});

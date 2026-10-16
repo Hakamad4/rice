@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCheckNow, MIN_GAP_MS, type CheckNowDeps } from '../../src/main/update/check-now';
-import { createUpdateChecker, type FetchLike, type UpdateState } from '../../src/main/update/check';
+import { createUpdateChecker, lastCheckOf, type FetchLike, type UpdateState } from '../../src/main/update/check';
 import { createWinUpdater, type UpdaterLike } from '../../src/main/update/win-updater';
 import type { BuildInfo } from '../../src/main/update/build-info';
 import { EventEmitter } from 'node:events';
@@ -122,5 +122,15 @@ describe('Buscar atualização agora (Windows)', () => {
     expect(await net.run.checkNow()).toMatchObject({ phase: 'error', error: 'network' });
     expect(net.marked).not.toHaveBeenCalled();
     expect(await win({ fail: 'Cannot parse latest.yml' }).run.checkNow()).toMatchObject({ phase: 'error', error: 'other', message: 'Cannot parse latest.yml' });
+  });
+});
+
+describe('hora da última verificação', () => {
+  it('lastCheckAt; em estado antigo com sha, a última tentativa; sem consulta nenhuma, nada', () => {
+    expect(lastCheckOf({ lastCheckAt: '2026-10-15T09:41:00Z', at: '2026-10-14T08:00:00Z', sha: 'x' })).toBe('2026-10-15T09:41:00Z');
+    expect(lastCheckOf({ at: '2026-10-14T08:00:00Z', sha: SHA_NEW })).toBe('2026-10-14T08:00:00Z');
+    expect(lastCheckOf({ at: '2026-10-14T08:00:00Z' })).toBeUndefined(); // tentou mas nunca obteve resposta
+    expect(lastCheckOf({})).toBeUndefined();
+    expect(lastCheckOf(undefined)).toBeUndefined();
   });
 });

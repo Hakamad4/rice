@@ -22,6 +22,8 @@ export type SessionState = 'idle' | 'recording' | 'finishing';
 export type SessionDeps = {
   root: () => Promise<string>;
   createCapture: () => AudioCapture;
+  /** Antes de abrir a captura (em paralelo com a preparação da pasta): escolhe o microfone (Mac). Quem implementa limita o tempo; falha é ignorada. */
+  prepareCapture?: () => Promise<void>;
   createPipeline: (language: TranscriptionLanguage, vocabulary?: string, speakers?: SpeakerIdentifier) => Promise<AsrPipeline>;
   /** Identificador de pessoas do canal do sistema (beta, opcional); `null`/falha = sem identificação. */
   speakers?: (dir: string) => Promise<SpeakerIdentifier | null>;
@@ -219,6 +221,7 @@ export class MeetingSession extends EventEmitter {
   private async begin(input: StartInput): Promise<string> {
     // retomar uma reunião que ainda está finalizando: espera só essa (as outras não bloqueiam nada)
     if (input.dir) await this.finalizing.get(input.dir)?.catch(() => {});
+    const prepared = this.deps.prepareCapture?.().catch(() => {});
     const startedAt = this.now();
     const adopted = await this.adoptMeeting(input.dir, startedAt);
     let wav: StereoWavWriter | null = null;
@@ -236,6 +239,7 @@ export class MeetingSession extends EventEmitter {
       });
       const language = (await readMeta(dir)).language ?? (await this.deps.defaultLanguage?.()) ?? 'pt';
       await this.checkFreeSpace(dir);
+      await prepared; // o microfone já está escolhido (a captura herda a escolha ao abrir)
       return this.launch(dir, startedAt, wavPath, resume, wav, language);
     } catch (err) {
       // não deixa a reunião adotada presa em `recording` com uma sessão aberta
@@ -427,6 +431,11 @@ export class MeetingSession extends EventEmitter {
     } catch (err) {
       this.warn((err as Error).message);
     }
+  }
+
+  /** Troca o microfone no meio da gravação (Mac): `uid` vazio = entrada padrão do macOS. */
+  switchMic(uid?: string): void {
+    this.active?.capture.setMicDevice(uid);
   }
 
   private attachCapture(active: Active): void {

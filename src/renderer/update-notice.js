@@ -1,4 +1,4 @@
-// Aviso de versão nova: ponto discreto em Configurações (barra lateral) e a linha com o botão em Configurações › Atualizações.
+// Aviso de versão nova: ponto discreto em Configurações (barra lateral) e a faixa no topo da janela.
 // Nada de atualizar sozinho: o botão só abre o Terminal (clone) ou a página de releases. Só createElement/textContent.
 (function () {
   const t = (key, vars) => window.RiceI18n.t(key, vars);
@@ -25,36 +25,6 @@
     if (hint) hint.textContent = on ? ` ${t('update.dot')}` : '';
   }
 
-  /** A caixa do aviso (escondida sem versão nova): texto "Nova versão disponível (abc123 → def456)", botão e explicação. */
-  function box(status, onRun) {
-    const node = el('div', { className: 'update-notice', hidden: true }, []);
-    paint(node, status, onRun);
-    return node;
-  }
-
-  function paint(node, status, onRun) {
-    const ok = status && status.available && SHA.test(String(status.from)) && SHA.test(String(status.to));
-    node.hidden = !ok;
-    if (!ok) return node.replaceChildren();
-    const run = el('button', { type: 'button', className: 'btn primary', textContent: status.fromClone ? t('update.run') : t('update.download') }, []);
-    run.onclick = onRun;
-    node.replaceChildren(
-      el('div', { className: 'update-line' }, [
-        el('span', { className: 'update-text', textContent: t('update.available', { from: status.from, to: status.to }) }, []),
-        run,
-      ]),
-      el('p', { className: 'set-help', textContent: status.fromClone ? t('update.run-help') : t('update.download-help') }, []),
-    );
-  }
-
-  /** "Versão 0.4.0 · commit abc1234 · /Applications/Rice.app" (sem commit, quando o app não tem build-info). */
-  function aboutText(about) {
-    if (!about || !about.version) return '';
-    return about.commit
-      ? t('update.about', { version: about.version, commit: about.commit, path: about.appPath })
-      : t('update.about.nocommit', { version: about.version, path: about.appPath });
-  }
-
   /**
    * A faixa no topo da janela principal (Mac): "Nova versão disponível (abc1234 → def5678)" com "Atualizar agora" e "Depois".
    * Escondida sem versão nova, com o "Depois" valendo, durante a gravação e no Windows (lá o electron-updater tem a UI dele).
@@ -75,5 +45,5 @@
     node.replaceChildren(icon, el('span', { className: 'update-banner-text', textContent: t('update.available', { from: status.from, to: status.to }) }, []), el('span', { className: 'update-banner-actions' }, [now, later]));
   }
 
-  window.RiceUpdate = { applyDot, box, paint, aboutText, banner };
+  window.RiceUpdate = { applyDot, banner };
 })();

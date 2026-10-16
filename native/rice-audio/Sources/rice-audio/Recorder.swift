@@ -22,8 +22,10 @@ final class Recorder {
     enum SystemSource { case auto, tap, sck }
     private let systemSource: SystemSource
     private let excludePIDs: [pid_t]
+    private var micDeviceUID: String?
 
-    init(sink: FrameSink, echoCancellation: Bool, systemSource: SystemSource = .auto, excludePIDs: [pid_t] = []) {
+    init(sink: FrameSink, echoCancellation: Bool, systemSource: SystemSource = .auto, excludePIDs: [pid_t] = [], micDeviceUID: String? = nil) {
+        self.micDeviceUID = micDeviceUID
         self.systemSource = systemSource
         self.excludePIDs = excludePIDs
         self.sink = sink
@@ -68,6 +70,12 @@ final class Recorder {
         Events.emit("started", ["mic": micOk, "sys": sysOk])
     }
 
+    /// Troca o microfone durante a gravação (`nil` = padrão do macOS).
+    func switchMic(to uid: String?) {
+        micDeviceUID = uid
+        mic?.switchDevice(to: uid)
+    }
+
     /// Para a gravação. Também cancela um start em andamento: o start vê o flag
     /// depois de cada etapa e desfaz o que já tinha iniciado.
     func stop() async {
@@ -96,6 +104,7 @@ final class Recorder {
             return false
         }
         let capture = MicCapture(
+            deviceUID: micDeviceUID,
             onSamples: { [weak self] samples in
                 guard let self else { return }
                 let cleaned = self.aec?.processCapture(samples) ?? samples
@@ -103,6 +112,9 @@ final class Recorder {
             },
             onDeviceChanged: { Events.emit("device-changed") }
         )
+        capture.onDevice = { uid, name, isDefault, chosen, reason in
+            Events.emit("mic-device", ["id": uid, "name": name, "isDefault": isDefault, "chosen": chosen, "reason": reason])
+        }
         do {
             try capture.start()
             mic = capture

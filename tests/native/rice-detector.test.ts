@@ -163,3 +163,19 @@ describe('default-input (entrada padrão do sistema)', () => {
     }
   });
 });
+
+describe('--print-inputs (escolha do microfone)', () => {
+  test('lista as entradas do CoreAudio com transporte, padrão e em uso; só consulta', async () => {
+    const { stdout } = await run(BIN, ['--print-inputs']);
+    const { inputs } = JSON.parse(stdout) as { inputs: Array<Record<string, unknown>> };
+    expect(Array.isArray(inputs)).toBe(true);
+    for (const i of inputs) {
+      expect(typeof i.id).toBe('string');
+      expect(typeof i.name).toBe('string');
+      expect(['builtin', 'usb', 'bluetooth', 'aggregate', 'virtual', 'other']).toContain(i.transport);
+      expect(typeof i.isDefault).toBe('boolean');
+      expect(typeof i.inUse).toBe('boolean');
+    }
+    expect(inputs.filter((i) => i.isDefault).length).toBeLessThanOrEqual(1);
+  });
+});

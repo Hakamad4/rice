@@ -147,3 +147,32 @@ test('default-input (opcional, só Mac): guarda o nome do microfone e avisa a ca
   ]);
   expect(c.inputDevice).toBeNull(); // o último evento tinha nulos
 });
+
+test('listInputs: as entradas do CoreAudio chegam pelo evento inputs; sem resposta, null depois do prazo', async () => {
+  process.env.FAKE_DETECTOR_INPUTS = JSON.stringify([{ id: 'u1', name: 'MacBook Pro Microphone', transport: 'builtin', isDefault: true, inUse: false }]);
+  const { c, seen } = client([sentinel(10)]);
+  await waitSentinel(seen);
+  expect(await c.listInputs(2000)).toEqual({ event: 'inputs', inputs: [{ id: 'u1', name: 'MacBook Pro Microphone', transport: 'builtin', isDefault: true, inUse: false }] });
+  delete process.env.FAKE_DETECTOR_INPUTS;
+});
+
+test('listInputs sem resposta do detector devolve null (o início da gravação não espera)', async () => {
+  const { c, seen } = client([sentinel(10)]);
+  await waitSentinel(seen);
+  const t0 = Date.now();
+  expect(await c.listInputs(300)).toBeNull();
+  expect(Date.now() - t0).toBeLessThan(1000);
+});
+
+test('listInputs repetido (com e sem resposta) não deixa ouvintes pendurados', async () => {
+  process.env.FAKE_DETECTOR_INPUTS = JSON.stringify([{ id: 'u1', name: 'Mic', transport: 'builtin', isDefault: true, inUse: false }]);
+  const { c, seen } = client([sentinel(10)]);
+  await waitSentinel(seen);
+  for (let i = 0; i < 30; i++) await c.listInputs(2000);
+  expect(c.listenerCount('inputs')).toBe(0);
+  delete process.env.FAKE_DETECTOR_INPUTS;
+  const { c: silent, seen: seen2 } = client([sentinel(10)]);
+  await waitSentinel(seen2);
+  for (let i = 0; i < 5; i++) expect(await silent.listInputs(50)).toBeNull();
+  expect(silent.listenerCount('inputs')).toBe(0);
+});

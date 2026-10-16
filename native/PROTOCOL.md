@@ -26,6 +26,9 @@ Um processo = uma gravação. O main (`AudioCapture`) lança `rice-audio --exclu
 | `--exclude-pid N` (repetível) | Processos cujo áudio não entra no `sys` (o Rice se exclui). Windows: aceito; ver nota em `native/win/README.md`. |
 | `--no-aec` | Não cancela eco no microfone. Evento `aec {enabled:false, reason:"desligado por --no-aec"}`. |
 | `--mic-device ID` (ou env `RICE_MIC_DEVICE`) | **Só Windows, opcional.** Abre o endpoint de captura `ID` (o `id` de `--list-inputs`) em vez do padrão do Windows. Sem o argumento: padrão (`eConsole`), seguindo as trocas. Se o endpoint sumir, volta ao padrão; se voltar, retoma (evento `mic-device`). O Mac não tem o argumento (usa a entrada padrão do sistema) e o ignora. |
+| `--mic-device UID` (ou env `RICE_MIC_DEVICE`) — **Mac** | Abre a entrada do CoreAudio com esse UID (`kAudioOutputUnitProperty_CurrentDevice` no `inputNode`, antes de iniciar) em vez da padrão do macOS. Sem ele, segue a padrão como sempre. UID que sumiu (fone desconectado): cai no padrão e o evento `mic-device` diz `reason: "preferred-missing"`. Só o dispositivo da entrada muda; o resto da captura (AEC, sistema, chunkers) é o mesmo. |
+| `--list-inputs` — **Mac** | `{"inputs":[{"id":UID,"isDefault","name","state":"active","transport"}]}` (`transport`: builtin, usb, bluetooth, aggregate, virtual, other). |
+| `--probe-inputs UID,UID [--ms 1200]` — **Mac** | Modo à parte (processo curto, fora da gravação): mede ~1,2 s de cada entrada e imprime `{"levels":[{"id","rmsDb","voice"}]}` (`error:"not-found"` se o UID não existe). O chamador nunca passa Bluetooth que não esteja em uso. |
 | `--list-inputs` | **Só Windows.** Imprime UMA linha JSON no stdout e sai com 0: `{"inputs":[{"id","isDefault","name","state"}]}` (entradas ativas; `name` é o nome amigável, ex. `Microfone (FIFINE K669)`; `state` é `active`). Fixture: `tests/fixtures/protocol/mic-device.json`. |
 | `--system-source tap\|sck\|auto` | Só macOS (fonte do áudio do sistema). Windows aceita e ignora. |
 | `--seconds N --out-dir DIR` | Modo manual: grava N s e escreve `mic.pcm`/`sys.pcm` (PCM cru) em DIR; stdout vazio. Erro de abertura → evento `error {source:"cli"}` e saída 1. |
@@ -39,6 +42,7 @@ Sem `--seconds`, o processo entra no modo controle: lê o stdin e **não captura
 
 - `{"cmd":"start"}`: inicia sleep-guard, AEC, microfone e áudio do sistema (nessa ordem). `start` repetido, ou depois de `stop`, é ignorado.
   Emite `started` ao final se nenhum `stop` chegou no meio.
+- `{"cmd":"mic-device","id":UID}` (**Mac**): troca o microfone durante a gravação, reabrindo a entrada pelo mesmo caminho da troca de dispositivo (`id` vazio = padrão do macOS). Emite `mic-device` com `reason:"switched"`; o Chunker cobre o intervalo com silêncio (evento `gap`), a linha do tempo não tem buraco.
 - `{"cmd":"list-inputs"}` (só Windows): responde o evento `inputs {inputs:[…]}` (mesma lista de `--list-inputs`).
 - `{"cmd":"stop"}`: para tudo, escoa o stdout e sai com código 0.
 - EOF do stdin equivale a `stop` (o pai fechou ou morreu).
@@ -79,7 +83,7 @@ Campo `event` + campos extras. Eventos:
 | `stopped` | (nenhum) | fim do `stop`, depois de escoar o resto dos chunkers. Só se havia gravação em andamento |
 | `device-changed` | (nenhum) | o microfone foi reaberto depois de troca de dispositivo |
 | `aec` | `enabled: bool`, `reason: string` | AEC ligado/desligado (no início e a cada troca da saída padrão) |
-| `mic-device` | `id`, `name`, `isDefault: bool`, `chosen: bool`, `reason` | **Opcional, aditivo, só Windows** (o helper do Mac não emite e o app tem que funcionar sem ele). Emitido ao abrir o mic e a cada troca do dispositivo em uso. `isDefault`: é o padrão do sistema; `chosen`: é o microfone escolhido pelo usuário e está em uso. `reason` ∈ `open`, `default-changed` (o padrão do Windows mudou), `preferred-missing` (o escolhido sumiu, voltou ao padrão), `preferred-returned` (o escolhido voltou e foi retomado) |
+| `mic-device` | `id`, `name`, `isDefault: bool`, `chosen: bool`, `reason` | **Opcional e aditivo** (o app tem que funcionar sem ele). Windows e Mac. Emitido ao abrir o mic e a cada troca do dispositivo em uso. `isDefault`: é o padrão do sistema; `chosen`: é o microfone escolhido pelo usuário e está em uso. `reason` ∈ `open`, `switched` (troca por comando, Mac), `default-changed` (o padrão do sistema mudou), `preferred-missing` (o escolhido sumiu, voltou ao padrão), `preferred-returned` (o escolhido voltou e foi retomado) |
 | `gap` | `source: "mic"\|"sys"`, `ms: int` | silêncio inserido (ver acima) |
 | `warning` | `source`, `message` | problema não fatal (`power`, `aec`, `sys`) |
 | `error` | `source`, `message`, `fatal?: true` | `source` ∈ `cli`, `mic`, `sys`, `resampler`; `fatal:true` = o main deve encerrar/reiniciar a captura |
@@ -136,6 +140,7 @@ Se o processo morre, o main o relança (1 s, 3 s, 9 s). EOF do stdin → termina
 | `events-list` | `events: [{id,title,start,end,allDay,calendar,attendees,url?,color?}]` | resposta de `list-events` |
 | `reminders-list` | `reminders: [{id,title,due,hasTime,overdue,list,color?}]` | resposta de `list-reminders` |
 | `reminder-completed` | `id`, `ok: bool` | resposta de `complete-reminder` |
+| `inputs` | `inputs: [{id, name, transport, isDefault, inUse}]` | **Opcional, aditivo, só o detector do Mac.** Resposta de `list-inputs`: as entradas do CoreAudio (`transport`: builtin, usb, bluetooth, aggregate, virtual, other). `inUse`: algum OUTRO processo usa a entrada agora (`kAudioProcessPropertyIsRunningInput` + `kAudioProcessPropertyDevices`, macOS 14.2+; mais preciso que `IsRunningSomewhere`, que também vale para a saída do mesmo dispositivo). Base da escolha automática do microfone ao gravar. Só consulta. |
 | `default-input` | `id`, `name` (nulos se não há entrada) | **Opcional, aditivo, só o detector do Mac** (o do Windows não emite; o app funciona sem ele). Entrada de áudio padrão do sistema (CoreAudio, `kAudioHardwarePropertyDefaultInputDevice`): na partida, a cada troca e como resposta de `current-input`. É a entrada que o `rice-audio` do Mac grava (`AVAudioEngine.inputNode` sem dispositivo fixo). `id` = UID do dispositivo. O detector só consulta; não grava. Fixture: `tests/fixtures/protocol/default-input.json` |
 | `calendar-changed`, `reminders-changed` | (nenhum) | o repositório mudou |
 | `error` | `message` | `invalid command line` / `unknown command: X` |
@@ -146,7 +151,7 @@ O `bundleId` de um app é o primeiro identificador visto para ele (`activeApps[a
 ### Comandos de stdin
 
 `current-event`, `list-events` (`from`, `to` ISO 8601, com ou sem milissegundos), `request-calendar-access`, `list-reminders`,
-`request-reminders-access`, `complete-reminder` (`id`), `current-input` (só Mac; repete `default-input`). Cada um responde com o evento da tabela.
+`request-reminders-access`, `complete-reminder` (`id`), `current-input` (só Mac; repete `default-input`), `list-inputs` (só Mac; responde `inputs`). Cada um responde com o evento da tabela.
 
 ### Argumentos (modos de teste, sem watch)
 

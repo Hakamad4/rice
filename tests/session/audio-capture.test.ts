@@ -80,3 +80,27 @@ test('stop é idempotente e funciona sem start', async () => {
   await c.stop();
   await c.stop();
 });
+
+test('setMicDevice troca o microfone no meio: o comando mic-device chega ao helper (uid vazio = padrão) e o evento volta', async () => {
+  const { c, events } = capture('ok');
+  c.start();
+  await until(() => events.some((e) => e.event === 'started'));
+  c.setMicDevice('uid-fifine');
+  await until(() => events.some((e) => e.event === 'mic-device'));
+  expect(events.find((e) => e.event === 'mic-device')).toMatchObject({ id: 'uid-fifine', chosen: true, reason: 'switched' });
+  c.setMicDevice();
+  await until(() => events.filter((e) => e.event === 'mic-device').length === 2);
+  expect(events.filter((e) => e.event === 'mic-device')[1]).toMatchObject({ isDefault: true, chosen: false });
+  await c.stop();
+});
+
+test('trocar o microfone várias vezes não acumula ouvintes (nem no capture nem no stdin do helper)', async () => {
+  const { c, events } = capture('ok');
+  c.start();
+  await until(() => events.some((e) => e.event === 'started'));
+  const listeners = c.eventNames().map((n) => c.listenerCount(n));
+  for (let i = 0; i < 40; i++) c.setMicDevice(i % 2 ? 'uid-a' : undefined);
+  await until(() => events.filter((e) => e.event === 'mic-device').length >= 40, 5000);
+  expect(c.eventNames().map((n) => c.listenerCount(n))).toEqual(listeners);
+  await c.stop();
+});

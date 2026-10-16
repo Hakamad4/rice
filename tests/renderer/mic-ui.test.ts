@@ -90,12 +90,28 @@ it('helper sem a opção de listar: só o padrão, com a explicação; microfone
   expect(btn.textContent).toContain('Microfone escolhido (não está conectado)');
 });
 
-it('Mac: sem seletor, com a explicação da entrada padrão do macOS', async () => {
-  boot({}, 'darwin');
+it('Mac: "Escolher o microfone automaticamente" (ligado por padrão) e o microfone fixo opcional', async () => {
+  const setMicAuto = vi.fn(async () => ({ ok: true }));
+  const setMic = vi.fn(async () => ({ ok: true }));
+  boot({ setMicAuto, setMic, listMicInputs: async () => ({ supported: true, inputs: [{ id: 'u1', name: 'MacBook Pro Microphone', isDefault: true, state: 'active' }, { id: 'u2', name: 'fifine Microphone', isDefault: false, state: 'active' }] }) }, 'darwin');
   await openAudio();
   const section = g.document.querySelector('[data-section=audio]') as any;
-  expect(section.textContent).toContain('Ajustes do Sistema › Som › Entrada');
-  expect([...section.querySelectorAll('.menu-select-btn')].some((b: any) => b.getAttribute('aria-label') === 'Microfone')).toBe(false);
+  const auto = section.querySelector('#mic-auto') as any;
+  expect(auto.checked).toBe(true);
+  expect(section.textContent).toContain('Escolher o microfone automaticamente');
+  expect(section.textContent).toContain('o microfone que o app da reunião está usando');
+  auto.checked = false;
+  auto.dispatchEvent(new g.window.Event('change'));
+  expect(setMicAuto).toHaveBeenCalledWith(false);
+  const fixed = [...section.querySelectorAll('.menu-select-btn')].find((b: any) => b.getAttribute('aria-label') === 'Microfone fixo') as any;
+  expect(fixed).toBeTruthy();
+  expect(fixed.textContent).toContain('Nenhum: detectar sozinho');
+});
+
+it('Mac: automático desligado nas configurações aparece desligado', async () => {
+  boot({ getSettings: async () => ({ root: '/R', rootDisplay: '~/R', onboardingDone: true, transcriptionLanguage: 'pt', uiLanguage: 'pt-BR', keepAudio: true, micAuto: false }) }, 'darwin');
+  await openAudio();
+  expect((g.document.querySelector('#mic-auto') as any).checked).toBe(false);
 });
 
 it('modelo de transcrição: mostra o em uso e o motivo (leve por pouca memória), a nota do modo leve e deixa forçar', async () => {
@@ -126,4 +142,78 @@ it('Mac: o modelo aparece só como "Em uso" (sem seletor) porque o Mac ignora o 
   const section = g.document.querySelector('[data-section=audio]') as any;
   await vi.waitFor(() => expect(section.textContent).toContain('no Mac o Rice usa sempre o modelo grande'));
   expect([...section.querySelectorAll('.menu-select-btn')].some((b: any) => b.getAttribute('aria-label') === 'Modelo de transcrição')).toBe(false);
+});
+
+const MAC_API = (over: Record<string, unknown> = {}) => ({
+  micInputs: vi.fn(async () => ({ inputs: [{ id: 'u1', name: 'MacBook Pro Microphone', short: 'MacBook Pro Microphone', isDefault: true }, { id: 'u2', name: 'AirPods de Ana', short: 'AirPods de Ana', isDefault: false }], currentId: 'u2' })),
+  micSwitch: vi.fn(async () => ({ ok: true })),
+  micMuteIgnore: vi.fn(async () => ({ ok: true })),
+  ...over,
+});
+const openChipMenu = async () => {
+  chip().click();
+  await vi.waitFor(() => expect(g.document.querySelectorAll('.menu-popover .menu-item').length).toBeGreaterThan(0));
+  return [...g.document.querySelectorAll('.menu-popover .menu-item')] as any[];
+};
+
+it('Mac: chip "AirPods de Ana · detectado"; clique abre o menu (Padrão do macOS, entradas, a atual marcada) e trocar chama o main', async () => {
+  const api = MAC_API();
+  const t = boot(api, 'darwin');
+  t.handlers['session:mic']!({ ...MIC, name: 'AirPods de Ana', short: 'AirPods de Ana', isDefault: false, chosen: false, detected: true, id: 'u2' });
+  expect(chip().textContent).toContain('AirPods de Ana');
+  expect(chip().querySelector('.mic-chip-tag').textContent).toBe('detectado');
+  expect(chip().getAttribute('role')).toBe('button');
+  const items = await openChipMenu();
+  expect(items.map((i) => i.textContent.trim())).toEqual(['Padrão do macOS', 'MacBook Pro Microphone', 'AirPods de Ana']);
+  expect(items.map((i) => i.getAttribute('aria-checked') ?? i.getAttribute('aria-current') ?? i.className.includes('checked'))).toBeTruthy();
+  items[1].click();
+  await vi.waitFor(() => expect(api.micSwitch).toHaveBeenCalledWith('u1'));
+});
+
+it('Mac: "Padrão do macOS" troca com id vazio; escolhido manualmente não mostra "detectado"', async () => {
+  const api = MAC_API();
+  const t = boot(api, 'darwin');
+  t.handlers['session:mic']!({ ...MIC, name: 'AirPods de Ana', short: 'AirPods de Ana', isDefault: false, chosen: true, detected: false });
+  expect(chip().querySelector('.mic-chip-tag')).toBeNull();
+  const items = await openChipMenu();
+  items[0].click();
+  await vi.waitFor(() => expect(api.micSwitch).toHaveBeenCalledWith(''));
+});
+
+it('Windows: o chip continua só informativo (sem menu, sem "detectado")', async () => {
+  const t = boot();
+  t.handlers['session:mic']!(MIC);
+  expect(chip().getAttribute('role')).toBe('status');
+  chip().click();
+  expect(g.document.querySelector('.menu-popover')).toBeNull();
+});
+
+it('Mac: aviso "Seu microfone parece mudo. Trocar para X?" com Trocar e Ignorar; some ao agir; nova troca reabre', async () => {
+  const api = MAC_API();
+  const t = boot(api, 'darwin', 'pt-BR');
+  t.handlers['session:mic']!({ ...MIC, isDefault: true });
+  t.handlers['session:mic-mute']!({ id: 'u2', name: 'AirPods de Ana', short: 'AirPods de Ana' });
+  const toast = () => g.document.querySelector('.mic-mute-toast') as any;
+  expect(toast().textContent).toContain('Seu microfone parece mudo. Trocar para AirPods de Ana?');
+  const [swap, ignore] = [...toast().querySelectorAll('button')] as any[];
+  expect([swap.textContent, ignore.textContent]).toEqual(['Trocar', 'Ignorar']);
+  expect(swap.className).not.toContain('ghost'); // Trocar é o primário
+  expect(ignore.className).toContain('ghost'); // Ignorar é o secundário (contorno)
+  ignore.click();
+  expect(toast()).toBeNull();
+  expect(api.micMuteIgnore).toHaveBeenCalledTimes(1);
+  t.handlers['session:mic-mute']!({ id: 'u2', name: 'AirPods de Ana', short: 'AirPods de Ana' }); // (o main só manda de novo depois de uma troca)
+  toast().querySelectorAll('button')[0].click();
+  await vi.waitFor(() => expect(api.micSwitch).toHaveBeenCalledWith('u2'));
+  expect(toast()).toBeNull();
+  t.handlers['session:mic-mute']!(null);
+  expect(toast()).toBeNull();
+});
+
+it('Mac: o aviso de mudo some quando a gravação termina e vem em inglês', async () => {
+  const t = boot(MAC_API(), 'darwin', 'en');
+  t.handlers['session:mic-mute']!({ id: 'u2', name: 'AirPods', short: 'AirPods' });
+  expect((g.document.querySelector('.mic-mute-toast') as any).textContent).toContain('Your microphone seems muted. Switch to AirPods?');
+  t.handlers['session:mic']!(null);
+  expect(g.document.querySelector('.mic-mute-toast')).toBeNull();
 });

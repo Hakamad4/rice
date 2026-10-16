@@ -13,6 +13,7 @@ createInterface({ input: process.stdin })
   .on('line', (l) => {
     const { cmd, from, to } = JSON.parse(l);
     if (cmd === 'list-events') out({ event: 'events-list', range: { from, to }, events: JSON.parse(process.env.FAKE_DETECTOR_LIST ?? '[]') });
+    if (cmd === 'list-inputs' && process.env.FAKE_DETECTOR_INPUTS) out({ event: 'inputs', inputs: JSON.parse(process.env.FAKE_DETECTOR_INPUTS) });
     if (cmd === 'list-reminders') out({ event: 'reminders-list', reminders: JSON.parse(process.env.FAKE_DETECTOR_REMINDERS ?? '[]') });
     if (cmd === 'request-reminders-access') out({ event: 'reminders-access', status: process.env.FAKE_REMINDERS_AFTER_REQUEST ?? 'granted' });
     if (cmd === 'complete-reminder') out({ event: 'reminder-completed', id: JSON.parse(l).id, ok: process.env.FAKE_REMINDER_OK !== '0' });

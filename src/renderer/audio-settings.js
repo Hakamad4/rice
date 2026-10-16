@@ -47,7 +47,31 @@
       load();
       out.push(row(t('audio.mic.label'), t('audio.mic.help'), select.root), feedback, hint);
     } else if (!WIN) {
-      out.push(el('p', { className: 'set-desc mic-mac-note', textContent: t('audio.mic.mac') }, []));
+      // Mac: escolher o microfone sozinho ao gravar (ligado por padrão) e, opcionalmente, um microfone fixo
+      const auto = el('input', { type: 'checkbox', id: 'mic-auto', className: 'switch', checked: settings.micAuto !== false }, []);
+      auto.setAttribute('role', 'switch');
+      auto.setAttribute('aria-label', t('audio.mic.auto.label'));
+      auto.onchange = () => { if (rice.setMicAuto) rice.setMicAuto(auto.checked); };
+      out.push(row(t('audio.mic.auto.label'), t('audio.mic.auto.help'), auto));
+      if (rice.listMicInputs && rice.setMic) {
+        const fixed = window.RiceMenuSelect.create({
+          items: [{ value: '', label: t('audio.mic.fixed.none') }],
+          value: settings.micDevice || '',
+          ariaLabel: t('audio.mic.fixed.label'),
+          onChoose: (value) => {
+            fixed.setValue(value);
+            rice.setMic(value).catch(() => {});
+          },
+        });
+        rice.listMicInputs().then((list) => {
+          const inputs = Array.isArray(list && list.inputs) ? list.inputs : [];
+          const saved = settings.micDevice || '';
+          const items = [{ value: '', label: t('audio.mic.fixed.none') }, ...inputs.map((i) => ({ value: String(i.id), label: i.isDefault ? `${i.name} (${t('audio.mic.is-default')})` : String(i.name) }))];
+          if (saved && !inputs.some((i) => i.id === saved)) items.push({ value: saved, label: t('audio.mic.missing') });
+          fixed.setItems(items, saved);
+        }).catch(() => {});
+        out.push(row(t('audio.mic.fixed.label'), t('audio.mic.fixed.help'), fixed.root));
+      }
     }
 
     // 2) modelo de transcrição e o motivo; só o Windows deixa escolher (o Mac usa sempre o modelo grande quantizado)

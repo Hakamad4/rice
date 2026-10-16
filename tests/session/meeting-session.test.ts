@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
-import { expect, test, vi } from 'vitest';
+import { describe, expect, it, test, vi } from 'vitest';
 import { MeetingSession } from '../../src/main/session/meeting-session';
 import { createMeeting, readMeetingText, readMeta, updateMeta, writeMeta } from '../../src/main/store/meeting-files';
 import { recoverMeeting } from '../../src/main/session/recover-meeting';
@@ -11,7 +11,9 @@ import { makeTmpDir } from '../helpers/tmp';
 class FakeCapture extends EventEmitter {
   started = 0;
   stopped = 0;
+  micDevices: Array<string | undefined> = [];
   start() { this.started++; }
+  setMicDevice(uid?: string) { this.micDevices.push(uid); }
   async stop() { this.stopped++; this.emit('exit', { code: 0, signal: null, expected: true }); }
   emitFrames(n: number, fromMs: number) {
     for (let i = 0; i < n; i++) {
@@ -1184,4 +1186,29 @@ test('o marcador de pausa segue o estilo dos outros marcadores discretos (repous
   // mesma forma do marcador de repouso: asteriscos + colchetes, "gravação pausada de … a …"
   expect(line('pt-BR', 'marker.sleep')).toMatch(/^\*\[gravação pausada de 14:03 a 14:07 — /);
   expect(line('en', 'marker.sleep')).toMatch(/^\*\[recording paused from 14:03 to 14:07 — /);
+});
+
+describe('escolha do microfone (Mac)', () => {
+  it('prepareCapture roda ANTES de abrir a captura; falha dele não impede de gravar', async () => {
+    const order: string[] = [];
+    const { session, captures } = await setup({ deps: { prepareCapture: async () => { await new Promise((r) => setTimeout(r, 30)); order.push('prepare'); } }, makeCapture: () => { order.push('capture'); return new FakeCapture(); } });
+    await session.start({ title: 'Mic', trigger: 'manual' });
+    expect(order).toEqual(['prepare', 'capture']);
+    expect(captures[0]!.started).toBe(1);
+    await session.stop();
+    const failing = await setup({ deps: { prepareCapture: async () => { throw new Error('detector fora'); } } });
+    await failing.session.start({ title: 'Mic 2', trigger: 'manual' });
+    expect(failing.captures[0]!.started).toBe(1);
+    await failing.session.stop();
+  });
+
+  it('switchMic repassa a troca à captura em andamento (vazio = padrão do macOS) e não faz nada parado', async () => {
+    const { session, captures } = await setup(true);
+    session.switchMic('uid-x'); // parado: nada
+    await session.start({ title: 'Mic', trigger: 'manual' });
+    session.switchMic('uid-fifine');
+    session.switchMic(undefined);
+    expect(captures[0]!.micDevices).toEqual(['uid-fifine', undefined]);
+    await session.stop();
+  });
 });

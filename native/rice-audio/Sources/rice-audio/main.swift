@@ -22,7 +22,26 @@ if arguments.contains("--selftest-gap") {
     exit(0)
 }
 
+if arguments.contains("--list-inputs") {
+    // {"inputs":[{"id","isDefault","name","state","transport"}]}: as entradas do CoreAudio (mesma forma do Windows, mais o transporte)
+    let inputs = InputDevices.list().map { ["id": $0.uid, "isDefault": $0.isDefault, "name": $0.name, "state": "active", "transport": $0.transport] as [String: Any] }
+    let data = try! JSONSerialization.data(withJSONObject: ["inputs": inputs], options: [.sortedKeys])
+    FileHandle.standardOutput.write(data)
+    FileHandle.standardOutput.write(Data("\n".utf8))
+    exit(0)
+}
+
+if let list = value(after: "--probe-inputs") {
+    runProbeInputs(uids: list.split(separator: ",").map(String.init), milliseconds: Int(value(after: "--ms") ?? "") ?? 1200)
+    exit(0)
+}
+
 let echoCancellation = !arguments.contains("--no-aec")
+/// Microfone escolhido (UID): `--mic-device` ou a variável RICE_MIC_DEVICE (como no Windows). Sem escolha, a entrada padrão do macOS.
+let micDeviceUID: String? = {
+    let chosen = value(after: "--mic-device") ?? ProcessInfo.processInfo.environment["RICE_MIC_DEVICE"]
+    return chosen?.isEmpty == false ? chosen : nil
+}()
 
 let systemSource: Recorder.SystemSource
 switch value(after: "--system-source") {
@@ -37,7 +56,7 @@ let excludePIDs: [pid_t] = arguments.enumerated().compactMap { index, arg in
 
 if let secondsText = value(after: "--seconds"), let seconds = Double(secondsText), let outDir = value(after: "--out-dir") {
     do {
-        let recorder = Recorder(sink: try FileFrameSink(directory: outDir), echoCancellation: echoCancellation, systemSource: systemSource, excludePIDs: excludePIDs)
+        let recorder = Recorder(sink: try FileFrameSink(directory: outDir), echoCancellation: echoCancellation, systemSource: systemSource, excludePIDs: excludePIDs, micDeviceUID: micDeviceUID)
         Task {
             await recorder.start()
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
@@ -52,7 +71,7 @@ if let secondsText = value(after: "--seconds"), let seconds = Double(secondsText
 }
 
 let stdoutSink = StdoutFrameSink()
-let recorder = Recorder(sink: stdoutSink, echoCancellation: echoCancellation, systemSource: systemSource, excludePIDs: excludePIDs)
+let recorder = Recorder(sink: stdoutSink, echoCancellation: echoCancellation, systemSource: systemSource, excludePIDs: excludePIDs, micDeviceUID: micDeviceUID)
 
 var shuttingDown = false
 let shutdownLock = NSLock()
@@ -84,6 +103,7 @@ func handle(line: String) async {
     }
     switch command {
     case "start": await recorder.start()
+    case "mic-device": recorder.switchMic(to: (object["id"] as? String).flatMap { $0.isEmpty ? nil : $0 })
     case "stop": shutdown()
     default:
         Events.emit("error", ["source": "cli", "message": "unknown command: \(command)"])
