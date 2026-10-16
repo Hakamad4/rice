@@ -76,7 +76,7 @@ describe('ideias ligadas no MEIO da gravação (regressão)', () => {
     await writeConfig(dir, { ...defaultConfig(), ideas: { on: true, intervalMin: 2 } });
     await f.engine.start(dir);
     await until(() => expect(f.engine.state(dir).error).toContain('limite do modelo'));
-    expect(f.engine.state(dir).running).toBe(false);
+    await until(() => expect(f.engine.state(dir).running).toBe(false)); // o erro aparece antes do ciclo fechar (engine.ts: error e depois finally running=false)
     await vi.advanceTimersByTimeAsync(5000);
     expect(f.calls()).toBe(1); // sem martelar o provedor
     fail = false;
