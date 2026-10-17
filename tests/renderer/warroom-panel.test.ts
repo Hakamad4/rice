@@ -207,6 +207,7 @@ it('ideias: contagem regressiva, "Gerar agora" e erro do ciclo sempre visível c
   expect(panel.querySelector('.wr-error').textContent).toContain('limite do modelo gratuito');
   const click = (label: string) => [...panel.querySelectorAll('button')].find((b: any) => b.textContent === label).click();
   click('Gerar agora');
+  await tick();
   click('Tentar agora');
   expect(warRoomRunNow).toHaveBeenCalledTimes(2);
   expect(warRoomSet).not.toHaveBeenCalled();
@@ -550,4 +551,54 @@ it('filtro Todos/Fixados nas Ideias e na Investigação: conta, filtra e mostra 
   chips()[1].click();
   await new Promise((r) => setTimeout(r, 0));
   expect([...body().querySelectorAll('.wr-finding p')].map((p: any) => p.textContent)).toEqual(['Selic 10']);
+});
+
+
+describe('Gerar agora: feedback imediato', () => {
+  const idle = (): any => state({ cfg: { ...state().cfg, kind: 'meeting' }, ideas: [], state: { running: false, phase: '', startedAt: 0, cycles: 0, maxCycles: 120, error: '', tools: [], nextAt: null, note: '', investigation: { nextAt: null, error: '', note: '' } } });
+
+  it('o botão muda no clique, ANTES de a promessa resolver, fica desabilitado e volta no fim', async () => {
+    let finish: (v: unknown) => void = () => {};
+    const warRoomRunNow = vi.fn(() => new Promise((r) => (finish = r)));
+    await setup(idle(), { warRoomRunNow });
+    tab('Ideias').click();
+    const run = () => body().querySelector('.wr-foot .wr-run') as any;
+    run().click(); // nada resolveu ainda
+    const busy = run();
+    expect(busy.textContent).toBe('Gerando ideias…');
+    expect(busy.disabled).toBe(true);
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.querySelector('.wr-line')).not.toBeNull();
+    expect(body().querySelector('.wr-foot .wr-next').textContent).toContain('Preparando…');
+    busy.click(); // clique duplo não dispara outro ciclo
+    expect(warRoomRunNow).toHaveBeenCalledTimes(1);
+    finish({ ok: true, result: 'ran' });
+    await tick();
+    expect(run().textContent).toBe('Gerar agora');
+    expect(run().disabled).toBe(false);
+  });
+
+  it('segue a etapa real do main (pensando → escrevendo) e, depois de ~20 s, mostra "Ainda pensando…" com Parar', async () => {
+    const d: any = idle();
+    d.state = { ...d.state, running: true, phase: 'thinking', startedAt: Date.now() - 1000 };
+    await setup(d);
+    tab('Ideias').click();
+    expect(body().querySelector('.wr-foot .wr-next').textContent).toContain('Pensando…');
+    expect((body().querySelector('.wr-foot .wr-busy') as any).disabled).toBe(true);
+    expect(body().querySelector('.wr-foot .wr-stop')).toBeNull();
+    d.state = { ...d.state, startedAt: Date.now() - 25_000 };
+    tab('Notas').click();
+    tab('Ideias').click();
+    expect(body().querySelector('.wr-foot .wr-next').textContent).toContain('Ainda pensando…');
+    expect(body().querySelector('.wr-foot .wr-stop').textContent).toBe('Parar');
+  });
+
+  it('erro: o botão volta e o aviso aparece', async () => {
+    const warRoomRunNow = vi.fn(async () => ({ ok: false, message: 'Só durante a gravação' }));
+    await setup(idle(), { warRoomRunNow });
+    tab('Ideias').click();
+    (body().querySelector('.wr-foot .wr-run') as any).click();
+    await tick();
+    expect((body().querySelector('.wr-foot .wr-run') as any).disabled).toBe(false);
+  });
 });

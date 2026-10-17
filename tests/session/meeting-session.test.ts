@@ -1216,7 +1216,9 @@ describe('escolha do microfone (Mac)', () => {
 });
 
 describe('parar nunca trava (prazos duros e nenhum helper órfão)', () => {
-  const fast = { captureStopMs: 60, stepDeadlineMs: 80, writesDeadlineMs: 80, finishDeadlineMs: 80 };
+  // prazos curtos só onde o teste PRENDE a etapa de propósito (captura, escrita, fila); o prazo das etapas em disco (updateMeta, marcador) fica folgado:
+  // com 80 ms, a gravação do meta 'done' estourava sob carga da suíte cheia e o stop() resolvia com a reunião ainda 'finishing'
+  const fast = { captureStopMs: 60, stepDeadlineMs: 10_000, writesDeadlineMs: 300, finishDeadlineMs: 300 };
 
   it('captura que não responde ao stop: stop() resolve no prazo, avisa e a reunião fecha', async () => {
     const warnings: string[] = [];

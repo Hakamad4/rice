@@ -146,6 +146,36 @@
       }).root;
     }
 
+    // "Gerar agora" muda o botão no mesmo frame do clique (estado local) e segue o estado real do main (preparando → pensando → escrevendo)
+    const pendingRun = new Map(); // trilha → quando o clique aconteceu
+    const SLOW_MS = 20000;
+    let slowTimer = null;
+    const runNow = async (track) => {
+      if (pendingRun.has(track)) return; // clique duplo
+      pendingRun.set(track, Date.now());
+      if (deps.onUpdate) deps.onUpdate();
+      try {
+        const result = await rice.warRoomRunNow(dir, track);
+        if (result && result.ok === false && result.message && deps.warn) deps.warn(result.message);
+      } catch (e) {
+        if (deps.warn) deps.warn((e && e.message) || t('warroom.err.cycle'));
+      } finally {
+        pendingRun.delete(track);
+        refresh();
+      }
+    };
+    /** O que o botão e o status mostram agora: o estado real do ciclo, ou "preparando" entre o clique e o primeiro aviso do main. */
+    const cycleView = (war) => {
+      const st = data.state;
+      const clicked = pendingRun.get(war ? 'investigation' : 'ideas');
+      const running = Boolean(st.running || clicked);
+      const phase = st.running ? st.phase || 'thinking' : 'preparing';
+      const since = st.running ? st.startedAt : clicked;
+      const elapsed = since ? Date.now() - since : Infinity; // sem horário (estado antigo): trata como longo, com "Parar"
+      return { running, phase, elapsed, slow: running && elapsed >= SLOW_MS };
+    };
+    const phaseText = (war, v) => (v.slow && v.phase !== 'writing' ? t('warroom.still-thinking') : v.phase === 'preparing' ? t('warroom.phase.preparing') : v.phase === 'thinking' ? t('warroom.phase.thinking') : t(war ? 'warroom.running' : 'warroom.generating'));
+
     function statusBlock(war) {
       const st = data.state;
       const mine = war ? st.investigation : st; // cada trilha tem o seu próximo ciclo, erro e aviso
@@ -167,7 +197,8 @@
           text.title = t(war ? 'warroom.idle-rec.war' : 'warroom.idle-rec'); // só quando NÃO está gravando
           return void (text.textContent = `· ${t('warroom.tb.waiting')}`);
         }
-        const next = st.running ? t(war ? 'warroom.running' : 'warroom.generating') : left === null ? '' : left <= 1000 ? t(war ? 'warroom.next.soon.war' : 'warroom.next.soon') : t(war ? 'warroom.tb.next.war' : 'warroom.tb.next', { time: mmss(left) });
+        const view = cycleView(war);
+        const next = view.running ? phaseText(war, view) : left === null ? '' : left <= 1000 ? t(war ? 'warroom.next.soon.war' : 'warroom.next.soon') : t(war ? 'warroom.tb.next.war' : 'warroom.tb.next', { time: mmss(left) });
         text.textContent = `· ${[cycleText(), next].filter(Boolean).join(' · ')}`;
       };
       // contagem da trilha desta aba; com limite mostra "n/max", sem limite só "n"
@@ -192,10 +223,17 @@
       lead.append(text);
       // durante um ciclo o botão vira "Parar" (aborta o ciclo atual, sem erro)
       const disabledWhy = !data.recording ? t('warroom.disabled.rec') : paused ? t('warroom.disabled.paused') : !war && !on ? t('warroom.disabled.off') : reached ? t('warroom.disabled.limit') : '';
-      const action = st.running
-        ? el('button', { type: 'button', className: 'btn ghost wr-stop' }, [window.RiceIcons.icon('square'), el('span', { textContent: t('warroom.stop') }, [])])
-        : el('button', { type: 'button', className: 'btn ghost wr-run', disabled: Boolean(disabledWhy), ...(disabledWhy ? { title: disabledWhy } : {}) }, [window.RiceIcons.icon(war ? 'search' : 'sparkles'), el('span', { textContent: t(war ? 'warroom.now.war' : 'warroom.now') }, [])]);
-      action.onclick = () => (st.running ? rice.warRoomStop(dir) : rice.warRoomRunNow(dir, war ? 'investigation' : 'ideas'));
+      const view = cycleView(war);
+      clearTimeout(slowTimer);
+      if (view.running && !view.slow) slowTimer = setTimeout(() => deps.onUpdate && deps.onUpdate(), SLOW_MS - view.elapsed + 50); // passou de ~20 s: o botão ganha "Parar"
+      let action;
+      if (view.running && !view.slow) {
+        // desabilitado contra clique duplo, com uma linha de progresso e o rótulo do ciclo
+        action = el('button', { type: 'button', className: 'btn ghost wr-run wr-busy', disabled: true }, [el('span', { textContent: t(war ? 'warroom.running' : 'warroom.generating') }, []), el('span', { className: 'wr-line', 'aria-hidden': 'true' }, [])]);
+        action.setAttribute('aria-busy', 'true');
+      } else if (view.running) action = el('button', { type: 'button', className: 'btn ghost wr-stop' }, [window.RiceIcons.icon('square'), el('span', { textContent: t('warroom.stop') }, [])]);
+      else action = el('button', { type: 'button', className: 'btn ghost wr-run', disabled: Boolean(disabledWhy), ...(disabledWhy ? { title: disabledWhy } : {}) }, [window.RiceIcons.icon(war ? 'search' : 'sparkles'), el('span', { textContent: t(war ? 'warroom.now.war' : 'warroom.now') }, [])]);
+      action.onclick = () => (view.running ? rice.warRoomStop(dir) : runNow(war ? 'investigation' : 'ideas'));
       const below = [];
       if (reached) {
         // limite da trilha atingido: para de gastar; "Continuar" libera mais ciclos só nesta reunião
@@ -205,8 +243,8 @@
       }
       if (mine.note === 'little-speech') below.push(el('p', { className: 'wr-note', textContent: t(war ? 'warroom.little.war' : 'warroom.little') }, []));
       if (mine.error) {
-        const retry = el('button', { type: 'button', className: 'btn ghost', textContent: t('warroom.retry'), disabled: st.running || !data.recording }, []);
-        retry.onclick = () => rice.warRoomRunNow(dir, war ? 'investigation' : 'ideas');
+        const retry = el('button', { type: 'button', className: 'btn ghost', textContent: t('warroom.retry'), disabled: view.running || !data.recording }, []);
+        retry.onclick = () => runNow(war ? 'investigation' : 'ideas');
         const err = el('div', { className: 'wr-error' }, [el('span', { className: 'wr-error-text', textContent: mine.error, title: mine.error }, []), retry]);
         err.setAttribute('role', 'alert');
         below.push(err);
