@@ -25,6 +25,8 @@ export type EngineState = {
   running: boolean;
   /** Etapa real do ciclo; '' quando não há ciclo. */
   phase: Phase | '';
+  /** Qual trilha tem o ciclo em andamento (um ciclo por vez em cada reunião); '' sem ciclo. */
+  track: Track | '';
   /** Quando o ciclo atual começou (ms desde 1970); 0 sem ciclo. */
   startedAt: number;
   error: string;
@@ -215,7 +217,7 @@ export class WarRoomEngine {
 
   state(dir: string): EngineState {
     let s = this.states.get(dir);
-    if (!s) this.states.set(dir, (s = { running: false, phase: '', startedAt: 0, error: '', tools: [], nextAt: null, note: '', investigation: { nextAt: null, error: '', note: '' } }));
+    if (!s) this.states.set(dir, (s = { running: false, phase: '', track: '', startedAt: 0, error: '', tools: [], nextAt: null, note: '', investigation: { nextAt: null, error: '', note: '' } }));
     return s;
   }
 
@@ -353,6 +355,7 @@ export class WarRoomEngine {
       began = true;
       state.running = true;
       state.phase = 'preparing';
+      state.track = track;
       state.startedAt = this.now();
       mine.error = '';
       mine.note = '';
@@ -453,6 +456,7 @@ export class WarRoomEngine {
         this.runningTrack.delete(dir);
         state.running = false;
         state.phase = '';
+        state.track = '';
         state.startedAt = 0;
       }
       this.deps.emit(dir);

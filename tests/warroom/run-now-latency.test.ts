@@ -99,3 +99,64 @@ describe('Gerar agora: etapas e parada', () => {
     expect(engine.state(dir).running).toBe(false);
   });
 });
+
+describe('todas as trilhas: clique/ativação → "rodando"', () => {
+  const cfgWar = { ...defaultConfig(), kind: 'warroom' as const, ideas: { on: true, intervalMin: 5 }, investigation: { intervalMin: 5, paused: false } };
+  const make = async (partials: () => string[]) => {
+    const dir = await makeTmpDir();
+    await writeConfig(dir, cfgWar);
+    const t0 = { v: 0 };
+    const marks: Record<string, number> = {};
+    let engine!: WarRoomEngine;
+    engine = new WarRoomEngine({
+      runner: () => ({ async *run() { yield ''; return '[{"kind":"idea","text":"x"}]'; } }),
+      transcript: async () => speech,
+      partials,
+      language: async () => 'pt-BR',
+      support: async () => ({ web: false, mcp: false, folder: false }),
+      emit: () => {
+        const s = engine.state(dir);
+        if (s.running) marks[s.track] ??= Date.now() - t0.v;
+      },
+    } as any);
+    return { engine, dir, marks, t0 };
+  };
+
+  test.each(['ideas', 'investigation'] as const)('"%s" manual com fala parcial: rodando em <100 ms', async (track) => {
+    let left = 4;
+    const { engine, dir, marks, t0 } = await make(() => (left-- > 0 ? ['…'] : []));
+    t0.v = Date.now();
+    await engine.tick(dir, { manual: true, track });
+    expect(marks[track]).toBeLessThan(100);
+  });
+
+  test.each(['ideas', 'investigation'] as const)('"%s": clique duplo (segundo tick) devolve busy e não abre outro ciclo', async (track) => {
+    const { engine, dir } = await make(() => ['…']);
+    const first = engine.tick(dir, { manual: true, track });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(await engine.tick(dir, { manual: true, track })).toBe('busy');
+    engine.abort(dir);
+    await first;
+  });
+
+  test.each(['ideas', 'investigation'] as const)('"%s": Parar na preparação cancela sem erro', async (track) => {
+    const { engine, dir } = await make(() => ['…']);
+    const done = engine.tick(dir, { manual: true, track });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(engine.state(dir).track).toBe(track);
+    engine.abort(dir);
+    expect(await done).toBe('skipped');
+    const s = engine.state(dir);
+    expect([s.running, s.track, s.error, s.investigation.error]).toEqual([false, '', '', '']);
+  });
+
+  test('ativar (start): o primeiro ciclo de cada trilha marca rodando sem demora', async () => {
+    const { engine, dir, marks, t0 } = await make(() => []);
+    t0.v = Date.now();
+    await engine.start(dir);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(marks.ideas).toBeLessThan(100);
+    expect(marks.investigation).toBeLessThan(300);
+    engine.stop(dir);
+  });
+});

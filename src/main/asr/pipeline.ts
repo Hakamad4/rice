@@ -63,6 +63,14 @@ const PROMPT_CHARS = 200;
 /** Parcial a cada 31 janelas (~1 s), com pelo menos 6 janelas de fala no trecho aberto. */
 const PARTIAL_EVERY_WINDOWS = 31;
 const PARTIAL_MIN_SPEECH_WINDOWS = 6;
+/**
+ * Cada parcial retranscreve o trecho aberto INTEIRO (até 25 s); em fala contínua isso mantinha o whisper (e a GPU) a ~96% do tempo,
+ * ~10× o áudio gravado. Os parciais podem ocupar no máximo esta fração do tempo do whisper: depois de um que levou D ms, o próximo só
+ * sai D·(1/duty − 1) ms depois (limitado a PARTIAL_MAX_GAP_MS: o parcial na tela expira em 6 s sem atualização). Os trechos FINAIS não
+ * mudam: a transcrição gravada é a mesma.
+ */
+export const PARTIAL_DUTY = 0.3;
+export const PARTIAL_MAX_GAP_MS = 3000;
 
 type QueueItem = { speaker: Speaker; startMs: number; endMs: number; pcm: Int16Array; segmentId: string };
 type PartialItem = { channel: Channel; segmentId: string; startMs: number; pcm: Int16Array };
@@ -83,6 +91,8 @@ export class AsrPipeline extends EventEmitter {
   /** Últimos ~200 caracteres reconhecidos por falante, usados como prompt do próximo trecho. */
   private readonly context = new Map<Speaker, string>();
   private idleWaiters: Array<() => void> = [];
+  /** Instante (ms, `Date.now`) antes do qual nenhum parcial novo é agendado (cadência adaptativa pelo custo do último). */
+  private partialNotBefore = 0;
 
   constructor(private readonly options: AsrPipelineOptions) {
     super();
@@ -223,7 +233,7 @@ export class AsrPipeline extends EventEmitter {
     channel.windowsSincePartial++;
     if (this.options.partials === false) return;
     if (seg.openSpeechWindows < PARTIAL_MIN_SPEECH_WINDOWS) return;
-    if (channel.windowsSincePartial < PARTIAL_EVERY_WINDOWS || channel.partialBusy || this.failed) return;
+    if (channel.windowsSincePartial < PARTIAL_EVERY_WINDOWS || channel.partialBusy || this.failed || Date.now() < this.partialNotBefore) return;
     const open = seg.peekOpen();
     if (!open) return;
     channel.windowsSincePartial = 0;
@@ -268,7 +278,9 @@ export class AsrPipeline extends EventEmitter {
     let attempt = 0;
     while (this.queue.length > 0 || this.partials.length > 0) {
       if (this.queue.length === 0) {
-        await this.runPartial(this.partials.shift()!);
+        const next = this.partials.shift()!;
+        if (Date.now() < this.partialNotBefore) next.channel.partialBusy = false; // enfileirado antes do teto (o outro canal): descarta, o próximo sai no prazo
+        else await this.runPartial(next);
         continue;
       }
       const item = this.queue[0]!;
@@ -322,6 +334,7 @@ export class AsrPipeline extends EventEmitter {
   /** Decodifica um parcial; falhas e parciais obsoletos são descartados em silêncio (não afetam status nem retry). */
   private async runPartial(item: PartialItem): Promise<void> {
     const { channel } = item;
+    const startedAt = Date.now();
     try {
       if (channel.openId !== item.segmentId) return; // o trecho já fechou
       const pcm = Buffer.from(item.pcm.buffer, item.pcm.byteOffset, item.pcm.byteLength);
@@ -333,6 +346,8 @@ export class AsrPipeline extends EventEmitter {
       // parcial é só cosmético
     } finally {
       channel.partialBusy = false;
+      const tookMs = Date.now() - startedAt;
+      this.partialNotBefore = Date.now() + Math.min(PARTIAL_MAX_GAP_MS, tookMs * (1 / PARTIAL_DUTY - 1));
     }
   }
 

@@ -397,6 +397,7 @@
     'warroom.phase.preparing': 'Preparing…',
     'warroom.phase.thinking': 'Thinking…',
     'warroom.still-thinking': 'Still thinking…',
+    'warroom.waiting-turn': 'Waiting for the other cycle…',
     'warroom.now': 'Generate now',
     'warroom.retry': 'Try now',
     'warroom.little': 'Not enough new speech yet to generate ideas.',

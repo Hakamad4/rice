@@ -168,13 +168,14 @@
     const cycleView = (war) => {
       const st = data.state;
       const clicked = pendingRun.get(war ? 'investigation' : 'ideas');
+      const other = Boolean(st.running && st.track && st.track !== (war ? 'investigation' : 'ideas')); // o ciclo em andamento é da OUTRA trilha: este clique espera a vez
       const running = Boolean(st.running || clicked);
       const phase = st.running ? st.phase || 'thinking' : 'preparing';
       const since = st.running ? st.startedAt : clicked;
       const elapsed = since ? Date.now() - since : Infinity; // sem horário (estado antigo): trata como longo, com "Parar"
-      return { running, phase, elapsed, slow: running && elapsed >= SLOW_MS };
+      return { running, other, phase, elapsed, slow: running && elapsed >= SLOW_MS };
     };
-    const phaseText = (war, v) => (v.slow && v.phase !== 'writing' ? t('warroom.still-thinking') : v.phase === 'preparing' ? t('warroom.phase.preparing') : v.phase === 'thinking' ? t('warroom.phase.thinking') : t(war ? 'warroom.running' : 'warroom.generating'));
+    const phaseText = (war, v) => (v.other ? t('warroom.waiting-turn') : v.slow && v.phase !== 'writing' ? t('warroom.still-thinking') : v.phase === 'preparing' ? t('warroom.phase.preparing') : v.phase === 'thinking' ? t('warroom.phase.thinking') : t(war ? 'warroom.running' : 'warroom.generating'));
 
     function statusBlock(war) {
       const st = data.state;
@@ -226,14 +227,21 @@
       const view = cycleView(war);
       clearTimeout(slowTimer);
       if (view.running && !view.slow) slowTimer = setTimeout(() => deps.onUpdate && deps.onUpdate(), SLOW_MS - view.elapsed + 50); // passou de ~20 s: o botão ganha "Parar"
+      const stopButton = () => {
+        const b = el('button', { type: 'button', className: 'btn ghost wr-stop' }, [window.RiceIcons.icon('square'), el('span', { textContent: t('warroom.stop') }, [])]);
+        b.onclick = () => rice.warRoomStop(dir);
+        return b;
+      };
       let action;
-      if (view.running && !view.slow) {
-        // desabilitado contra clique duplo, com uma linha de progresso e o rótulo do ciclo
-        action = el('button', { type: 'button', className: 'btn ghost wr-run wr-busy', disabled: true }, [el('span', { textContent: t(war ? 'warroom.running' : 'warroom.generating') }, []), el('span', { className: 'wr-line', 'aria-hidden': 'true' }, [])]);
-        action.setAttribute('aria-busy', 'true');
-      } else if (view.running) action = el('button', { type: 'button', className: 'btn ghost wr-stop' }, [window.RiceIcons.icon('square'), el('span', { textContent: t('warroom.stop') }, [])]);
-      else action = el('button', { type: 'button', className: 'btn ghost wr-run', disabled: Boolean(disabledWhy), ...(disabledWhy ? { title: disabledWhy } : {}) }, [window.RiceIcons.icon(war ? 'search' : 'sparkles'), el('span', { textContent: t(war ? 'warroom.now.war' : 'warroom.now') }, [])]);
-      action.onclick = () => (view.running ? rice.warRoomStop(dir) : runNow(war ? 'investigation' : 'ideas'));
+      if (view.running) {
+        // desabilitado contra clique duplo, com uma linha de progresso; "Parar" vale desde a preparação (menos quando o ciclo em andamento é da outra trilha)
+        const busy = el('button', { type: 'button', className: 'btn ghost wr-run wr-busy', disabled: true }, [el('span', { textContent: view.other ? t('warroom.waiting-turn') : t(war ? 'warroom.running' : 'warroom.generating') }, []), el('span', { className: 'wr-line', 'aria-hidden': 'true' }, [])]);
+        busy.setAttribute('aria-busy', 'true');
+        action = el('span', { className: 'wr-run-group' }, view.other ? [busy] : [busy, stopButton()]);
+      } else {
+        action = el('button', { type: 'button', className: 'btn ghost wr-run', disabled: Boolean(disabledWhy), ...(disabledWhy ? { title: disabledWhy } : {}) }, [window.RiceIcons.icon(war ? 'search' : 'sparkles'), el('span', { textContent: t(war ? 'warroom.now.war' : 'warroom.now') }, [])]);
+        action.onclick = () => runNow(war ? 'investigation' : 'ideas');
+      }
       const below = [];
       if (reached) {
         // limite da trilha atingido: para de gastar; "Continuar" libera mais ciclos só nesta reunião

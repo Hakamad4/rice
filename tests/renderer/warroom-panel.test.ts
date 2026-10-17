@@ -585,7 +585,7 @@ describe('Gerar agora: feedback imediato', () => {
     tab('Ideias').click();
     expect(body().querySelector('.wr-foot .wr-next').textContent).toContain('Pensando…');
     expect((body().querySelector('.wr-foot .wr-busy') as any).disabled).toBe(true);
-    expect(body().querySelector('.wr-foot .wr-stop')).toBeNull();
+    expect(body().querySelector('.wr-foot .wr-stop')).not.toBeNull(); // Parar vale desde a preparação
     d.state = { ...d.state, startedAt: Date.now() - 25_000 };
     tab('Notas').click();
     tab('Ideias').click();
@@ -600,5 +600,43 @@ describe('Gerar agora: feedback imediato', () => {
     (body().querySelector('.wr-foot .wr-run') as any).click();
     await tick();
     expect((body().querySelector('.wr-foot .wr-run') as any).disabled).toBe(false);
+  });
+
+  it('Investigação: muda no clique, mostra Preparando…, aceita Parar na preparação e ignora clique duplo', async () => {
+    let finish: (v: unknown) => void = () => {};
+    const warRoomRunNow = vi.fn(() => new Promise((r) => (finish = r)));
+    const warRoomStop = vi.fn(async () => ({ ok: true }));
+    const d: any = state();
+    d.state = { ...d.state, running: false, phase: '', track: '', startedAt: 0 };
+    await setup(d, { warRoomRunNow, warRoomStop });
+    tab('Investigação').click();
+    const run = () => body().querySelector('.wr-foot .wr-run') as any;
+    run().click();
+    const busy = body().querySelector('.wr-foot .wr-busy') as any;
+    expect(busy.textContent).toBe('Investigando…');
+    expect(busy.disabled).toBe(true);
+    expect(body().querySelector('.wr-foot .wr-next').textContent).toContain('Preparando…');
+    busy.click();
+    expect(warRoomRunNow).toHaveBeenCalledTimes(1);
+    expect(warRoomRunNow).toHaveBeenCalledWith('/R/a', 'investigation');
+    (body().querySelector('.wr-foot .wr-stop') as any).click(); // Parar já na preparação
+    expect(warRoomStop).toHaveBeenCalledWith('/R/a');
+    finish({ ok: true, result: 'skipped' });
+    await tick();
+    expect(run().disabled).toBe(false);
+  });
+
+  it('ciclo da OUTRA trilha em andamento: o botão espera a vez (sem Parar, sem clique)', async () => {
+    const warRoomRunNow = vi.fn(async () => ({ ok: true }));
+    const d: any = state();
+    d.state = { ...d.state, running: true, phase: 'thinking', track: 'ideas', startedAt: Date.now() - 500 };
+    await setup(d, { warRoomRunNow });
+    tab('Investigação').click();
+    const busy = body().querySelector('.wr-foot .wr-busy') as any;
+    expect(busy.textContent).toBe('Aguardando o outro ciclo…');
+    expect(body().querySelector('.wr-foot .wr-stop')).toBeNull();
+    expect(body().querySelector('.wr-foot .wr-next').textContent).toContain('Aguardando o outro ciclo…');
+    busy.click();
+    expect(warRoomRunNow).not.toHaveBeenCalled();
   });
 });

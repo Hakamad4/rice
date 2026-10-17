@@ -99,7 +99,7 @@
   .meeting { display:flex; align-items:center; gap:var(--gap-3); box-sizing:border-box; height:30px; padding:0 8px 0 10px; margin:0 0 var(--gap-1); border-radius:6px; cursor:pointer; font-size:13px; }
   .meeting:hover { background:var(--hover); } .meeting.active { background:var(--active); }
   .meeting .m-title { flex:1; min-width:0; line-height:1.4; letter-spacing:normal; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .live-dot { flex:none; width:8px; height:8px; border-radius:50%; background:var(--rec); align-self:center; animation:pulse 1.4s ease-in-out infinite; }
+  .live-dot { flex:none; width:8px; height:8px; border-radius:50%; background:var(--rec); align-self:center; }
   .live-item { display:flex; align-items:center; gap:8px; width:100%; padding:7px 10px; margin:0 0 6px; border-radius:8px; font-size:13px; text-align:left; background:var(--hover); color:var(--ink); } .live-item[hidden] { display:none; } .live-item:hover, .live-item.active { background:var(--active); } .live-item .live-text { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .live-card { display:flex; align-items:center; gap:12px; padding:10px 14px; margin:0 0 16px; border-radius:10px; background:var(--hover); } .live-card-body { flex:1; min-width:0; display:flex; flex-direction:column; } .live-card-body small { color:var(--muted); font-size:11px; } .live-card-text { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; }
   .m-dot { width:6px; height:6px; border-radius:50%; background:var(--faint); flex:none; align-self:center; }
@@ -140,8 +140,8 @@
   }
   #rec { display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:999px; box-shadow:inset 0 0 0 1px var(--line); font-weight:500; }
   .rec-dot { flex:none; width:8px; height:8px; min-width:8px; min-height:8px; aspect-ratio:1; border-radius:50%; background:var(--rec); } /* círculo sempre redondo: não encolhe nem achata */
-  #rec.recording .rec-dot { animation:pulse 1.4s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity:.35; } }
+  /* batida de 1 Hz pelo timer da gravação (renderer.js): uma animação CSS infinita mantinha renderer e GPU acordados a 60 quadros/s (~15% de um núcleo) só para um ponto pulsar */
+  body.beat-off .live-dot:not(.paused), body.beat-off #rec.recording:not(.paused) .rec-dot { opacity:.35; }
   #live-jump { position:absolute; left:50%; bottom:18px; transform:translateX(-50%); display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:15px; font-size:12px; background:var(--ink); color:var(--bg, #fff); box-shadow:0 2px 10px rgba(0,0,0,.18); z-index:5; } #live-jump[hidden] { display:none; } #live-jump .icon { width:12px; height:12px; }
   #detail { flex:1; overflow:auto; container-type:inline-size; container-name:detail; }
   /* avisos persistentes da gravação: faixa fina, sem cor berrante; o nível aparece só na barrinha da esquerda */
@@ -298,6 +298,7 @@
   .action-text { display:flex; flex-direction:column; min-width:0; } .action-text .action-label { line-height:1.3; } .action-sub { font-size:12px; line-height:1.35; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
   .tpl-tabbar { margin:0 0 var(--space-4); } .itpl-instruction { width:100%; min-height:112px; resize:vertical; font:inherit; line-height:1.5; } .itpl-cats { margin:var(--gap-3) 0 0; grid-column:2; }
   .wr-type { color:var(--muted); } .wr-type .icon { width:12px; height:12px; } .wr-idea-tag { display:inline-flex; align-items:center; height:18px; padding:0 8px; border-radius:999px; background:var(--active); color:var(--muted); font-size:11px; line-height:18px; }
+  .wr-run-group { display:inline-flex; align-items:center; gap:var(--space-2); flex-wrap:nowrap; }
   .wr-busy { position:relative; overflow:hidden; opacity:1; color:var(--muted); } .wr-busy .wr-line { position:absolute; left:0; right:0; bottom:0; height:2px; overflow:hidden; } .wr-busy .wr-line::after { content:""; position:absolute; top:0; bottom:0; width:40%; background:var(--ink); opacity:.55; animation:wr-line 1.2s ease-in-out infinite; } @keyframes wr-line { from { left:-40%; } to { left:100%; } } @media (prefers-reduced-motion: reduce) { .wr-busy .wr-line::after { animation:none; left:0; width:100%; opacity:.2; } }
   .wr-stop, .wr-foot .wr-stop { display:inline-flex; align-items:center; gap:6px; box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--rec) 55%, transparent); } .wr-stop .icon { width:10px; height:10px; color:var(--rec); fill:var(--rec); stroke:var(--rec); }
   .send-btn[data-stop="1"] { background:var(--bg); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--rec) 55%, transparent); } .send-btn[data-stop="1"] .icon { width:10px; height:10px; color:var(--rec); fill:var(--rec); stroke:var(--rec); }

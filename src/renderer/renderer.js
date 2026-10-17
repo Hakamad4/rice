@@ -1969,10 +1969,11 @@ function liveCard() {
 }
 $('live-item').onclick = () => recDir && openMeeting(recDir);
 function syncLiveTimer() {
-  if (recState === 'recording' && !liveTimer) liveTimer = setInterval(() => (renderLive(), renderRecLabel(), recPaused && renderPause()), 1000);
+  if (recState === 'recording' && !liveTimer) liveTimer = setInterval(() => (document.body.classList.toggle('beat-off'), renderLive(), renderRecLabel(), recPaused && renderPause()), 1000);
   if (recState !== 'recording' && liveTimer) {
     clearInterval(liveTimer);
     liveTimer = null;
+    document.body.classList.remove('beat-off');
   }
   renderLive();
 }
