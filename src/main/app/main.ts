@@ -19,6 +19,7 @@ import { toLocalIso } from '../../shared/naming';
 import { isTranscriptionLanguage, type FolderRetention, type MeetingMeta, type NoteTemplateInput, type TranscriptionLanguage } from '../../shared/types';
 import { canDeleteMeeting, deleteMeetingDir } from './delete-meeting';
 import { AsrService } from '../session/asr-service';
+import { partialsWanted } from '../asr/partials-gate';
 import { AudioCapture } from '../session/audio-capture';
 import { DetectorClient } from '../session/detector-client';
 import { MeetingSession, type SessionState } from '../session/meeting-session';
@@ -243,6 +244,18 @@ on('i18n:language', (event) => {
  * Semáforos acompanham o zoom da página (⌘+/⌘−): a faixa do topo tem 48px CSS, então o centro dela fica em 24·zoom px
  * de tela; os semáforos (≈12px) são reposicionados para esse centro. Sem zoom: y 18, como no trafficLightPosition.
  */
+/**
+ * Parciais só servem a quem as vê: o renderer informa `document.visibilityState` (minimizada/oculta = 'hidden') e o main
+ * pausa os parciais do whisper (o maior consumo de GPU na gravação). O painel expandido do nub também mostra parciais,
+ * então conta como visível. Janela coberta por outra continua 'visible' (o Chromium não detecta oclusão aqui).
+ */
+let uiVisible = true;
+on('ui:visibility', (event, raw: unknown) => {
+  if (BENCH) return; // instância de medição: a janela nunca é mostrada, o estado vem de RICE_PERF_VISIBILITY
+  if (BrowserWindow.fromWebContents(event.sender) !== window) return;
+  uiVisible = raw !== 'hidden';
+});
+
 on('ui:titlebar-zoom', (event, raw: unknown) => {
   const zoom = typeof raw === 'number' && Number.isFinite(raw) && raw >= 0.25 && raw <= 5 ? raw : 1;
   const win = BrowserWindow.fromWebContents(event.sender);
@@ -536,6 +549,7 @@ function setupDetector(): void {
 
 /** `RICE_BENCH=1`: instância de medição, sem janelas visíveis, nub, alertas, bandeja nem ícone no Dock. */
 const BENCH = process.env.RICE_BENCH === '1';
+if (BENCH && process.env.RICE_PERF_VISIBILITY === 'hidden') uiVisible = false; // medição A/B das parciais com a janela oculta
 /** Plataforma que o renderer mostra. Só as instâncias de teste (RICE_BENCH) aceitam RICE_FAKE_PLATFORM, para os prints do layout do Windows no Mac. */
 const PLATFORM_FOR_UI = BENCH && process.env.RICE_FAKE_PLATFORM === 'win32' ? 'win32' : process.platform;
 
@@ -564,6 +578,7 @@ function createWindow(): void {
   window.on('restore', updateNub);
   window.on('closed', () => {
     window = null;
+    uiVisible = false; // sem janela ninguém vê parciais (a gravação segue)
     updateNub();
   });
   updateNub();
@@ -857,6 +872,7 @@ let asrService: AsrService | null = null;
 
 function setupSession(runner: AiRunner): AsrService {
   const asr = new AsrService({
+    partialsWanted: () => partialsWanted(uiVisible, nub?.expanded ?? false),
     onProgress: (p) => {
       asrStatus = { ...asrStatus, downloadPercent: p.totalBytes > 0 && p.receivedBytes < p.totalBytes ? Math.floor((p.receivedBytes / p.totalBytes) * 100) : undefined };
       send('asr:download-progress', p);

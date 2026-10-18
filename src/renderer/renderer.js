@@ -2500,6 +2500,11 @@ function showSettings(focus) {
   return rendered;
 }
 
+// Janela minimizada/oculta: o main pausa os parciais do whisper (só quem vê a tela precisa deles). Finais e gravação não mudam.
+const reportVisibility = () => window.rice.setUiVisibility?.(document.visibilityState);
+document.addEventListener('visibilitychange', reportVisibility);
+reportVisibility();
+
 $('settings-link').onclick = () => showSettings();
 window.rice.on('app:open-settings', () => showSettings());
 

@@ -26,7 +26,7 @@ const tmp = mkdtempSync(join(tmpdir(), 'rice-thermal-'));
 const home = join(tmp, 'home');
 mkdirSync(join(home, '.local', 'bin'), { recursive: true });
 mkdirSync(join(home, 'Library', 'Application Support', 'Rice'), { recursive: true });
-symlinkSync(join(homedir(), 'Library', 'Application Support', 'Rice', 'models'), join(home, 'Library', 'Application Support', 'Rice', 'models')); // só leitura
+symlinkSync(opt('models', '') || join(homedir(), 'Library', 'Application Support', 'Rice', 'models'), join(home, 'Library', 'Application Support', 'Rice', 'models')); // só leitura (--models=<pasta> para variantes, ex.: encoder CoreML)
 writeFileSync(join(home, '.local', 'bin', 'claude'), `#!/usr/bin/env node
 const t0=Date.now(); let s=''; process.stdin.on('data',(d)=>s+=d); process.stdin.on('end',()=>{
   require('node:fs').appendFileSync(process.env.HOME+'/ai-calls.jsonl', JSON.stringify({t0,t1:Date.now(),pid:process.pid,stdinBytes:s.length,args:process.argv.slice(2).join(' ').slice(0,200)})+'\\n');
@@ -116,8 +116,13 @@ async function startApp() {
 }
 
 // ambiente limpo: outra instância gravando (ou outro whisper-server) falsifica CPU/GPU; aborta em vez de medir errado
-const others = execFileSync('bash', ['-c', "ps -axo pid=,command= | grep -E 'whisper-server|rice-wt/.*/Electron ' | grep -vE 'grep|thermal.mjs' || true"]).toString().trim();
-if (others && opt('allow-others', '0') !== '1') { console.error('ABORTA: há outros processos de whisper-server/Electron rodando (falsificam a medição):\n' + others); process.exit(2); }
+const foreign = () => execFileSync('bash', ['-c', "ps -axo pid=,command= | grep -E 'whisper-server|rice-wt/.*/Electron |wt-[a-z0-9]+/node_modules/electron' | grep -vE 'grep|thermal.mjs' || true"]).toString().trim();
+// espera (até --wait-clean segundos, padrão 1200) outro agente terminar a instância dele; se não limpar, aborta em vez de medir errado
+for (let waited = 0; foreign() && opt('allow-others', '0') !== '1'; waited += 10) {
+  if (waited >= Number(opt('wait-clean', 1200))) { console.error('ABORTA: há outros processos de whisper-server/Electron rodando (falsificam a medição):\n' + foreign()); process.exit(2); }
+  if (waited === 0) console.log('aguardando outro agente liberar a GPU/CPU...');
+  await sleep(10_000);
+}
 let child;
 let caffeinate;
 // limpeza mesmo se este script morrer (SIGPIPE de um `| head`, Ctrl-C, exceção): nunca deixar uma instância gravando para trás
@@ -148,8 +153,8 @@ try {
 
   const vmBefore = vmStats();
   if (loadOn) {
-    loadProc = spawn(process.execPath, [join(repo, 'scripts/perf/load-moderate.mjs'), '--procs=3', '--duty=0.5', '--gb=4', `--secs=${Math.ceil(minutes * 60 + 60)}`], { stdio: ['ignore', 'pipe', 'ignore'] });
-    result.load = { pid: loadProc.pid, procs: 3, duty: 0.5, gb: 4 };
+    loadProc = spawn(process.execPath, [join(repo, 'scripts/perf/load-moderate.mjs'), '--procs=3', '--duty=0.5', `--gb=${process.env.LOAD_GB ?? 4}`, `--secs=${Math.ceil(minutes * 60 + 60)}`], { stdio: ['ignore', 'pipe', 'ignore'] });
+    result.load = { pid: loadProc.pid, procs: 3, duty: 0.5, gb: Number(process.env.LOAD_GB ?? 4) };
     await sleep(25_000); // deixa a pressão de memória e a carga se instalarem antes de gravar
   }
   const started = await page.ev("(() => { window.__recStart = Date.now(); return window.rice.startRecording({ title: 'Medição térmica' }); })()");
@@ -259,6 +264,7 @@ try {
   result.view = await page.ev("({ title: document.getElementById('page-title')?.textContent, rows: document.querySelectorAll('.transcript .t-row').length, partialRows: document.querySelectorAll('.t-partial').length, tab: [...document.querySelectorAll('.mt-tab')].map((b) => b.className + ':' + b.textContent).join('|') })");
   result.thermal = [execFileSync('pmset', ['-g', 'therm']).toString().trim(), execFileSync('pmset', ['-g', 'batt']).toString().split('\n')[0]];
   result.loadAvg = execFileSync('sysctl', ['-n', 'vm.loadavg']).toString().trim();
+  result.foreignAtEnd = foreign().split('\n').filter((l) => l && !l.includes(String(mainPid)) && !l.includes(tmp)).length; // outras instâncias/whisper de outros agentes durante a corrida (contaminam)
   await page.ev('window.rice.stopRecording()');
   await sleep(3000);
   // whisper: requisições

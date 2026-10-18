@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('rice', {
   /** 'darwin' | 'win32' (o main só aceita simular o Windows em instâncias de teste). */
   platform: platformArg ? platformArg.slice('--rice-platform='.length) : process.platform,
   zoomFactor: () => webFrame.getZoomFactor(),
+  setUiVisibility: (state) => ipcRenderer.send('ui:visibility', state),
   setTitlebarZoom: (zoom) => ipcRenderer.send('ui:titlebar-zoom', zoom),
   uiLanguage: ipcRenderer.sendSync('i18n:language'),
   setUiLanguage: (language) => ipcRenderer.invoke('settings:set-ui-language', language),

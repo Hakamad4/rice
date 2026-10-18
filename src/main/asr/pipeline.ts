@@ -31,6 +31,8 @@ export type AsrPipelineOptions = {
   segmenter?: Partial<SegmenterOptions>;
   /** Parciais ao vivo (padrão: ligado). */
   partials?: boolean;
+  /** Consultado a cada janela: false = ninguém está vendo os parciais agora (janela oculta), não agenda nenhum. Padrão: sempre. */
+  partialsWanted?: () => boolean;
 };
 
 type Channel = {
@@ -222,6 +224,15 @@ export class AsrPipeline extends EventEmitter {
     }
   }
 
+  /**
+   * Parciais só servem a quem as está vendo: com a janela oculta/minimizada (e sem o painel do nub aberto) o pipeline não as
+   * agenda. Consultado a cada janela do VAD, então ao voltar a ficar visível a próxima janela (~32 ms) já dispara o parcial.
+   * Os trechos finais não passam por aqui.
+   */
+  private partialsWanted(): boolean {
+    return this.options.partialsWanted?.() ?? true;
+  }
+
   /** Mantém o id do trecho aberto e agenda parciais. */
   private trackOpen(channel: Channel): void {
     const seg = channel.segmenter;
@@ -231,7 +242,7 @@ export class AsrPipeline extends EventEmitter {
       channel.windowsSincePartial = 0;
     }
     channel.windowsSincePartial++;
-    if (this.options.partials === false) return;
+    if (this.options.partials === false || !this.partialsWanted()) return;
     if (seg.openSpeechWindows < PARTIAL_MIN_SPEECH_WINDOWS) return;
     if (channel.windowsSincePartial < PARTIAL_EVERY_WINDOWS || channel.partialBusy || this.failed || Date.now() < this.partialNotBefore) return;
     const open = seg.peekOpen();
@@ -279,7 +290,7 @@ export class AsrPipeline extends EventEmitter {
     while (this.queue.length > 0 || this.partials.length > 0) {
       if (this.queue.length === 0) {
         const next = this.partials.shift()!;
-        if (Date.now() < this.partialNotBefore) next.channel.partialBusy = false; // enfileirado antes do teto (o outro canal): descarta, o próximo sai no prazo
+        if (Date.now() < this.partialNotBefore || !this.partialsWanted()) next.channel.partialBusy = false; // enfileirado antes do teto (o outro canal): descarta, o próximo sai no prazo
         else await this.runPartial(next);
         continue;
       }

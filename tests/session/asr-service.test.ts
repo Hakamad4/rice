@@ -28,6 +28,19 @@ describe('AsrService sob demanda', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  it('repassa o gate de parciais (janela oculta) a cada pipeline criado', async () => {
+    let wanted = true;
+    const service = new AsrService({
+      partialsWanted: () => wanted,
+      deps: { ensureModel: async () => '/m.bin', createServer: async () => ({ dispose: async () => {}, transcribe: vi.fn(), restart: vi.fn() }) as never, createSession: async () => ({ release: async () => {} }) as never },
+    });
+    const pipeline = await service.createPipeline('pt');
+    const gate = (pipeline as unknown as { partialsWanted(): boolean }).partialsWanted.bind(pipeline);
+    expect(gate()).toBe(true);
+    wanted = false;
+    expect(gate()).toBe(false);
+  });
+
   it('warmup só garante o modelo: não sobe o servidor', async () => {
     const { service, servers, ensureModel } = setup();
     await service.warmup();

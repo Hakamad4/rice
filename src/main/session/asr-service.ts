@@ -45,6 +45,8 @@ export class AsrService {
       onProgress?: (p: DownloadProgress) => void;
       onStatus?: (s: { state: 'loading' | 'ready' | 'failed'; error?: string }) => void;
       idleMs?: number;
+      /** Repassado a cada pipeline: false = parciais sem espectador (janela oculta). */
+      partialsWanted?: () => boolean;
       deps?: Partial<AsrServiceDeps>;
     } = {},
   ) {
@@ -100,7 +102,7 @@ export class AsrService {
       this.releaseLease();
       throw err;
     }
-    const pipeline = new AsrPipeline({ createDetector: () => new SileroVad(loaded.session), transcriber: loaded.server, language, ...(vocabulary ? { vocabulary } : {}), ...(speakers ? { speakers } : {}) });
+    const pipeline = new AsrPipeline({ createDetector: () => new SileroVad(loaded.session), transcriber: loaded.server, language, ...(vocabulary ? { vocabulary } : {}), ...(speakers ? { speakers } : {}), ...(this.opts.partialsWanted ? { partialsWanted: this.opts.partialsWanted } : {}) });
     const finish = pipeline.finish.bind(pipeline);
     let released = false;
     pipeline.finish = async () => {
