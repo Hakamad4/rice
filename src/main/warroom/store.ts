@@ -66,11 +66,23 @@ export function normalizeConfig(raw: unknown): WarRoomConfig {
 const configPath = (dir: string) => join(dir, 'warroom.json');
 const ideasPath = (dir: string) => join(dir, 'ideias.jsonl');
 
-async function atomicWrite(path: string, text: string): Promise<void> {
-  await mkdir(join(path, '..'), { recursive: true });
-  const tmp = `${path}.tmp`;
-  await writeFile(tmp, text, { mode: 0o600 });
-  await renameRetry(tmp, path);
+/** Escritas em andamento por arquivo: duas gravações seguidas do mesmo arquivo dividiam o `.tmp` e a segunda falhava no rename (ENOENT). */
+const writing = new Map<string, Promise<void>>();
+
+function atomicWrite(path: string, text: string): Promise<void> {
+  const run = async () => {
+    await mkdir(join(path, '..'), { recursive: true });
+    const tmp = `${path}.tmp`;
+    await writeFile(tmp, text, { mode: 0o600 });
+    await renameRetry(tmp, path);
+  };
+  // em fila: cada gravação começa depois da anterior do mesmo arquivo, então a última chamada é a que fica no disco
+  const next = (writing.get(path) ?? Promise.resolve()).catch(() => {}).then(run);
+  writing.set(path, next);
+  void next.finally(() => {
+    if (writing.get(path) === next) writing.delete(path);
+  }).catch(() => {});
+  return next;
 }
 
 export async function readConfig(dir: string): Promise<WarRoomConfig> {
