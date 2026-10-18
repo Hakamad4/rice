@@ -142,6 +142,7 @@ Se o processo morre, o main o relança (1 s, 3 s, 9 s). EOF do stdin → termina
 | `reminder-completed` | `id`, `ok: bool` | resposta de `complete-reminder` |
 | `inputs` | `inputs: [{id, name, transport, isDefault, inUse}]` | **Opcional, aditivo, só o detector do Mac.** Resposta de `list-inputs`: as entradas do CoreAudio (`transport`: builtin, usb, bluetooth, aggregate, virtual, other). `inUse`: algum OUTRO processo usa a entrada agora (`kAudioProcessPropertyIsRunningInput` + `kAudioProcessPropertyDevices`, macOS 14.2+; mais preciso que `IsRunningSomewhere`, que também vale para a saída do mesmo dispositivo). Base da escolha automática do microfone ao gravar. Só consulta. |
 | `default-input` | `id`, `name` (nulos se não há entrada) | **Opcional, aditivo, só o detector do Mac** (o do Windows não emite; o app funciona sem ele). Entrada de áudio padrão do sistema (CoreAudio, `kAudioHardwarePropertyDefaultInputDevice`): na partida, a cada troca e como resposta de `current-input`. É a entrada que o `rice-audio` do Mac grava (`AVAudioEngine.inputNode` sem dispositivo fixo). `id` = UID do dispositivo. O detector só consulta; não grava. Fixture: `tests/fixtures/protocol/default-input.json` |
+| `window-cover` | `window` (o pedido), `onScreen: bool`, `covered: 0…1` | **Opcional, aditivo, só o detector do Mac.** A 1 Hz enquanto `cover-watch` com `window > 0`: fração (3 casas) da janela CGWindow `window` coberta pela UNIÃO das janelas à frente dela (`CGWindowListCopyWindowInfo`, na tela; só camada 0 e alfa ≥ 0,99, então PiP/sempre-no-topo e translúcidas não contam). Fora da lista (minimizada, oculta, outro Space): `onScreen:false, covered:1`. Sem permissão de Gravação de Tela (só ordem, camada, alfa e retângulo; nada de títulos nem pixels). Base para pausar os parciais do whisper quando ninguém os vê. |
 | `calendar-changed`, `reminders-changed` | (nenhum) | o repositório mudou |
 | `error` | `message` | `invalid command line` / `unknown command: X` |
 
@@ -151,7 +152,7 @@ O `bundleId` de um app é o primeiro identificador visto para ele (`activeApps[a
 ### Comandos de stdin
 
 `current-event`, `list-events` (`from`, `to` ISO 8601, com ou sem milissegundos), `request-calendar-access`, `list-reminders`,
-`request-reminders-access`, `complete-reminder` (`id`), `current-input` (só Mac; repete `default-input`), `list-inputs` (só Mac; responde `inputs`). Cada um responde com o evento da tabela.
+`request-reminders-access`, `complete-reminder` (`id`), `current-input` (só Mac; repete `default-input`), `list-inputs` (só Mac; responde `inputs`), `cover-watch` (só Mac; `window` = número CGWindow, `window:0` para; sem resposta única: passa a emitir `window-cover` a 1 Hz; o main reenvia o pedido se o detector reiniciar). Cada um responde com o evento da tabela.
 
 ### Argumentos (modos de teste, sem watch)
 
@@ -163,6 +164,7 @@ O `bundleId` de um app é o primeiro identificador visto para ele (`activeApps[a
 | `--simulate-mic '<json>'` | `<json>` = `[["id",...],["id"],[]]`: cada passo é um snapshot; imprime os eventos `mic-in-use`/`mic-released` gerados, um por linha, na ordem do Swift (primeiro os `in-use` em ordem alfabética do app, depois os `released`) |
 | `--simulate-upcoming '<json>'` | `{now,announced:[ids],events:[{id,title,start,end}]}` → array JSON dos ids que disparam |
 | `--simulate-reminders '<json>'` | `{now,items:[{id,title,y,m,d,h?,min?}]}` → `[{"hasTime","id","overdue"}]` (depende do fuso local) |
+| `--simulate-cover '<json>'` | `{window:N, items:[{number,layer,alpha?,x,y,w,h}…]}` (da frente para trás) → `{"covered":0…1,"onScreen":bool}`: o cálculo de cobertura sem janelas reais |
 | `--once` | `{"event":"snapshot","micInUse":[...],"calendarAccess":..,"upcoming":[...]}` |
 
 Casamento de apps (`--match`): id exato ou prefixo `id + "."` (sub-processos), na ordem da lista:

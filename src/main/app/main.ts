@@ -19,7 +19,7 @@ import { toLocalIso } from '../../shared/naming';
 import { isTranscriptionLanguage, type FolderRetention, type MeetingMeta, type NoteTemplateInput, type TranscriptionLanguage } from '../../shared/types';
 import { canDeleteMeeting, deleteMeetingDir } from './delete-meeting';
 import { AsrService } from '../session/asr-service';
-import { partialsWanted } from '../asr/partials-gate';
+import { CoverTracker, partialsWanted } from '../asr/partials-gate';
 import { AudioCapture } from '../session/audio-capture';
 import { DetectorClient } from '../session/detector-client';
 import { MeetingSession, type SessionState } from '../session/meeting-session';
@@ -247,13 +247,27 @@ on('i18n:language', (event) => {
 /**
  * Parciais só servem a quem as vê: o renderer informa `document.visibilityState` (minimizada/oculta = 'hidden') e o main
  * pausa os parciais do whisper (o maior consumo de GPU na gravação). O painel expandido do nub também mostra parciais,
- * então conta como visível. Janela coberta por outra continua 'visible' (o Chromium não detecta oclusão aqui).
+ * então conta como visível. O Chromium não detecta janela COBERTA por outra ('visible' mesmo atrás do Meet): no Mac o
+ * rice-detector mede a cobertura (CGWindowList, 1 Hz, só gravando e só com a janela visível) e `cover` pausa os parciais
+ * com >= 95% coberta por 2 amostras seguidas. Windows: o Chromium já rastreia a oclusão sozinho.
  */
 let uiVisible = true;
+const cover = new CoverTracker();
+let coverWindow = 0; // número CGWindow vigiado pelo detector (0 = parado)
+
+function updateCoverWatch(): void {
+  const live = isMac() && !!detector && !!window && !window.isDestroyed() && session?.state === 'recording' && uiVisible;
+  const wanted = live && window ? Number(window.getMediaSourceId().split(':')[1]) || 0 : 0;
+  if (wanted === coverWindow) return;
+  coverWindow = wanted;
+  detector?.watchCover(wanted);
+  if (!wanted) cover.reset();
+}
 on('ui:visibility', (event, raw: unknown) => {
   if (BENCH) return; // instância de medição: a janela nunca é mostrada, o estado vem de RICE_PERF_VISIBILITY
   if (BrowserWindow.fromWebContents(event.sender) !== window) return;
   uiVisible = raw !== 'hidden';
+  updateCoverWatch();
 });
 
 on('ui:titlebar-zoom', (event, raw: unknown) => {
@@ -458,6 +472,10 @@ function setupDetector(): void {
   const d = new DetectorClient(riceDetectorBinary());
   detector = d;
   d.on('error', () => {});
+  d.on('window-cover', ({ onScreen, covered }: { onScreen: boolean; covered: number }) => {
+    if (coverWindow) cover.sample(onScreen, covered);
+  });
+  d.on('exit', () => cover.reset()); // detector caiu: sem amostras, volta a pedir parciais (o cliente reenvia o cover-watch ao relançar)
   d.on('calendar-access', (status: string) => {
     if (!systemCalendarSupported()) return; // o detector do Windows responde "unsupported"; o estado já está fixo
     calendarAccess = status;
@@ -579,6 +597,7 @@ function createWindow(): void {
   window.on('closed', () => {
     window = null;
     uiVisible = false; // sem janela ninguém vê parciais (a gravação segue)
+    updateCoverWatch();
     updateNub();
   });
   updateNub();
@@ -872,7 +891,7 @@ let asrService: AsrService | null = null;
 
 function setupSession(runner: AiRunner): AsrService {
   const asr = new AsrService({
-    partialsWanted: () => partialsWanted(uiVisible, nub?.expanded ?? false),
+    partialsWanted: () => partialsWanted(uiVisible, nub?.expanded ?? false, cover.covered),
     onProgress: (p) => {
       asrStatus = { ...asrStatus, downloadPercent: p.totalBytes > 0 && p.receivedBytes < p.totalBytes ? Math.floor((p.receivedBytes / p.totalBytes) * 100) : undefined };
       send('asr:download-progress', p);
@@ -921,6 +940,7 @@ function setupSession(runner: AiRunner): AsrService {
       },
     });
   });
+  s.on('state', () => updateCoverWatch());
   for (const name of ['state', 'segment', 'partial', 'asr-status', 'asr-warning', 'capture-event', 'session-warning', 'notes'] as const) {
     s.on(name, (payload) => send(`session:${name}`, payload));
   }

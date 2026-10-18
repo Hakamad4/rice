@@ -36,6 +36,18 @@ if arguments.contains("--print-inputs") {
     exit(0)
 }
 
+if let inputJSON = value(after: "--simulate-cover") {
+    // {"window":N,"items":[{"number","layer","alpha","x","y","w","h"}…]} da frente para trás → {"covered":0…1,"onScreen":bool}
+    let input = (try? JSONSerialization.jsonObject(with: Data(inputJSON.utf8))) as? [String: Any] ?? [:]
+    let items = (input["items"] as? [[String: Any]] ?? []).map { o -> WindowCover.Item in
+        func num(_ key: String) -> Double { (o[key] as? NSNumber)?.doubleValue ?? 0 }
+        return WindowCover.Item(number: Int(num("number")), layer: Int(num("layer")), alpha: o["alpha"] == nil ? 1 : num("alpha"), rect: CGRect(x: num("x"), y: num("y"), width: num("w"), height: num("h")))
+    }
+    let result = WindowCover.evaluate(window: (input["window"] as? Int) ?? 0, items: items)
+    printJSON(["covered": result.covered, "onScreen": result.onScreen])
+    exit(0)
+}
+
 if let stepsJSON = value(after: "--simulate-mic") {
     let steps = (try? JSONSerialization.jsonObject(with: Data(stepsJSON.utf8))) as? [[String]] ?? []
     let watcher = MicWatcher()
@@ -107,6 +119,7 @@ inputWatcher.observeChanges()
 calendar.observeChanges { Output.emit("calendar-changed", [:]) }
 reminders.observeChanges { Output.emit("reminders-changed", [:]) }
 
+let coverWatcher = CoverWatcher()
 let inFlightCommands = DispatchGroup()
 
 Thread {
@@ -148,6 +161,10 @@ Thread {
                 Output.emit("inputs", ["inputs": InputList.all().map(InputList.fields)])
                 inFlightCommands.leave()
             }
+        case "cover-watch":
+            // {"cmd":"cover-watch","window":N}: N = número CGWindow da janela principal (1 Hz, `window-cover`); 0 para
+            let number = (object["window"] as? NSNumber)?.intValue ?? 0
+            DispatchQueue.main.async { coverWatcher.watch(window: number) }
         case "current-input":
             inFlightCommands.enter()
             DispatchQueue.main.async {
