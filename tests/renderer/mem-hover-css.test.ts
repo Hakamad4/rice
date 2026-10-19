@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
-const css = readFileSync('src/renderer/index.html', 'utf8');
+const css = rendered('src/renderer/index.html');
 const rule = (sel: string): string => new RegExp(`${sel.replace(/[.]/g, '\\.')} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
 // o hover do "O que lembrar" tem respiro (padding) e a margem negativa igual mantém o texto no lugar (como as abas Pessoas/Empresas)

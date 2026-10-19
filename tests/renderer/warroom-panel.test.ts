@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const meetings = [{ dir: '/R/a', title: 'Crise', startedAt: new Date().toISOString(), state: 'recording' }];
@@ -98,7 +99,7 @@ it('provedor com só uma fonte indisponível: a nota diz qual', async () => {
 });
 
 it('polimento: abas sublinhadas; linhas de 36px; intervalo só com as ideias ligadas; estado vazio com ícone; botões ghost', async () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.mt-tabs \{[^}]*border-bottom:1px solid var\(--line\)/); // abas sublinhadas, sem pílula
   expect(css).toMatch(/\.mt-tab\[aria-selected="true"\]::after \{[^}]*height:2px/);
   expect(css).toMatch(/\.wr-box-row \{[^}]*min-height:48px/);
@@ -250,7 +251,7 @@ it('sem nenhum CLI detectado o menu avisa e só oferece "Copiar prompt"', async 
 });
 
 it('"Saiba mais" é link inline dentro do MESMO parágrafo (sem margem de botão) e "Continuar no terminal" não quebra o ícone', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.wr-desc button\.link-button \{ display:inline; padding:0; margin:0;/);
   expect(css).toMatch(/\.wr-handoff \{ display:inline-flex;[^}]*white-space:nowrap/);
 });
@@ -430,10 +431,10 @@ describe('rodapé de controles (mesmo nas Ideias e na Investigação)', () => {
   });
 
   it('CSS: contêiner --hover (padding 8px 12px, raio 10px), TODOS os controles de 32px com borda 1px --line e raio 8px, switch compacto 28×16, desabilitado a .5; abaixo de 640px os botões só descem se não couberem', () => {
-    const css = readFileSync('src/renderer/index.html', 'utf8');
-    expect(css).toMatch(/\.wr-foot \{ display:flex; flex-wrap:wrap; align-items:center; gap:var\(--space-2\); padding:var\(--space-2\) var\(--space-3\); border-radius:10px; background:var\(--hover\);/);
+    const css = rendered('src/renderer/index.html');
+    expect(css).toMatch(/\.wr-foot \{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 12px; border-radius:10px; background:var\(--hover\);/);
     expect(css).toMatch(/\.wr-foot \.btn, \.wr-foot \.menu-select-btn, \.wr-foot \.tpl-chip \{ height:32px; box-sizing:border-box;[^}]*border-radius:8px; background:transparent; box-shadow:inset 0 0 0 1px var\(--line\)/);
-    expect(css).toMatch(/\.wr-foot \.btn:disabled \{ opacity:\.5; cursor:not-allowed; \}/);
+    expect(css).toMatch(/\.wr-foot \.btn:disabled \{ opacity:\.45; cursor:not-allowed; \}/);
     expect(css).toMatch(/\.wr-foot input\.switch \{ width:28px; height:16px; \}/);
     expect(css).toMatch(/\.wr-toggle \{[^}]*height:32px/);
     expect(css).toMatch(/@container detail \(max-width: 640px\) \{ \.wr-foot \.wr-foot-actions \{ flex-wrap:wrap; justify-content:flex-end; \} \}/); // os botões só descem quando não cabem
@@ -443,7 +444,7 @@ describe('rodapé de controles (mesmo nas Ideias e na Investigação)', () => {
 
 
 it('bloco "Transformar em War room": ações numa linha à ESQUERDA abaixo do texto (primário + ghost, 32px); sem nota solta; "Saiba mais" inline', async () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.wr-cta \{ display:flex; flex-direction:column; align-items:flex-start;/);
   expect(css).toMatch(/\.wr-cta-actions \{ justify-content:flex-start; \}/);
   expect(css).toMatch(/\.wr-cta \[class~=btn\] \{ height:32px;/);
@@ -461,7 +462,7 @@ it('bloco "Transformar em War room": ações numa linha à ESQUERDA abaixo do te
 });
 
 it('rodapé numa linha: o status não quebra sob o switch (o grupo da direita desce inteiro); "Parar" com quadrado vermelho de 10px e borda vermelha sutil (Investigação, Ideias e chat)', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
     expect(css).toMatch(/\.wr-foot \.wr-stop \{[^}]*box-shadow:inset 0 0 0 1px color-mix\(in srgb, var\(--rec\) 55%, transparent\)/);
   expect(css).toMatch(/\.wr-stop \.icon \{ width:10px; height:10px; color:var\(--rec\); fill:var\(--rec\);/);
   expect(css).toMatch(/\.send-btn\[data-stop="1"\] \.icon \{ width:10px; height:10px; color:var\(--rec\);/); // o stop do chat
@@ -531,7 +532,7 @@ it('sem limite: a contagem aparece sem "/máximo" e sem aviso', async () => {
 });
 
 it('seletor de tipo no rodapé: lista compacta (200px) e prévia abaixo limitada, para caber na janela', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.tpl-popover\.compact-list \.tpl-list \{ max-height:200px; \}/);
   expect(readFileSync('src/renderer/template-picker.js', 'utf8')).toContain("options.kind === 'ideas' ? ' compact-list'");
 });

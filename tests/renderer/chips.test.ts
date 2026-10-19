@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { bootRenderer, press, type } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 
@@ -113,7 +114,7 @@ it('Configurações: chips vêm do settings.vocabulary (uma linha por termo) e s
 });
 
 it('visual: contêiner com o estilo dos campos, chips com raio de 6px e 12px, × pequeno em cor secundária', () => {
-  const html = readFileSync('src/renderer/index.html', 'utf8');
+  const html = rendered('src/renderer/index.html');
   const rule = (sel: string) => html.split('\n').find((l) => l.trimStart().startsWith(sel)) ?? '';
   expect(rule('.chips {')).toMatch(/border:1px solid var\(--line\).*border-radius:8px.*background:var\(--field-bg\)/);
   expect(rule('.chips {')).toContain('flex-wrap:wrap');

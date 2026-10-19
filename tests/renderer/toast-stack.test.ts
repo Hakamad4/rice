@@ -2,9 +2,10 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
-const css = readFileSync('src/renderer/index.html', 'utf8');
+const css = rendered('src/renderer/index.html');
 const MEETINGS = [{ dir: '/R/a', title: 'Kickoff', startedAt: new Date().toISOString(), state: 'done', notesStatus: 'done' }];
 
 function boot() {

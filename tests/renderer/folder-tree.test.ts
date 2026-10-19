@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const now = new Date().toISOString();
@@ -257,7 +258,7 @@ it('o chip do chat lista as pastas em árvore e mostra o caminho', async () => {
 });
 
 it('CSS da árvore: 14px por nível, linha de 1px, canto arredondado de 4px no último filho, conector curto, ponto de 4px; sem caracteres de desenho', () => {
-  const html = readFileSync('src/renderer/index.html', 'utf8');
+  const html = rendered('src/renderer/index.html');
   const js = readFileSync('src/renderer/renderer.js', 'utf8');
   expect(html).toMatch(/\.folder-children \{ margin:0 0 2px 14px; \}/);
   expect(html).toMatch(/\.folder-children > :last-child::before \{[^}]*border-bottom-left-radius:4px/);

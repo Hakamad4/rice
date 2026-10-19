@@ -2,6 +2,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, expect, it } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 beforeAll(() => {
@@ -84,8 +85,8 @@ it('logo do Rice: ícone sólido (fill currentColor, sem traço) com o desenho d
     expect(n.getAttribute('stroke')).toBe('none');
   }
   expect((shapes[1] as any).getAttribute('d')).toBe('M223 490 H834 A305.5 305.5 0 0 1 223 490 Z');
-  const html = readFileSync('src/renderer/index.html', 'utf8');
+  const html = rendered('src/renderer/index.html');
   expect(html).toContain('<span class="ico brand-mark" data-icon="rice"></span>');
   expect(html).not.toContain('🍚');
-  expect(readFileSync('src/renderer/nub.html', 'utf8')).toContain('<path d="M223 490 H834 A305.5 305.5 0 0 1 223 490 Z"');
+  expect(rendered('src/renderer/nub.html')).toContain('<path d="M223 490 H834 A305.5 305.5 0 0 1 223 490 Z"');
 });

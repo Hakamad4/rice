@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 
@@ -78,8 +79,8 @@ it('tutorial: passo curto de Privacidade que remete a Configurações', async ()
 });
 
 it('cartões em 1 coluna (ícone + título na linha, descrição embaixo) e 2 colunas só com o conteúdo ≥ 760px, sem max-width nas descrições; o cartão "O que sai" ocupa as 2 colunas', async () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
-  expect(css).toMatch(/\.priv-item \{[^}]*padding:14px; border-radius:10px; background:var\(--hover\)/);
+  const css = rendered('src/renderer/index.html');
+  expect(css).toMatch(/\.priv-item \{[^}]*padding:12px; border-radius:10px; background:var\(--hover\)/);
   expect(css).toMatch(/@container setcontent \(min-width: 760px\) \{ \.priv-list \{ grid-template-columns:1fr 1fr; \} \.priv-item\.wide \{ grid-column:1 \/ -1; \} \}/); // 1 coluna por padrão
   expect(css).toMatch(/\.priv-body \{ display:contents; \} \.priv-title \{ grid-column:2; grid-row:1;/);
   expect(css).toMatch(/\.priv-text, \.priv-today, \.priv-note \{ grid-column:1 \/ -1;/);

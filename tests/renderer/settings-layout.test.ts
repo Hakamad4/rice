@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 
@@ -105,10 +106,10 @@ it('em inglês: mesmos blocos, textos traduzidos', async () => {
   expect([...g.document.querySelectorAll('.folder-actions button')].map((b: any) => b.textContent)).toEqual(['Show in Finder', 'Change…']);
 });
 
-const css = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+const css = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
 
 it('responsivo (≤560px): linhas rótulo+controle viram coluna, segmentado em largura total com segmentos iguais, switches ficam ao lado do rótulo', async () => {
-  const block = css.split('@container detail (max-width: 560px) {')[1]?.split('\n  }\n')[0] ?? '';
+  const block = css.split('@container detail (max-width: 520px) {').slice(1).map((b) => b.split('\n  }\n')[0]).join('\n') // blocos de mesma largura (breakpoints fundidos) valem juntos;
   expect(block).toMatch(/\.set-row:not\(\.inline\) \{ flex-direction:column; align-items:stretch/);
   expect(block).toMatch(/\.set-row:not\(\.inline\) \.set-text \{ max-width:none; \}/);
   expect(block).toMatch(/\.set-row:not\(\.inline\) \.segmented \{ display:flex; width:100%; \}/);
@@ -214,7 +215,7 @@ it('menu de seções para telas estreitas: as seções viram abas sublinhadas ro
   g.localStorage.clear();
   await open();
   expect(g.document.querySelector('.set-picker')).toBeNull();
-  const block = css.split('@container detail (max-width: 620px) {')[1]?.split('\n  }\n')[0] ?? '';
+  const block = css.split('@container detail (max-width: 640px) {').slice(1).map((b) => b.split('\n  }\n')[0]).join('\n') // blocos de mesma largura (breakpoints fundidos) valem juntos;
   expect(block).toMatch(/\.set-nav \{ width:100%; flex-direction:row;[^}]*overflow-x:auto;[^}]*border-bottom:1px solid var\(--line\)/);
   expect(block).toMatch(/\.set-nav-group \{ display:none; \}/);
   expect(block).toMatch(/\.set-nav-item\[aria-current="true"\]::after \{[^}]*height:2px/);
@@ -233,8 +234,8 @@ it('responsivo: menu de 210px com itens de 32px e 13px; conteúdo em container p
 });
 
 it('responsivo (<620px): o conteúdo ocupa a largura toda (stretch + width:100%); sem isso o container-type o encolhia a ~0 e o texto ficava vertical', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
-  expect(css).toMatch(/@container detail \(max-width: 620px\) \{ \.set-layout \{ flex-direction:column; align-items:stretch; gap:0; \} \.set-content \{ flex:none; width:100%; \}/);
+  const css = rendered('src/renderer/index.html');
+  expect(css).toMatch(/@container detail \(max-width: 640px\) \{ \.set-layout \{ flex-direction:column; align-items:stretch; gap:0; \} \.set-content \{ flex:none; width:100%; \}/);
 });
 
 it('limite de ciclos: menu padrão com o valor atual; o aviso de "Sem limite" só aparece com 0', async () => {

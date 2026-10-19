@@ -2,12 +2,13 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 afterEach(() => vi.useRealTimers());
 
 it('o ponto de gravação não usa animação CSS infinita (mantinha renderer e GPU a 60 quadros/s, ~15% de um núcleo)', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).not.toMatch(/animation:\s*pulse/);
   expect(css).not.toMatch(/@keyframes pulse/);
   expect(css).toMatch(/body\.beat-off \.live-dot:not\(\.paused\)/);

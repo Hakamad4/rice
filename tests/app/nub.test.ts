@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { barSide, NUB_BAR_WIDTH, NUB_BTN_GAP, NUB_BTN_HEIGHT, NUB_BTN_WIDTH, NUB_COL_WIDTH, NUB_DIVIDER, NUB_PAD, NUB_HEIGHT, NUB_WIDTH, clampToWorkArea, expandedBounds, LevelThrottle, NubController, NUB_LEAVE_MS, NUB_POLL_MS, pillFromWindow, rmsLevel, shouldShowNub, windowBoundsFor, type NubWindow } from '../../src/main/app/nub';
+import { rendered } from '../helpers/tokens';
 
 const WA = { x: 0, y: 25, width: 1440, height: 875 };
 
@@ -392,7 +393,7 @@ describe('NubController hover e cliques', () => {
 });
 
 describe('medidas do nub: CSS e constantes concordam', () => {
-  const css = readFileSync('src/renderer/nub.html', 'utf8');
+  const css = rendered('src/renderer/nub.html');
   const px = (name: string) => Number(new RegExp(`--${name}:(\\d+)px`).exec(css)?.[1]);
 
   it('variáveis do :root espelham as constantes de nub.ts', () => {

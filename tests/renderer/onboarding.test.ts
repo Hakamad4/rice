@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 
@@ -533,7 +534,7 @@ describe('Conectar a IA: lista compacta com acordeão', () => {
   });
 
   it('com tudo recolhido a lista é baixa: 4 linhas de 48px', () => {
-    const html = readFileSync('src/renderer/index.html', 'utf8');
+    const html = rendered('src/renderer/index.html');
     expect(html).toMatch(/\.ai-head \{[^}]*height:48px/);
     expect(html).toMatch(/\.ai-detail \{[^}]*grid-template-rows:0fr/);
     expect(html).toMatch(/\.ai-card\.open \.ai-detail \{[^}]*grid-template-rows:1fr/);
@@ -632,10 +633,10 @@ describe('Conectar a IA: layout único do detalhe', () => {
   });
 
   it('CSS: 16px de respiro, 12px entre blocos, círculo de 18px, código com fundo --hover e raio 6px, hairline no rodapé', () => {
-    const html = readFileSync('src/renderer/index.html', 'utf8');
+    const html = rendered('src/renderer/index.html');
     expect(html).toMatch(/\.ai-pad \{[^}]*padding:16px[^}]*gap:12px/);
     expect(html).toMatch(/\.ai-step-n \{[^}]*width:18px; height:18px[^}]*background:var\(--hover\)[^}]*font-size:11px/);
-    expect(html).toMatch(/\.cmd-line code \{[^}]*font:12\.5px[^}]*white-space:pre; overflow-x:auto/); // 'curl … | bash' não quebra no meio: rolagem discreta dentro do bloco
+    expect(html).toMatch(/\.cmd-line code \{[^}]*font:12px[^}]*white-space:pre; overflow-x:auto/); // 'curl … | bash' não quebra no meio: rolagem discreta dentro do bloco
     expect(html).toMatch(/\.cmd-copy \{[^}]*width:28px; height:28px/);
     expect(html).toMatch(/\.cmd-line \{[^}]*min-height:36px[^}]*padding:8px 10px 8px 12px; background:var\(--hover\); border-radius:8px; box-shadow:inset 0 0 0 1px var\(--line\)/);
     expect(html).toMatch(/\.ai-foot \{[^}]*padding-top:12px; border-top:1px solid var\(--line\)/);
@@ -644,7 +645,7 @@ describe('Conectar a IA: layout único do detalhe', () => {
 });
 
 describe('Como usar o Rice: esqueleto e indicadores harmônicos', () => {
-  const style = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const style = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
 
   it('indicador de estado igual em todos: círculo com o número; pronto = círculo cheio com check de linha (nada de "✓" em texto)', async () => {
     const box = await guide({ aiStatus: async () => aiStatus('claude-sub', { 'claude-sub': provider({ connected: true, hasKey: true }) }), asrStatus: async () => ({ state: 'ready' }) });
@@ -681,7 +682,7 @@ describe('Como usar o Rice: esqueleto e indicadores harmônicos', () => {
     expect(style).not.toMatch(/\.step\.done \.step-badge \{[^}]*accent/);
     expect(style).toMatch(/\.step-body > p \{[^}]*font-size:13px[^}]*color:var\(--muted\)/);
     expect(style).toMatch(/\.step-body \{ padding-left:32px; \}/); // 20px do círculo + 12px de espaço = alinha com o título
-    expect(style).toMatch(/@container detail \(max-width: 560px\) \{[^@]*\.step-body \{ padding-left:0; \}/);
+    expect(style).toMatch(/@container detail \(max-width: 520px\) \{[^@]*\.step-body \{ padding-left:0; \}/);
     expect(style).not.toMatch(/\.path-hl \{[^}]*ui-monospace/); // caminho em fonte normal
   });
 });
@@ -712,7 +713,7 @@ describe('Como usar o Rice: rodapé e alinhamento', () => {
     expect(ok.querySelector('.guide-foot .hint')).toBeNull();
   });
 
-  const style = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+  const style = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
 });
 
 describe('Como usar o Rice: passos com lista de status e rodapé (mesmo padrão das IAs e da Agenda)', () => {

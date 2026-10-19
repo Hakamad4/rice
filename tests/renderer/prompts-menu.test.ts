@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { normalizeSavedPrompts } from '../../src/shared/saved-prompts';
 import { bootRenderer, type } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const MEETINGS = [{ dir: '/R/a', title: 'Kickoff', startedAt: new Date().toISOString(), state: 'done', notesStatus: 'done' }];
@@ -180,13 +181,13 @@ it('o main normaliza: texto puro, uma linha, sem repetir, no máximo 8 e 300 car
 });
 
 it('menu acima do campo e botão de 28px na linha do campo (CSS)', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.prompts-btn \{[^}]*width:\s*28px[^}]*height:\s*28px/);
   expect(readFileSync('src/renderer/action-menu.js', 'utf8')).toMatch(/placement === 'above'/);
 });
 
 it('a seta do submenu é cinza (só o ✓ de item marcado usa o destaque)', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.menu-item\.has-submenu > \.check \{ color:var\(--muted\); \}/);
   expect(css).toMatch(/\.menu-item \.check \{[^}]*color:var\(--accent\)/);
 });

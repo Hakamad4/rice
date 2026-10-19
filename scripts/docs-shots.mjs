@@ -434,6 +434,10 @@ const scenes = (lang) => {
       await app.sleep(600);
       return { width: 760, height: 250 };
     }, 'alert'],
+    // Mini painel (nub.html): a MESMA página nesta janela invisível, com um stub no lugar do preload (window.nub). Fundo neutro só para a composição.
+    ['49-nub-collapsed', async (app) => { await nubScene(app, lang, { hover: false }); return { width: 260, height: 200 }; }, 'alert'],
+    ['50-nub-expanded', async (app) => { await nubScene(app, lang, { hover: true }); return { width: 260, height: 200 }; }, 'alert'],
+    ['51-nub-chat', async (app) => { await nubScene(app, lang, { chat: true }); return { width: 340, height: 440 }; }, 'alert'],
     ['46-record-prompt', async (app) => {
       // Notificação NATIVA do macOS (main.ts notify): nada é disparado de verdade. Recriação em HTML do banner, com os textos reais das chaves
       // notify.record.title / .action / .mute, sobre um fundo neutro que cobre a janela só durante a captura.
@@ -577,6 +581,22 @@ function startFakeOllama() {
   return new Promise((ok, fail) => { server.once('error', fail); server.listen(11434, '127.0.0.1', () => ok(server)); });
 }
 
+/** Carrega nub.html na janela de teste e põe o mini painel no estado pedido (recolhido, com o cursor em cima ou com o chat aberto). */
+async function nubScene(app, lang, { hover = false, chat = false }) {
+  const stub = `window.nub = { uiLanguage: ${JSON.stringify(lang)}, on(ev, cb) { (window.__nub ||= {})[ev] = cb; }, expand: async () => ({ ok: true, title: ${JSON.stringify(lang === 'en' ? 'Quarter planning' : 'Planejamento do trimestre')}, lines: [{ who: ${JSON.stringify(lang === 'en' ? 'Ana' : 'Ana')}, text: ${JSON.stringify(lang === 'en' ? 'We should start with the pilot.' : 'Vamos começar pelo piloto.')} }] }), collapse: async () => ({}), ask: async () => ({}), cancel() {}, openMain() {}, stop() {}, pause() {}, dragEnd() {} };`;
+  await app.setSize(chat ? 340 : 260, chat ? 440 : 200);
+  await app.navigate(pathToFileURL(join(repo, 'src/renderer/nub.html')).href, stub);
+  await app.eval(`(() => {
+    document.documentElement.style.background = 'linear-gradient(135deg, #4a4f5c 0%, #2b2f3a 100%)';
+    window.__nub['nub:state']({ paused: false });
+    window.__nub['nub:level']({ mic: 0.8, sys: 0.5 });
+    ${hover ? "window.__nub['nub:hover'](true);" : ''}
+    ${chat ? "document.getElementById('chat').click();" : ''}
+    return true;
+  })()`);
+  await app.sleep(700);
+}
+
 async function runLang(lang, groupName) {
   const group = GROUPS[groupName];
   const todo = scenes(lang).filter((scene) => sceneGroup(scene) === groupName && (!process.env.DOCS_ONLY || process.env.DOCS_ONLY.split(',').includes(scene[0])));
@@ -647,13 +667,29 @@ async function runLang(lang, groupName) {
     // espera a lista da barra lateral carregar (no primeiro lançamento de um idioma ela pode demorar)
     for (let i = 0; i < 20 && Number(await app.eval(`document.querySelectorAll('.meeting').length`)) < 6; i++) await app.sleep(1000);
     console.log(`${lang}/${groupName}: reuniões vistas pelo app =`, await app.eval(`window.rice.listMeetings().then((m) => m.length)`), '| linhas no DOM =', await app.eval(`document.querySelectorAll('.meeting').length`), '| pastas no DOM =', await app.eval(`document.querySelectorAll('.folder-row').length`), '| erros?', await app.eval(`window.__docsErr || ''`));
-    await app.theme('dark');
+    await app.theme(process.env.DOCS_THEME || 'dark');
     for (const [name, step] of todo) {
       try {
         // cada cena começa limpa: sem busca digitada, sem menu aberto, sem aviso de consentimento
         await app.eval(`(() => { document.getElementById('search-clear')?.click(); window.RiceActionMenu?.close(); window.RiceConsent?.hide?.(); document.getElementById('docs-overlay')?.remove(); [...document.querySelectorAll('[role=dialog] button')].find((b) => /^(Cancelar|Cancel|Fechar|Close)$/.test(b.textContent.trim()))?.click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); return true; })()`);
         await app.sleep(300);
         const dims = (await step(app)) || {}; // a cena pode capturar uma área menor (aviso, notificação)
+        if (process.env.DOCS_VARIANTS === '1') {
+          // design-system: a MESMA cena em claro/escuro, janela normal e pequena (420 px). Cenas com tamanho próprio (aviso, nub) só variam o tema.
+          for (const theme of ['light', 'dark']) {
+            for (const [sizeName, [w, h]] of Object.entries({ normal: [W, H], small: [420, 760] })) {
+              if (dims.width && sizeName === 'small') continue;
+              await app.theme(theme);
+              if (!dims.width) await app.setSize(w, h);
+              await app.sleep(500);
+              await app.shot(join(out, `${name}__${theme}-${sizeName}.png`), { x: 0, y: 0, width: dims.width ?? w, height: dims.height ?? h });
+            }
+          }
+          await app.setSize(W, H);
+          await app.theme(process.env.DOCS_THEME || 'dark');
+          console.log(`ok ${lang} ${name} (variantes)`);
+          continue;
+        }
         const file = join(out, `${name}.png`);
         await app.shot(file, { x: 0, y: 0, width: dims.width ?? W, height: dims.height ?? H });
         if (dims.width) await app.setSize(W, H);

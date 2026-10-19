@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const meetings = [{ dir: '/R/a', title: 'Planejamento', startedAt: '2026-01-01T10:00:00-03:00', state: 'done' }];
@@ -45,7 +46,7 @@ it('"Pausar" ao lado de "Parar" só gravando; pausado, o estado vive no próprio
   handlers['session:pause']!({ dir: '/R/a', paused: false });
   expect(pauseBtn().textContent).toBe('Pausar');
   expect(pauseBtn().classList.contains('paused')).toBe(false);
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.pause-btn\.paused \{ color:var\(--warn\); \}/);
 });
 
@@ -64,7 +65,7 @@ it('pausado, a barra lateral diz "Pausado" e o ponto fica âmbar e parado (item 
   expect(dots().every((d) => d.classList.contains('paused'))).toBe(true);
   expect([...g.document.querySelectorAll('.meeting .live-dot')].every((d: any) => d.title === 'Pausado')).toBe(true);
   expect(g.document.getElementById('rec').classList.contains('paused')).toBe(true); // o ponto do "Parar" também
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.live-dot\.paused \{ background:var\(--warn\); animation:none; \}/);
   expect(css).toMatch(/#rec\.recording\.paused \.rec-dot \{ background:var\(--warn\); animation:none; \}/);
   handlers['session:pause']!({ dir: '/R/a', paused: false });

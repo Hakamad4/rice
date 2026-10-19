@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 beforeAll(() => {
@@ -89,9 +90,9 @@ it('clicar no título ou no bloco abre a edição; clicar numa ação não abre'
 });
 
 it('CSS da lista: grade emoji|conteúdo, ações alinhadas ao título, sem position:absolute, padding 12×14 e raio 10', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   const block = css.split('.tpl-block {')[1]?.split('}')[0] ?? '';
-  for (const p of ['grid-template-columns:28px minmax(0,1fr)', 'padding:12px 14px', 'border-radius:10px', 'margin:0 -14px 4px']) expect(block).toContain(p);
+  for (const p of ['grid-template-columns:28px minmax(0,1fr)', 'padding:12px 12px', 'border-radius:10px', 'margin:0 -12px 4px']) expect(block).toContain(p);
   expect(css).toMatch(/\.tpl-actions \{[^}]*gap:4px 16px/);
   expect(css).toMatch(/\.tpl-actions \{[^}]*grid-column:2/);
   expect(css).toMatch(/\.tpl-desc \{[^}]*-webkit-line-clamp:2/);

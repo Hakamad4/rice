@@ -17,6 +17,7 @@ const WIN: Record<SystemPanel, string> = {
 export const systemPanelUrl = (panel: SystemPanel): string => (isWindows() ? WIN : MAC)[panel];
 
 /** Cores da barra de título do Windows (os botões nativos desenhados sobre a nossa faixa de 48px CSS). */
+/** Cor da faixa dos botões do Windows = `--bg` de design/tokens.css (claro #fcfcfb, escuro #191919); tests/design/tokens.test.ts confere. */
 export function titleBarOverlay(dark: boolean, zoom = 1): { color: string; symbolColor: string; height: number } {
-  return { color: dark ? '#191919' : '#ffffff', symbolColor: dark ? '#ffffff' : '#1d1d1f', height: Math.max(24, Math.round(48 * zoom)) };
+  return { color: dark ? '#191919' : '#fcfcfb', symbolColor: dark ? '#ffffff' : '#1d1d1f', height: Math.max(24, Math.round(48 * zoom)) };
 }

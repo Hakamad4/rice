@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, it, vi } from 'vitest';
 import { bootRenderer, press } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const meetings = [{ dir: '/R/a', title: 'Planejamento', startedAt: '2026-01-01T10:00:00-03:00', state: 'done' }];
@@ -43,7 +44,7 @@ it('transcrição: miniatura de 64px no ponto do tempo (depois da fala do segmen
   expect(first.querySelector('.shot-img').src).toContain('data:image/jpeg');
   expect(first.querySelector('.shot-text').textContent).toBe('Slide de metas do trimestre');
   expect(first.querySelector('.shot-clock').textContent).toBe('10:00:45');
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.shot-img \{[^}]*height:64px[^}]*border-radius:6px/);
   expect(css).toMatch(/\.shot-caption \{[^}]*color:var\(--muted\)/);
 });

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { vi } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 
@@ -27,7 +28,7 @@ export function bootRenderer(overrides: Record<string, unknown> = {}, meetings: 
   };
   g.window.rice = rice;
   g.localStorage.clear();
-  const html = readFileSync('src/renderer/index.html', 'utf8');
+  const html = rendered('src/renderer/index.html');
   g.document.documentElement.innerHTML = html.replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const m of html.matchAll(/<script src="([^"]+)"><\/script>/g)) new Function(readFileSync(`src/renderer/${m[1]}`, 'utf8'))();
   return { rice, handlers };

@@ -100,6 +100,15 @@ describe('Gerar agora: etapas e parada', () => {
   });
 });
 
+/** Espera por condição (não por tempo fixo): o ciclo só marca "rodando" depois de ler a config do disco, o que sob carga passa de 20 ms. */
+async function until(cond: () => boolean, ms = 5000) {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) throw new Error('condição não atingida');
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
 describe('todas as trilhas: clique/ativação → "rodando"', () => {
   const cfgWar = { ...defaultConfig(), kind: 'warroom' as const, ideas: { on: true, intervalMin: 5 }, investigation: { intervalMin: 5, paused: false } };
   const make = async (partials: () => string[]) => {
@@ -133,7 +142,7 @@ describe('todas as trilhas: clique/ativação → "rodando"', () => {
   test.each(['ideas', 'investigation'] as const)('"%s": clique duplo (segundo tick) devolve busy e não abre outro ciclo', async (track) => {
     const { engine, dir } = await make(() => ['…']);
     const first = engine.tick(dir, { manual: true, track });
-    await new Promise((r) => setTimeout(r, 20));
+    await until(() => engine.state(dir).track === track);
     expect(await engine.tick(dir, { manual: true, track })).toBe('busy');
     engine.abort(dir);
     await first;
@@ -142,8 +151,8 @@ describe('todas as trilhas: clique/ativação → "rodando"', () => {
   test.each(['ideas', 'investigation'] as const)('"%s": Parar na preparação cancela sem erro', async (track) => {
     const { engine, dir } = await make(() => ['…']);
     const done = engine.tick(dir, { manual: true, track });
-    await new Promise((r) => setTimeout(r, 20));
-    expect(engine.state(dir).track).toBe(track);
+    await until(() => engine.state(dir).track === track);
+    expect(engine.state(dir).phase).toBe('preparing');
     engine.abort(dir);
     expect(await done).toBe('skipped');
     const s = engine.state(dir);

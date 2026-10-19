@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { expect, it, vi, describe } from 'vitest';
+import { rendered, tokenValue } from '../helpers/tokens';
 
 const g = globalThis as any;
 /** A transcrição vive na sua própria aba da reunião. */
@@ -38,7 +39,7 @@ it('renderer: lista agrupada por dia, abre reunião e renomeia pelo título', as
     on: () => {},
   };
   g.window.rice = rice;
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
@@ -77,7 +78,7 @@ it('renderer: painel "Pergunte ao Rice" recolhido sem reunião, lembra a escolha
     onDelta: () => {},
     on: () => {},
   };
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
@@ -125,7 +126,7 @@ it('renderer: sem localStorage o painel ainda funciona', async () => {
       onDelta: () => {},
       on: () => {},
     };
-    g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
+    g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
       .replace(/<script[^>]*><\/script>/g, '')
       .replace(/^[\s\S]*?<html[^>]*>/, '');
     for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
@@ -156,7 +157,7 @@ function bootDraft(state: string, startRecording: (input: unknown) => Promise<un
     onDelta: () => {},
     on: () => {},
   };
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
@@ -214,7 +215,7 @@ async function boot(extra: Record<string, unknown> = {}, meetings = [{ dir: '/R/
     ...extra,
   };
   g.window.rice = rice;
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
@@ -389,7 +390,7 @@ it('renderer: seletor de template na reunião; trocar numa reunião resumida ofe
     on: () => {},
   };
   g.window.rice = rice;
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
@@ -421,7 +422,7 @@ it('renderer: tela Templates abre pela barra lateral', async () => {
     on: () => {},
   };
   g.window.rice = rice;
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
@@ -452,7 +453,7 @@ async function bootMeeting(notes: string, extra: Record<string, any> = {}) {
     ...extra,
   };
   g.window.rice = rice;
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8')
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
@@ -532,7 +533,7 @@ it('renderer: após gravar a partir de um draft, o rótulo fica "Continuar grava
     onDelta: () => {},
     on: (c: string, fn: any) => (handlers[c] = fn),
   };
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
@@ -616,8 +617,8 @@ it('⌘K foca a busca (e reabre a sidebar recolhida)', async () => {
 });
 
 it('faixa de título: botão de recolher no-drag, 28×28, centrado com os semáforos (faixa de 48px) e sem lupa', () => {
-  const html = readFileSync('src/renderer/index.html', 'utf8');
-  expect(html).toContain('--titlebar:48px'); // centro 24px = semáforos em y:18 + 6
+  const html = rendered('src/renderer/index.html');
+  expect(tokenValue('--titlebar')).toBe('48px'); // centro 24px = semáforos em y:18 + 6
   expect(html).toMatch(/\.win-tools \{[^}]*align-items:center/);
   expect(html).toMatch(/\.win-tools \{[^}]*height:var\(--titlebar\)/);
   expect(html).toMatch(/\.icon-btn \{[^}]*width:28px; height:28px/);
@@ -625,7 +626,7 @@ it('faixa de título: botão de recolher no-drag, 28×28, centrado com os semáf
   expect(html).not.toContain('id="search-toggle"');
   expect(readFileSync('src/main/app/main.ts', 'utf8')).toContain('trafficLightPosition: { x: 16, y: 18 }');
   const search = html.split('.search-box {')[1]?.split('}')[0] ?? '';
-  for (const p of ['height:30px', 'border-radius:8px', 'background:var(--field-bg)']) expect(search).toContain(p);
+  for (const p of ['height:28px', 'border-radius:8px', 'background:var(--field-bg)']) expect(search).toContain(p);
 });
 
 it('apagar: Enter só confirma com a palavra certa, Esc cancela, "apagar" em destaque', async () => {
@@ -686,7 +687,7 @@ async function bootLang(uiLanguage: string, extra: Record<string, any> = {}, met
   };
   g.window.rice = rice;
   g.localStorage.clear();
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/index.html', 'utf8').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
+  g.document.documentElement.innerHTML = rendered('src/renderer/index.html').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
   for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'ai-providers', 'chat-tools', 'calendar-connect', 'menu-select', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   return { rice, handlers };
@@ -896,7 +897,7 @@ it('Configurações: abre pelo menu do app (app:open-settings) e o atalho de IA 
 
 /** Regiões `-webkit-app-region` declaradas no <style> do index.html, em ordem (a última regra que casa vence). */
 function appRegionRules(): Array<{ selector: string; value: string }> {
-  const html = readFileSync('src/renderer/index.html', 'utf8');
+  const html = rendered('src/renderer/index.html');
   const css = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
   const rules: Array<{ selector: string; value: string }> = [];
   for (const m of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
@@ -1163,7 +1164,7 @@ it('regressão de arrasto (ordem do DOM): .win-tools vem depois de toda região 
     expect(effectiveRegion(button, rules)).toBe('no-drag');
   }
   // a faixa da sidebar é recortada: o trecho direito começa depois dos semáforos + botões
-  const html = readFileSync('src/renderer/index.html', 'utf8');
+  const html = rendered('src/renderer/index.html');
   expect(html).toMatch(/\.side-drag-right \{[^}]*left:calc\(var\(--tools-left\) \+ var\(--tools-width\)\)/);
   expect(html).toMatch(/\.side-drag-left \{[^}]*width:var\(--tools-left\)/);
   expect(html).not.toMatch(/\.side-drag \{[^}]*(?:left:0;[^}]*right:0)/); // não é mais uma faixa única de ponta a ponta

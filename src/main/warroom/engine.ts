@@ -292,9 +292,9 @@ export class WarRoomEngine {
   private active = (cfg: WarRoomConfig) => cfg.ideas.on || this.investigating(cfg);
 
   /** Espera (no máximo SETTLE_MS) a fala ativa virar segmento final; sem fala ativa, não espera nada. */
-  private async settle(dir: string): Promise<void> {
+  private async settle(dir: string, signal: AbortSignal): Promise<void> {
     const deadline = this.now() + SETTLE_MS;
-    while ((this.deps.partials?.(dir) ?? []).length > 0 && this.now() < deadline) await new Promise((r) => setTimeout(r, 250));
+    while ((this.deps.partials?.(dir) ?? []).length > 0 && this.now() < deadline && !signal.aborted) await new Promise((r) => setTimeout(r, 250));
   }
 
   /** "Parar": aborta o ciclo em andamento sem erro; o agendamento segue (ou fica parado se a trilha foi pausada). */
@@ -372,7 +372,7 @@ export class WarRoomEngine {
     if (options.manual) begin();
     try {
       if (options.manual) {
-        await this.settle(dir); // espera (até ~3 s) a fala em andamento fechar antes de ler
+        await this.settle(dir, controller.signal); // espera (até ~3 s) a fala em andamento fechar antes de ler
         if (controller.signal.aborted) throw new Error('cancelled');
       }
       const full = await this.deps.transcript(dir);
