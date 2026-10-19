@@ -1,5 +1,7 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
@@ -152,5 +154,108 @@ describe('CI', () => {
     expect(smoke).not.toContain('msvc-dev-cmd');
     expect(smoke).toContain("-notmatch 'country'"); // a amostra jfk.wav precisa sair transcrita
     expect(smoke).toContain("'no GPU found'"); // e na CPU
+  });
+});
+
+describe('tradução offline no empacotamento', () => {
+  const run = (env: Record<string, string>) => spawnSync('bash', ['scripts/build-translate.sh'], { env: { ...process.env, RICE_CMAKE: 'cmake-que-nao-existe', RICE_OFFLINE_TRANSLATION: '', RICE_RELEASE: '', ...env }, encoding: 'utf8' });
+  const flag = /^export const OFFLINE_TRANSLATION = (true|false);/m.exec(readFileSync('src/main/translate/flags.ts', 'utf8'))?.[1];
+
+  describe('chave DESABILITADA (release 0.6.9: só a tradução pela IA)', () => {
+    test('a constante OFFLINE_TRANSLATION está em false', () => {
+      expect(flag).toBe('false');
+    });
+    test('build de release não compila e NÃO exige cmake (RICE_RELEASE=1, sem cmake): sai 0', () => {
+      const envs: Record<string, string>[] = [{ RICE_RELEASE: '1' }, { RICE_RELEASE: '1', RICE_OFFLINE_TRANSLATION: '0' }];
+      for (const env of envs) {
+        const r = run(env);
+        expect(r.status).toBe(0);
+        expect(r.stdout).toMatch(/desabilitada/);
+        expect(r.stderr).not.toMatch(/ERRO/);
+      }
+    });
+    test('mesmo com RICE_OFFLINE_TRANSLATION=0 sobre uma constante true, nada é compilado', () => {
+      const r = run({ RICE_RELEASE: '1', RICE_OFFLINE_TRANSLATION: '0' });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(/não compilado/);
+    });
+    test('o stage (.sh e .ps1) só copia o binário com a chave habilitada, e o workflow de release pula a compilação', () => {
+      const sh = readFileSync('scripts/stage-native.sh', 'utf8');
+      expect(sh).toMatch(/if ! offline_translation_enabled; then[\s\S]*sem rice-translate[\s\S]*elif \[ -x native\/translate/);
+      const ps1 = readFileSync('scripts/stage-native-win.ps1', 'utf8');
+      expect(ps1).toMatch(/if \(-not \$offline\) \{[\s\S]*desabilitada[\s\S]*\} else \{[\s\S]*Copy-Item \$tr/);
+      expect(ps1).toContain('OFFLINE_TRANSLATION');
+      const wf = readFileSync('.github/workflows/release-windows.yml', 'utf8');
+      expect(wf).toMatch(/if: steps\.offline\.outputs\.enabled == '1'/);
+      expect(wf).toContain('OFFLINE_TRANSLATION = true');
+    });
+  });
+
+  describe('chave HABILITADA (RICE_OFFLINE_TRANSLATION=1)', () => {
+    test('RICE_RELEASE=1 sem cmake: o build FALHA (nunca segue em silêncio sem o motor)', () => {
+      const r = run({ RICE_OFFLINE_TRANSLATION: '1', RICE_RELEASE: '1' });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/ERRO: cmake não encontrado/);
+    });
+    test('fora do modo release só avisa e segue (RICE_RELEASE ausente, vazio ou 0)', () => {
+      const envs: Record<string, string>[] = [{ RICE_RELEASE: '' }, { RICE_RELEASE: '0' }];
+      for (const env of envs) {
+        const r = run({ RICE_OFFLINE_TRANSLATION: '1', ...env });
+        expect(r.status).toBe(0);
+        expect(r.stderr).toMatch(/aviso: cmake não encontrado/);
+      }
+    });
+    test('o stage exige o binário com RICE_RELEASE=1 e o workflow define RICE_RELEASE', () => {
+      expect(readFileSync('scripts/stage-native.sh', 'utf8')).toMatch(/RICE_RELEASE[\s\S]*exit 1/);
+      expect(readFileSync('scripts/stage-native-win.ps1', 'utf8')).toMatch(/RICE_RELEASE[^\n]*throw/);
+      expect(readFileSync('.github/workflows/release-windows.yml', 'utf8')).toMatch(/RICE_RELEASE: '1'/);
+    });
+  });
+
+  describe('stage-native.sh de verdade, numa cópia temporária do repositório', () => {
+    const stage = (env: Record<string, string>, withBinary: boolean) => {
+      const root = mkdtempSync(join(tmpdir(), 'rice-stage-'));
+      mkdirSync(join(root, 'scripts'));
+      mkdirSync(join(root, 'src/main/translate'), { recursive: true });
+      copyFileSync('scripts/stage-native.sh', join(root, 'scripts/stage-native.sh'));
+      copyFileSync('scripts/offline-translation.sh', join(root, 'scripts/offline-translation.sh'));
+      copyFileSync('src/main/translate/flags.ts', join(root, 'src/main/translate/flags.ts'));
+      const bins = ['rice-audio', 'rice-detector', ...(withBinary ? ['rice-translate'] : [])];
+      for (const b of bins) {
+        const dir = b === 'rice-translate' ? 'translate' : b;
+        mkdirSync(join(root, 'native', dir, '.build/release'), { recursive: true });
+        writeFileSync(join(root, 'native', dir, '.build/release', b), '#!/bin/sh\n', { mode: 0o755 });
+      }
+      const r = spawnSync('bash', ['scripts/stage-native.sh'], { cwd: root, env: { ...process.env, RICE_OFFLINE_TRANSLATION: '', RICE_RELEASE: '', ...env }, encoding: 'utf8' });
+      const staged = existsSync(join(root, 'native-bin')) ? readdirSync(join(root, 'native-bin')).sort() : [];
+      rmSync(root, { recursive: true, force: true });
+      return { status: r.status, stderr: r.stderr, staged };
+    };
+    test('desabilitada: o binário não entra no app, mesmo existindo e com RICE_RELEASE=1', () => {
+      const r = stage({ RICE_RELEASE: '1' }, true);
+      expect(r.status).toBe(0);
+      expect(r.staged).toEqual(['rice-audio', 'rice-detector']);
+    });
+    test('habilitada: o binário entra; sem ele, RICE_RELEASE=1 falha e sem RICE_RELEASE só avisa', () => {
+      expect(stage({ RICE_OFFLINE_TRANSLATION: '1', RICE_RELEASE: '1' }, true).staged).toEqual(['rice-audio', 'rice-detector', 'rice-translate']);
+      const sem = stage({ RICE_OFFLINE_TRANSLATION: '1', RICE_RELEASE: '1' }, false);
+      expect(sem.status).toBe(1);
+      expect(sem.stderr).toMatch(/ERRO: falta native\/translate/);
+      const aviso = stage({ RICE_OFFLINE_TRANSLATION: '1' }, false);
+      expect(aviso.status).toBe(0);
+      expect(aviso.stderr).toMatch(/aviso: sem rice-translate/);
+    });
+  });
+
+  test('build-native.sh chama o build do rice-translate (que decide pela chave)', () => {
+    expect(readFileSync('scripts/build-native.sh', 'utf8')).toContain('scripts/build-translate.sh');
+  });
+  test('o app leva native-bin/ (rice-translate no Mac; .exe em native-bin/win no Windows, sem o binário do Mac) e os avisos de terceiros', () => {
+    for (const files of [pkg.build.files, pkg.build.mac.files, pkg.build.win.files] as string[][]) {
+      expect(files).toContain('native-bin/**');
+      expect(files).toContain('THIRD-PARTY-NOTICES.md');
+    }
+    expect(pkg.build.win.files).toContain('!native-bin/rice-translate');
+    expect(pkg.build.mac.files).toContain('!native-bin/win/**');
   });
 });

@@ -407,6 +407,16 @@
   .speaker-pop .chip:hover { background:var(--active); } .speaker-pop .link-button { align-self:flex-start; padding:0; margin:0; }
   .t-row.t-partial { color:var(--muted); }
   .t-row.t-gap { color:var(--faint); font-style:italic; font-size:var(--fs-sm); }
+  /* tradução ao vivo: botão ao lado das abas; a fala original em itálico e a tradução em azul (--translation) logo abaixo */
+  .tr-split[hidden], .tr-note[hidden], .tr-below[hidden] { display:none; } .tr-below { flex:1 1 100%; display:flex; flex-direction:column; align-items:flex-start; gap:var(--space-2); } .tr-below .tr-split { margin-left:0; } .tr-below .tr-split-narrow { display:none; } @container detail (max-width: 460px) { .tr-split-wide { display:none; } .tr-below .tr-split-narrow:not([hidden]) { display:inline-flex; } } @container detail (min-width: 461px) { .tr-below:has(> .tr-note[hidden]) { display:none; } } /* coluna estreita: o botão sai da linha das abas (que rola) e vai logo abaixo */
+  .tr-split { flex:none; margin-left:auto; align-self:center; display:inline-flex; align-items:stretch; height:var(--h-md); border-radius:var(--radius-pill); box-shadow:var(--shadow-hairline); color:var(--muted); } .tr-split.on { color:var(--translation); box-shadow:inset 0 0 0 1px var(--translation); }
+  .tr-btn, .tr-menu-btn { display:inline-flex; align-items:center; gap:var(--space-15); color:inherit; background:transparent; font-size:var(--fs-md); } .tr-btn { padding:0 var(--space-25) 0 var(--space-3); border-radius:var(--radius-pill) 0 0 var(--radius-pill); white-space:nowrap; } .tr-menu-btn { padding:0 var(--space-2); border-radius:0 var(--radius-pill) var(--radius-pill) 0; }
+  .tr-btn:hover, .tr-menu-btn:hover { color:var(--ink); background:var(--hover); } .tr-split.on .tr-btn:hover, .tr-split.on .tr-menu-btn:hover { color:var(--translation); } .tr-btn .icon { width:var(--icon-md); height:var(--icon-md); }
+  .tr-code::before { content:" · "; white-space:pre; } @container detail (max-width: 700px) { .tr-label { display:none; } .tr-code::before { content:none; } .tr-btn { padding:0 var(--space-25); } } /* janela pequena ou zoom alto: só o ícone (e o idioma, ligado) */
+  .tr-note { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); font-size:var(--fs-sm); color:var(--muted); } .tr-note-text { flex:1 1 220px; min-width:0; overflow-wrap:anywhere; } .tr-note-btn.quiet { box-shadow:none; color:var(--muted); }
+  .tr-off { display:flex; flex-direction:column; align-items:flex-start; gap:var(--space-2); max-width:100%; } .tr-off-status { font-size:var(--fs-sm); color:var(--muted); overflow-wrap:anywhere; } .tr-off-actions { display:flex; flex-wrap:wrap; gap:var(--space-2); }
+  .tr-packs { display:flex; flex-direction:column; gap:var(--space-1); width:100%; } .tr-pack { display:flex; align-items:center; gap:var(--space-2); min-height:var(--h-md); font-size:var(--fs-md); } .tr-pack-name { flex:1 1 auto; min-width:0; } .tr-pack-size { flex:none; font-size:var(--fs-sm); color:var(--muted); font-variant-numeric:tabular-nums; } .tr-pivot { margin:var(--space-1) 0 0; font-size:var(--fs-sm); color:var(--muted); } .tr-credits { margin-top:var(--space-3); font-size:var(--fs-sm); color:var(--muted); } .tr-credits summary { cursor:pointer; color:var(--ink); } .tr-credits p { margin:var(--space-2) 0 0; max-width:60ch; }
+  .t-row.tr-orig .t-text { font-style:italic; } .t-row .t-tr { display:block; margin-top:var(--space-05); color:var(--translation); font-style:normal; overflow-wrap:anywhere; }
 
   /* conversa (recolhível) */
   /* painel de chat (280–420 px): cabeçalho e campo fixos, só a lista de mensagens rola, nada estoura a largura */
@@ -1090,6 +1100,7 @@
   <script src="followups.js"></script>
   <script src="memory-page.js"></script>
   <script src="warroom.js"></script>
+  <script src="translate.js"></script>
   <script src="sidebar-menu.js"></script>
   <script src="mic-chip.js"></script>
   <script src="audio-settings.js"></script>

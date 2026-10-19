@@ -1,0 +1,95 @@
+name: translate-native
+
+# Compila o rice-translate (sidecar de tradução offline: CTranslate2 + sentencepiece, fixados por tag no CMake) no macOS e no Windows,
+# roda os testes do núcleo e o protocolo em modo simulado, e mede o tamanho do binário. Com a release de modelos publicada, o job
+# `bench` também mede a latência por frase em CPU x86 (Windows) e Apple Silicon.
+on:
+  push:
+    branches: [feat/integration, main, 'feat/translate-*']
+    paths: ['native/translate/**', 'native/win/common/**', 'tests/native/rice-translate.test.ts', 'tests/fixtures/fake-rice-translate.mjs', 'scripts/translation-models/**', '.github/workflows/translate-native.yml']
+  pull_request:
+    paths: ['native/translate/**', 'native/win/common/**', 'scripts/translation-models/**', '.github/workflows/translate-native.yml']
+  workflow_dispatch:
+    inputs:
+      bench:
+        description: 'Medir a latência com modelos baixados da release translation-models-v1'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.os == 'windows-latest'
+        with:
+          arch: x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Configurar e compilar (CTranslate2 com Ruy, sem MKL/OpenMP)
+        shell: bash
+        run: |
+          cmake -S native/translate -B native/translate/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build native/translate/build
+      - name: Testes do núcleo (divisão em frases, cache de modelos)
+        shell: bash
+        run: ctest --test-dir native/translate/build --output-on-failure
+      - name: Protocolo do binário real em modo --simulate (cliente TS)
+        shell: bash
+        env:
+          RICE_TRANSLATE_BIN: ${{ github.workspace }}/native/translate/build/rice-translate${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+        run: npx vitest run tests/native/rice-translate.test.ts tests/translate/sidecar.test.ts
+      - name: Tamanho do binário
+        shell: bash
+        run: ls -l native/translate/build/rice-translate*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rice-translate-${{ matrix.os }}
+          path: native/translate/build/rice-translate*
+          if-no-files-found: error
+          retention-days: 14
+
+  bench:
+    name: latência (${{ matrix.os }})
+    if: github.event_name == 'workflow_dispatch' && inputs.bench
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: rice-translate-${{ matrix.os }}
+          path: bin
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Baixar os modelos da release e medir (CPU ${{ runner.arch }}, 1 thread)
+        shell: bash
+        run: |
+          chmod +x bin/rice-translate* || true
+          EXE="bin/rice-translate"; [ -f bin/rice-translate.exe ] && EXE="bin/rice-translate.exe"
+          BASE=https://github.com/WalissonCF/rice/releases/download/translation-models-v1
+          for m in opus-mt-es-en opus-mt-tc-big-en-es; do
+            mkdir -p "models/$m"
+            for f in model.bin config.json shared_vocabulary.json source.spm target.spm; do curl -sfL -o "models/$m/$f" "$BASE/$m.$f" || true; done
+          done
+          echo "modelo base (opus-mt-es-en):"; node scripts/translation-models/bench.mjs "$EXE" "$PWD/models/opus-mt-es-en"
+          echo "modelo tc-big (opus-mt-tc-big-en-es):"; node scripts/translation-models/bench.mjs "$EXE" "$PWD/models/opus-mt-tc-big-en-es"

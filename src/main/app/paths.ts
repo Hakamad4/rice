@@ -23,10 +23,15 @@ export function repoRoot(): string {
 export function nativeBinary(name: string, exists: (path: string) => boolean = existsSync, root: string = repoRoot(), flavor: typeof posix = pathFlavor()): string {
   if (flavor === win32) {
     const exe = `${name}.exe`;
-    const dev = [flavor.join(root, 'native', 'win', 'build', 'Release', exe), flavor.join(root, 'native', 'win', 'build', exe)].find((p) => exists(p));
+    const dev = [
+      flavor.join(root, 'native', 'win', 'build', 'Release', exe),
+      flavor.join(root, 'native', 'win', 'build', exe),
+      flavor.join(root, 'native', 'translate', 'build', 'Release', exe), // rice-translate (CMake próprio)
+      flavor.join(root, 'native', 'translate', 'build', exe),
+    ].find((p) => exists(p));
     return dev ?? flavor.join(root, 'native-bin', 'win', exe);
   }
-  const built = flavor.join(root, 'native', name, '.build', 'release', name);
+  const built = flavor.join(root, 'native', name === 'rice-translate' ? 'translate' : name, '.build', 'release', name);
   return exists(built) ? built : flavor.join(root, 'native-bin', name);
 }
 
@@ -39,6 +44,11 @@ export function riceAudioBinary(): string {
 
 export function riceDetectorBinary(): string {
   return process.env.RICE_DETECTOR_BIN ?? nativeBinary('rice-detector');
+}
+
+/** Sidecar da tradução offline. Mac: `scripts/build-native.sh` (CMake em `native/translate/.build/release`); Windows: `native/translate/build`. */
+export function riceTranslateBinary(): string {
+  return process.env.RICE_TRANSLATE_BIN ?? nativeBinary('rice-translate');
 }
 
 /** Claude Code: `claude.exe` (instalador nativo) ou `claude.cmd` (npm) no Windows; `claude` no PATH se não achar. */

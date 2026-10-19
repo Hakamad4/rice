@@ -4,6 +4,17 @@ import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 
+/** `rice.translate*` de mentira (a tradução ao vivo desligada e sem modelo offline). */
+export const translateMocks = {
+  translateGet: async (dir: string) => ({ dir, on: false, lang: 'en', from: 'pt', langs: ['pt', 'en', 'es', 'fr', 'de', 'it'], offline: { state: 'not-installed', packs: [], ramBytes: 0, enabled: false, localMode: false }, records: [] }),
+  translateSet: async (dir: string) => ({ dir, on: true, lang: 'en', from: 'pt', langs: ['pt', 'en'], offline: { state: 'not-installed', packs: [], ramBytes: 0, enabled: false, localMode: false }, records: [] }),
+  translateOfflineStatus: async () => ({ state: 'not-installed', packs: [], ramBytes: 0, enabled: false, localMode: false }),
+  translateOfflineDownload: async () => ({ ok: true }),
+  translateOfflineCancel: async () => ({ ok: true }),
+  translateOfflineDelete: async () => ({ ok: true }),
+};
+
+
 /** Sobe o renderer inteiro (index.html + os scripts na ordem em que o HTML os carrega) com uma API `rice` de mentira. */
 export function bootRenderer(overrides: Record<string, unknown> = {}, meetings: any[] = []): { rice: any; handlers: Record<string, (p: any) => any> } {
   const handlers: Record<string, (p: any) => any> = {};
@@ -22,6 +33,7 @@ export function bootRenderer(overrides: Record<string, unknown> = {}, meetings: 
     calendarEvents: async () => [],
     googleStatus: async () => ({ connected: true }),
     aiStatus: async () => ({ active: 'claude-sub', models: {}, providers: { 'claude-sub': { connected: true, hasKey: true, detail: 'Conectado.' } } }),
+    ...translateMocks,
     onDelta: () => {},
     on: (channel: string, fn: (p: any) => any) => (handlers[channel] = fn),
     ...overrides,

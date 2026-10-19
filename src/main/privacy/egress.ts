@@ -27,7 +27,7 @@ export type EgressRecord = {
 const API_PROVIDERS: readonly AiProvider[] = ['claude-api', 'openai-api', 'gemini-api'];
 export const viaOf = (provider: AiProvider): EgressVia => (provider === 'local-model' ? 'local' : API_PROVIDERS.includes(provider) ? 'api' : 'cli');
 
-const KINDS: readonly string[] = ['notes', 'chat', 'ideas', 'warroom', 'screenshot', 'memory', 'email-draft', 'other'];
+const KINDS: readonly string[] = ['notes', 'chat', 'ideas', 'warroom', 'screenshot', 'memory', 'email-draft', 'translate', 'other'];
 
 /** Marca as chamadas deste runner com o contexto (quando o código que chama não sabe de qual reunião vem). */
 export const withEgressContext = (runner: Pick<AiRunner, 'run'>, ctx: EgressContext): AiRunner => ({ run: (options) => runner.run({ ...options, egress: options.egress ?? ctx }) });
@@ -81,6 +81,7 @@ const GROUPS: Array<{ id: string; kinds: EgressKind[] }> = [
   { id: 'ideas', kinds: ['ideas', 'warroom'] },
   { id: 'email', kinds: ['email-draft'] },
   { id: 'memory', kinds: ['memory'] },
+  { id: 'translate', kinds: ['translate'] },
   { id: 'other', kinds: ['other'] },
 ];
 const ALWAYS = new Set(['notes', 'chat', 'ideas']);

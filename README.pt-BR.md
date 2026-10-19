@@ -540,4 +540,4 @@ O que fica, o que sai e como conferir:
 
 ## Licença
 
-MIT — veja [LICENSE](LICENSE).
+MIT — veja [LICENSE](LICENSE). Os modelos opcionais de tradução offline são OPUS-MT (Helsinki-NLP), CC-BY-4.0; veja [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

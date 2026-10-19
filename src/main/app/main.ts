@@ -37,6 +37,11 @@ import { registerScreenshots } from '../screenshots/ipc';
 import { decideCapture, judgeShot, providerSeesImages } from '../screenshots/relevance';
 import { attachmentImages, attachmentsContext } from '../attachments/store';
 import { createWarRoom } from '../warroom/ipc';
+import type { Segment } from '../../shared/types';
+import { createTranslate } from '../translate/ipc';
+import { createOfflineTranslator } from '../translate/engine';
+import { OFFLINE_TRANSLATION } from '../translate/flags';
+import { isTranslateLang, type TranslateLang } from '../translate/offline';
 import { planGeminiMigration } from '../ai/migrate';
 import { deleteIdeaTemplate, listIdeaTemplates, localizeIdeaTemplate, restoreBuiltinIdeaTemplate, saveIdeaTemplate } from '../warroom/idea-templates';
 import { contextFacts, readConfig as readWarRoomConfig, writeConfig as writeWarRoomConfig } from '../warroom/store';
@@ -122,7 +127,7 @@ import { configureLongNotes, type NotesProgress } from '../session/long-notes';
 import type { AlertActionKind } from '../session/alerts';
 import { saveAnnotations } from '../store/annotations';
 
-type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Ocultar dados pessoais ao enviar para a IA (as pastas sensíveis ligam por conta própria). */ redactPii?: boolean; /** Guarda padrão (as pastas podem definir a própria). */ retentionDefault?: FolderRetention; /** Aviso de consentimento ao gravar (padrão: ligado) e o texto próprio (vazio = o padrão no idioma da reunião). */ consentRemind?: boolean; consentText?: string; /** Modo 100% local: nada usa a rede (só localhost); só o provedor Modelo local. */ fullyLocal?: boolean; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Mac: escolher o microfone sozinho ao gravar (padrão: ligado). */ micAuto?: boolean; /** Windows: abrir com o Windows, só na bandeja (padrão: desligado). */ launchAtLogin?: boolean; /** Windows: id do microfone escolhido (ausente = padrão do Windows). */ micDevice?: string; /** Modelo de transcrição: automático (pela memória), leve ou completo. */ asrModel?: AsrChoice; /** Windows: transcrição na GPU (padrão: ligado); desligado, o whisper-server sobe com -ng. */ asrGpu?: boolean; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean; /** Memória entre reuniões (padrão: ligada). */ memory?: boolean; /** Domínios do próprio usuário (do participante `self` da agenda), para a memória não tratar a própria empresa como cliente. */ memoryOwnDomains?: string[]; /** Aviso local quando uma pendência minha vence (padrão: ligado). */ followupNotify?: boolean; };
+type Settings = { /** Última pasta onde um PDF foi salvo (padrão: Downloads). */ exportDir?: string; ai?: unknown; transcriptionLanguage?: TranscriptionLanguage; uiLanguage?: UiLanguage; root: string; keepAudio?: boolean; calendarAsked?: boolean; onboardingDone?: boolean; nubPosition?: Point; defaultTemplateId?: string; vocabulary?: string; vocabularyAttendees?: boolean; /** Acima disso (em caracteres) as notas usam extração por partes; padrão 60000. */ notesDirectMaxChars?: number; /** Beta: separa "Outros" em Pessoa 1, 2… (modelo de voz local de 27 MB, baixado na primeira vez). */ identifySpeakers?: boolean; /** Opt-in "por sua conta e risco": ferramentas MCP só no chat (desligado por padrão). */ chatTools?: boolean; /** "Procurar atualizações": uma consulta anônima por dia ao GitHub (padrão: ligado). */ savedPrompts?: string[]; /** Ocultar dados pessoais ao enviar para a IA (as pastas sensíveis ligam por conta própria). */ redactPii?: boolean; /** Guarda padrão (as pastas podem definir a própria). */ retentionDefault?: FolderRetention; /** Aviso de consentimento ao gravar (padrão: ligado) e o texto próprio (vazio = o padrão no idioma da reunião). */ consentRemind?: boolean; consentText?: string; /** Modo 100% local: nada usa a rede (só localhost); só o provedor Modelo local. */ fullyLocal?: boolean; /** Atalho global de gravar/parar (padrão ⌥⌘R; "none" = nenhum). */ recordShortcut?: string; checkUpdates?: boolean; /** Mac: escolher o microfone sozinho ao gravar (padrão: ligado). */ micAuto?: boolean; /** Windows: abrir com o Windows, só na bandeja (padrão: desligado). */ launchAtLogin?: boolean; /** Windows: id do microfone escolhido (ausente = padrão do Windows). */ micDevice?: string; /** Modelo de transcrição: automático (pela memória), leve ou completo. */ asrModel?: AsrChoice; /** Windows: transcrição na GPU (padrão: ligado); desligado, o whisper-server sobe com -ng. */ asrGpu?: boolean; /** Última consulta de versão (data e último commit do `main`). */ updateCheck?: UpdateState; /** Último template de ideias escolhido (padrão das reuniões novas). */ lastIdeaTemplate?: string; /** Avisos de uma vez só na tela de IA (ex.: o Gemini por assinatura foi descontinuado). */ aiNotices?: { geminiSub?: boolean }; /** Limite de ciclos de cada trilha da War room por reunião (0 = sem limite; padrão 120). */ warroomMaxCycles?: number; /** Minutos sem fala até o "ainda gravando?" (padrão 15; 0 desliga). */ inactivityMinutes?: number; /** Apps para os quais o usuário disse "não perguntar mais". */ mutedApps?: string[]; /** Mostrar os lembretes de hoje no Início (padrão: ligado, se o macOS permitir). */ showReminders?: boolean; /** Capturas de tela durante a gravação (desligado por padrão; só liga depois do aviso). */ screenshots?: boolean; /** Memória entre reuniões (padrão: ligada). */ memory?: boolean; /** Domínios do próprio usuário (do participante `self` da agenda), para a memória não tratar a própria empresa como cliente. */ memoryOwnDomains?: string[]; /** Aviso local quando uma pendência minha vence (padrão: ligado). */ followupNotify?: boolean; /** Último idioma de destino da tradução ao vivo. */ translateLang?: TranslateLang; };
 
 // Modo 100% local: o fetch global só fala com localhost enquanto o modo estiver ligado (rede de segurança por baixo dos bloqueios de cada recurso)
 installNetworkGuard();
@@ -1035,6 +1040,32 @@ function setupSession(runner: AiRunner): AsrService {
     openPath: (path) => shell.openPath(path), // abre o .command no Terminal padrão (sem osascript)
     openExternal: (url) => shell.openExternal(url),
     reveal: (path) => shell.showItemInFolder(path),
+  });
+  // tradução ao vivo: só consome trechos finais; desligada = nada carregado
+  const translate = createTranslate({
+    handle,
+    send,
+    checkedDir,
+    ai: async () => {
+      const provider = (await currentAiSettings()).provider;
+      return { runner: lightRunner ?? runner, provider, local: provider === 'local-model' };
+    },
+    offline: createOfflineTranslator(OFFLINE_TRANSLATION),
+    offlineEnabled: OFFLINE_TRANSLATION,
+    startedAt: async (d) => new Date((await readMeta(d)).startedAt),
+    meetingLanguage: async (d) => ((await notesLanguageOf(await readMeta(d))).headings === 'en' ? 'en' : 'pt'),
+    lastLanguage: async () => {
+      const l = (await loadSettings()).translateLang;
+      return isTranslateLang(l) ? l : undefined;
+    },
+    rememberLanguage: async (lang) => {
+      await saveSettings({ ...(await loadSettings()), translateLang: lang });
+    },
+    onError: (scope, err) => logError(scope, err),
+  });
+  s.on('segment', ({ dir: d, segment }: { dir: string; segment: Segment }) => void translate.onSegment(d, segment));
+  s.on('state', (st: string) => {
+    if (st === 'idle') translate.onSessionIdle();
   });
   registerAttachments({
     handle,

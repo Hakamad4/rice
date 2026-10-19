@@ -17,6 +17,7 @@
   --line: rgba(42,42,40,.1);
   --guide: rgba(42,42,40,.2);
   --accent: #4a6fd6;
+  --translation: #2f56c0;
   --ring: rgba(74,111,214,.28);
   --ok: #2e9e5b;
   --warn: #c98a1b;
@@ -122,6 +123,7 @@
     --line: rgba(255,255,255,.1);
     --guide: rgba(255,255,255,.2);
     --accent: #86a0f0;
+    --translation: #8fb0ff;
     --ring: rgba(134,160,240,.32);
     --ok: #4cc38a;
     --warn: #e0a93b;
@@ -145,6 +147,7 @@
   --line: rgba(255,255,255,.1);
   --guide: rgba(255,255,255,.2);
   --accent: #86a0f0;
+  --translation: #8fb0ff;
   --ring: rgba(134,160,240,.32);
   --ok: #4cc38a;
   --warn: #e0a93b;

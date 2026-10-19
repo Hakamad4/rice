@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi, describe } from 'vitest';
 import { rendered, tokenValue } from '../helpers/tokens';
+import { translateMocks } from '../helpers/boot-renderer';
 
 const g = globalThis as any;
 /** A transcrição vive na sua própria aba da reunião. */
@@ -35,6 +36,7 @@ it('renderer: lista agrupada por dia, abre reunião e renomeia pelo título', as
     renameMeeting: vi.fn(async (_d: string, t: string) => ((title = t), { ok: true, title: t })),
     sessionState: async () => ({ state: 'idle', dir: null }),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: () => {},
   };
@@ -42,7 +44,7 @@ it('renderer: lista agrupada por dia, abre reunião e renomeia pelo título', as
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
 
   await vi.waitFor(() => expect(g.document.querySelectorAll('.group-label').length).toBe(2));
   expect([...g.document.querySelectorAll('.group-label')].map((n: any) => n.textContent)).toEqual(['Hoje', 'Ontem']);
@@ -75,13 +77,14 @@ it('renderer: painel "Pergunte ao Rice" recolhido sem reunião, lembra a escolha
     }),
     sessionState: async () => ({ state: 'idle', dir: null }),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: () => {},
   };
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   const body = g.document.body;
   const toggle = g.document.getElementById('chat-toggle');
 
@@ -123,13 +126,14 @@ it('renderer: sem localStorage o painel ainda funciona', async () => {
       }),
       sessionState: async () => ({ state: 'idle', dir: null }),
       recoveredCount: async () => 0,
-      onDelta: () => {},
+      ...translateMocks,
+    onDelta: () => {},
       on: () => {},
     };
     g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
       .replace(/<script[^>]*><\/script>/g, '')
       .replace(/^[\s\S]*?<html[^>]*>/, '');
-    for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+    for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
     await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
     g.document.querySelector('.meeting').click();
     await vi.waitFor(() => expect(g.document.body.classList.contains('chat-open')).toBe(true));
@@ -154,13 +158,14 @@ function bootDraft(state: string, startRecording: (input: unknown) => Promise<un
     startRecording,
     sessionState: async () => ({ state: 'idle', dir: null }),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: () => {},
   };
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
 }
 
 it('renderer: Gravar numa reunião draft aberta passa o dir dela (sem criar outra)', async () => {
@@ -210,6 +215,7 @@ async function boot(extra: Record<string, unknown> = {}, meetings = [{ dir: '/R/
     renameMeeting: vi.fn(async (d: string, t: string) => (titles.set(d, t), { ok: true, title: t })),
     sessionState: async () => ({ state: 'idle', dir: null }),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: (ch: string, fn: (p: any) => any) => handlers.set(ch, fn),
     ...extra,
@@ -218,7 +224,7 @@ async function boot(extra: Record<string, unknown> = {}, meetings = [{ dir: '/R/
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelectorAll('.meeting').length).toBe(meetings.length));
   return { rice, handlers };
 }
@@ -386,6 +392,7 @@ it('renderer: seletor de template na reunião; trocar numa reunião resumida ofe
     regenerateNotes: vi.fn(async () => ({ ok: true })),
     sessionState: async () => ({ state: 'idle', dir: null }),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: () => {},
   };
@@ -393,7 +400,7 @@ it('renderer: seletor de template na reunião; trocar numa reunião resumida ofe
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.querySelector('.tpl-picker .tpl-chip')).not.toBeNull());
@@ -418,6 +425,7 @@ it('renderer: tela Templates abre pela barra lateral', async () => {
     listTemplates: async () => ({ templates: [{ id: 'geral', title: 'Reunião geral', icon: 'file-text', builtin: true, description: 'x', sections: [] }], defaultId: 'geral', warnings: [] }),
     sessionState: async () => ({ state: 'idle', dir: null }),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: () => {},
   };
@@ -425,7 +433,7 @@ it('renderer: tela Templates abre pela barra lateral', async () => {
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   g.document.getElementById('templates-link').click();
   await vi.waitFor(() => expect(g.document.querySelector('.tpl-block')).not.toBeNull());
   expect(g.document.querySelector('h1').textContent).toBe('Templates');
@@ -448,6 +456,7 @@ async function bootMeeting(notes: string, extra: Record<string, any> = {}) {
     regenerateNotes: vi.fn(async () => ({ ok: true })),
     sessionState: async () => ({ state: 'idle', dir: null }),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: () => {},
     ...extra,
@@ -456,7 +465,7 @@ async function bootMeeting(notes: string, extra: Record<string, any> = {}) {
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.getElementById('page-title')).not.toBeNull());
@@ -530,11 +539,12 @@ it('renderer: após gravar a partir de um draft, o rótulo fica "Continuar grava
     }),
     sessionState: vi.fn(async () => ({ state: 'idle', dir: null })),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: (c: string, fn: any) => (handlers[c] = fn),
   };
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'menu-select', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   g.document.querySelector('.meeting').click();
   await vi.waitFor(() => expect(g.document.getElementById('page-title')).not.toBeNull());
@@ -681,6 +691,7 @@ async function bootLang(uiLanguage: string, extra: Record<string, any> = {}, met
     setMeetingLanguage: vi.fn(async () => ({ ok: true })),
     sessionState: async () => ({ state: 'idle', dir: null }),
     recoveredCount: async () => 0,
+    ...translateMocks,
     onDelta: () => {},
     on: (c: string, fn: any) => (handlers[c] = fn),
     ...extra,
@@ -688,7 +699,7 @@ async function bootLang(uiLanguage: string, extra: Record<string, any> = {}, met
   g.window.rice = rice;
   g.localStorage.clear();
   g.document.documentElement.innerHTML = rendered('src/renderer/index.html').replace(/<script[^>]*><\/script>/g, '').replace(/^[\s\S]*?<html[^>]*>/, '');
-  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'ai-providers', 'chat-tools', 'calendar-connect', 'menu-select', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
+  for (const f of ['icons', 'i18n', 'locales/pt-BR', 'locales/en', 'markdown', 'annotations', 'grouping', 'search', 'global-chat', 'toast-stack', 'share', 'onboarding', 'home', 'ai-providers', 'chat-tools', 'calendar-connect', 'menu-select', 'template-preview', 'template-picker', 'templates', 'language-menu', 'action-menu', 'ai-chip', 'web-search', 'update-notice', 'update-page', 'retention-dialog', 'consent-toast', 'resume-rule', 'receipt-card', 'shortcut-field', 'prompts-menu', 'privacy', 'speaker-popover', 'settings', 'language-settings', 'chips', 'dialog', 'live-scroll', 'attachments', 'screenshots', 'memory', 'memory-page', 'followups', 'warroom', 'translate', 'resize', 'mic-chip', 'audio-settings', 'renderer']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();
   await vi.waitFor(() => expect(g.document.querySelector('.meeting')).not.toBeNull());
   return { rice, handlers };
 }

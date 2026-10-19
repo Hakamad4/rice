@@ -25,6 +25,7 @@ add('color', 'code', '--code', 'rgba(42,42,40,.06)', 'rgba(255,255,255,.07)', tr
 add('color', 'line', '--line', 'rgba(42,42,40,.1)', 'rgba(255,255,255,.1)', true, 'borda e divisor (1 px)');
 add('color', 'guide', '--guide', 'rgba(42,42,40,.2)', 'rgba(255,255,255,.2)', true, 'linha-guia mais forte (ramos, tracejados)');
 add('color', 'accent', '--accent', '#4a6fd6', '#86a0f0', true, 'acento: foco, seleção, links');
+add('color', 'translation', '--translation', '#2f56c0', '#8fb0ff', false, 'texto da tradução ao vivo (azul, abaixo da fala original); contraste AA >= 4,5:1 sobre --bg e --sidebar nos dois temas');
 add('color', 'ring', '--ring', 'rgba(74,111,214,.28)', 'rgba(134,160,240,.32)', true, 'anel de foco (accent translúcido)');
 add('color', 'ok', '--ok', '#2e9e5b', '#4cc38a', true, 'sucesso');
 add('color', 'warn', '--warn', '#c98a1b', '#e0a93b', true, 'aviso');

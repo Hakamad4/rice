@@ -52,7 +52,7 @@
   const NAV = [
     { group: 'settings.group.general', items: [['language', 'globe', 'settings.language'], ['audio', 'mic', 'settings.audio'], ['folder', 'folder', 'settings.folder'], ['updates', 'download', 'settings.updates'], ['shortcuts', 'keyboard', 'settings.shortcuts'], ['startup', 'play', 'settings.startup']] }, // 'startup' só existe no Windows
     { group: 'settings.group.ai', items: [['ai', 'sparkles', 'settings.ai'], ['tools', 'plug', 'settings.nav.tools']] },
-    { group: 'settings.group.meetings', items: [['calendar', 'calendar', 'settings.calendar'], ['vocabulary', 'file-text', 'settings.vocabulary'], ['speakers', 'users', 'settings.speakers'], ['screenshots', 'image', 'settings.screenshots'], ['memory', 'history', 'settings.memory'], ['followups', 'check-circle', 'settings.followups']] },
+    { group: 'settings.group.meetings', items: [['calendar', 'calendar', 'settings.calendar'], ['vocabulary', 'file-text', 'settings.vocabulary'], ['speakers', 'users', 'settings.speakers'], ['translate', 'languages', 'settings.translate'], ['screenshots', 'image', 'settings.screenshots'], ['memory', 'history', 'settings.memory'], ['followups', 'check-circle', 'settings.followups']] },
     { group: null, items: [['privacy', 'shield', 'settings.nav.privacy']] },
   ];
   const IDS = NAV.flatMap((g) => g.items.map((i) => i[0]));
@@ -318,12 +318,14 @@
     const launch = toggle('launch-login', settings.launchAtLogin === true, t('settings.startup.label'));
     launch.onchange = () => rice.setLaunchAtLogin && rice.setLaunchAtLogin(launch.checked);
     // as seções ficam todas no DOM (na ordem de sempre); só a escolhida aparece (as outras têm `hidden`)
+    const offlineModels = window.RiceTranslate.offlineEnabled(); // chave OFFLINE_TRANSLATION: desligada, sem seção de modelos nem créditos
     const nodes = [
       section(t('settings.language'), null, window.RiceLanguage.rows({ settings, onChange: again, row }), 'language'),
       section(t('settings.folder'), null, [folder, el('p', { className: 'set-desc', textContent: t('settings.folder.text') }, [])], 'folder'),
       section(t('settings.ai'), t('settings.ai.text'), [aiBox, lightBox, row(t('settings.cycles.label'), t('settings.cycles.help'), cycles.root), cycleWarn], 'ai'),
       section(t('settings.calendar'), t('settings.calendar.text'), [calBox], 'calendar'),
       section(t('settings.vocabulary'), t('settings.vocabulary.help'), [vocabulary.root, row(t('settings.vocabulary.attendees'), null, attendees)], 'vocabulary'),
+      ...(offlineModels ? [section(t('settings.translate'), t('settings.translate.text'), [row(t('translate.offline.title'), t('translate.offline.help'), window.RiceTranslate.offlineControl()), window.RiceTranslate.credits()], 'translate')] : []),
       section(t('settings.speakers'), null, [row(t('settings.speakers.label'), t('settings.speakers.help'), identify)], 'speakers'),
       section(t('settings.screenshots'), t('settings.screenshots.text'), [row(t('settings.screenshots.label'), t('settings.screenshots.help'), shots), shotsNote, shotsOpen], 'screenshots'),
       section(t('settings.memory'), t('settings.memory.text'), memoryNodes, 'memory'),
@@ -335,7 +337,7 @@
       ...(WIN ? [section(t('settings.startup'), null, [row(t('settings.startup.label'), t('settings.startup.help'), launch)], 'startup')] : []),
       section(t('settings.updates'), null, [updatePage.node], 'updates'),
     ];
-    const initial = [ctx && ctx.section, ctx && ctx.focus, remembered()].find((id) => IDS.includes(id) && (id !== 'startup' || WIN)) || 'language';
+    const initial = [ctx && ctx.section, ctx && ctx.focus, remembered()].find((id) => IDS.includes(id) && (id !== 'startup' || WIN) && (id !== 'translate' || offlineModels)) || 'language';
     const buttons = new Map();
     const show = (id) => {
       for (const node of nodes) node.hidden = node.dataset.section !== id;
@@ -344,7 +346,7 @@
       if (current && current.scrollIntoView) current.scrollIntoView({ block: 'nearest', inline: 'nearest' }); // aba ativa sempre visível na faixa rolável
       remember(id);
     };
-    const navVisible = NAV.map((g) => ({ ...g, items: g.items.filter((i) => i[0] !== 'startup' || WIN) }));
+    const navVisible = NAV.map((g) => ({ ...g, items: g.items.filter((i) => (i[0] !== 'startup' || WIN) && (i[0] !== 'translate' || offlineModels)) }));
     const navChildren = navVisible.flatMap((g) => [
       ...(g.group ? [el('div', { className: 'set-nav-group', textContent: t(g.group) }, [])] : []),
       ...g.items.map(([id, icon, label]) => {

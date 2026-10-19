@@ -47,6 +47,7 @@
     "artifactName": "Rice-${version}-${arch}.${ext}",
     "files": [
       "package.json",
+      "THIRD-PARTY-NOTICES.md",
       "out/**",
       "src/renderer/**",
       "design/tokens.css",
@@ -89,6 +90,7 @@
       },
       "files": [
         "package.json",
+        "THIRD-PARTY-NOTICES.md",
         "out/**",
         "src/renderer/**",
         "design/tokens.css",
@@ -132,6 +134,7 @@
       "icon": "assets/icon/icon.ico",
       "files": [
         "package.json",
+        "THIRD-PARTY-NOTICES.md",
         "out/**",
         "src/renderer/**",
         "design/tokens.css",
@@ -146,7 +149,8 @@
         "!node_modules/better-sqlite3/prebuilds/!(win32-x64.node)",
         "!node_modules/better-sqlite3/{src,deps,build}/**",
         "!native-bin/rice-audio",
-        "!native-bin/rice-detector"
+        "!native-bin/rice-detector",
+        "!native-bin/rice-translate"
       ],
       "publish": [
         {

@@ -6,7 +6,7 @@ import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 
-async function open(extra: Record<string, unknown> = {}, lang: 'pt-BR' | 'en' = 'pt-BR') {
+async function open(extra: Record<string, unknown> = {}, lang: 'pt-BR' | 'en' = 'pt-BR', count = 14) {
   const out = bootRenderer({
     uiLanguage: lang,
     getSettings: async () => ({ root: '/Users/x/Rice', rootDisplay: '~/Rice', onboardingDone: true, transcriptionLanguage: 'pt', uiLanguage: lang, keepAudio: true, identifySpeakers: false, vocabulary: 'OKR', vocabularyAttendees: true }),
@@ -19,7 +19,7 @@ async function open(extra: Record<string, unknown> = {}, lang: 'pt-BR' | 'en' = 
     ...extra,
   }, []);
   g.document.getElementById('settings-link').click();
-  await vi.waitFor(() => expect(g.document.querySelectorAll('.settings-page .setting-section').length).toBe(14));
+  await vi.waitFor(() => expect(g.document.querySelectorAll('.settings-page .setting-section').length).toBe(count));
   return out;
 }
 const sections = () => [...g.document.querySelectorAll('.settings-page .setting-section')] as any[];
@@ -246,4 +246,14 @@ it('limite de ciclos: menu padrão com o valor atual; o aviso de "Sem limite" s�
   expect(row.querySelector('.menu-select-btn').textContent).toBe('Sem limite');
   const warn = [...g.document.querySelectorAll('.settings-page p.set-help')].find((p: any) => p.textContent.startsWith('Sem limite, uma reunião longa')) as any;
   expect(warn.hidden).toBe(false);
+});
+
+it('chave OFFLINE_TRANSLATION ligada: a seção "Tradução ao vivo" (modelo offline e créditos) aparece; desligada, não', async () => {
+  await open();
+  expect(g.document.querySelector('#set-translate')).toBeNull();
+  expect(navButtons().map((b) => b.textContent)).not.toContain('Tradução ao vivo');
+  expect(g.document.body.textContent).not.toContain('CC-BY');
+  await open({ translateOfflineStatus: async () => ({ state: 'not-installed', packs: [], ramBytes: 0, enabled: true, localMode: false }) }, 'pt-BR', 15);
+  expect(g.document.querySelector('#set-translate')).not.toBeNull();
+  expect(navButtons().map((b) => b.textContent)).toContain('Tradução ao vivo');
 });

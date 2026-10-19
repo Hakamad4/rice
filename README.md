@@ -540,4 +540,4 @@ What stays, what leaves, and how to check it:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). The optional offline translation models are OPUS-MT (Helsinki-NLP), CC-BY-4.0; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

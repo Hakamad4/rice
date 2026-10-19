@@ -113,7 +113,7 @@ describe('contraste do texto (WCAG AA)', () => {
     return out;
   };
 
-  for (const text of ['--ink', '--muted']) {
+  for (const text of ['--ink', '--muted', '--translation']) {
     for (const [name, r] of pairs(text)) test(`${name} >= 4,5:1`, () => expect(r).toBeGreaterThanOrEqual(4.5));
   }
 });
