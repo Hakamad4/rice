@@ -179,3 +179,61 @@ describe('--print-inputs (escolha do microfone)', () => {
     expect(inputs.filter((i) => i.isDefault).length).toBeLessThanOrEqual(1);
   });
 });
+
+describe('cobertura da janela (--simulate-cover)', () => {
+  const item = (number: number, x: number, y: number, w: number, h: number, extra: Record<string, unknown> = {}) => ({ number, layer: 0, alpha: 1, x, y, w, h, ...extra });
+  async function cover(window: number, items: object[]): Promise<{ covered: number; onScreen: boolean }> {
+    const { stdout } = await run(BIN, ['--simulate-cover', JSON.stringify({ window, items })]);
+    return JSON.parse(stdout);
+  }
+
+  test('livre: nada à frente', async () => {
+    expect(await cover(1, [item(1, 0, 0, 100, 100), item(9, 0, 0, 100, 100)])).toEqual({ covered: 0, onScreen: true }); // a de trás não cobre
+  });
+  test('metade e total', async () => {
+    expect((await cover(2, [item(5, 0, 0, 50, 100), item(2, 0, 0, 100, 100)])).covered).toBe(0.5);
+    expect((await cover(2, [item(5, -10, -10, 200, 200), item(2, 0, 0, 100, 100)])).covered).toBe(1);
+  });
+  test('sobreposição entre as de cima conta uma vez (união)', async () => {
+    expect((await cover(3, [item(1, 0, 0, 50, 100), item(2, 25, 0, 50, 100), item(3, 0, 0, 100, 100)])).covered).toBe(0.75);
+  });
+  test('duas janelas que juntas cobrem tudo', async () => {
+    expect((await cover(3, [item(1, 0, 0, 60, 100), item(2, 50, 0, 50, 100), item(3, 0, 0, 100, 100)])).covered).toBe(1);
+  });
+  test('camada > 0 (PiP, sempre no topo) e translúcidas não contam', async () => {
+    expect((await cover(3, [item(1, 0, 0, 100, 100, { layer: 3 }), item(2, 0, 0, 100, 100, { alpha: 0.5 }), item(3, 0, 0, 100, 100)])).covered).toBe(0);
+  });
+  test('fora da lista (minimizada, oculta, outro Space): fora da tela e 100% coberta', async () => {
+    expect(await cover(42, [item(1, 0, 0, 100, 100)])).toEqual({ covered: 1, onScreen: false });
+  });
+  test('retângulos de outro monitor (coordenadas globais) só contam pela interseção', async () => {
+    expect((await cover(2, [item(1, 3440, 198, 1920, 1080), item(2, 3000, 300, 800, 400)])).covered).toBe(0.45); // só x 3440–3800 (360 de 800) está sob a janela do 2º monitor
+  });
+});
+
+describe('cover-watch (comando do main)', () => {
+  test('janela inexistente: 1 Hz de window-cover fora da tela; window 0 para', async () => {
+    const child = spawn(BIN, [], { stdio: ['pipe', 'pipe', 'ignore'] });
+    const lines: Array<Record<string, unknown>> = [];
+    let buf = '';
+    child.stdout.on('data', (d: Buffer) => {
+      buf += d.toString();
+      for (const l of buf.split('\n').slice(0, -1)) if (l) lines.push(JSON.parse(l));
+      buf = buf.slice(buf.lastIndexOf('\n') + 1);
+    });
+    try {
+      child.stdin.write('{"cmd":"cover-watch","window":2147000000}\n');
+      await new Promise((r) => setTimeout(r, 2500));
+      const covers = lines.filter((l) => l.event === 'window-cover');
+      expect(covers.length).toBeGreaterThanOrEqual(2);
+      expect(covers[0]).toEqual({ event: 'window-cover', window: 2147000000, onScreen: false, covered: 1 });
+      child.stdin.write('{"cmd":"cover-watch","window":0}\n');
+      await new Promise((r) => setTimeout(r, 300));
+      const before = lines.filter((l) => l.event === 'window-cover').length;
+      await new Promise((r) => setTimeout(r, 1500));
+      expect(lines.filter((l) => l.event === 'window-cover').length).toBe(before); // parado: nenhuma amostra nova
+    } finally {
+      child.kill();
+    }
+  });
+});

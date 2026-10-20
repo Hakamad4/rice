@@ -2,10 +2,11 @@
 // Prévia de template (seletor de Ideias e de Notas): espaçamentos e tipografia medidos no CSS computado.
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const doc = g.document;
-const css = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+const css = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
 
 beforeAll(() => {
   const style = doc.createElement('style');

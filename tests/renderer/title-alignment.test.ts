@@ -4,12 +4,13 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const doc = g.document;
 const px = (v: string) => parseFloat(v) || 0;
 
-const css = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+const css = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
 beforeAll(() => {
   const style = doc.createElement('style');
   style.textContent = `${css}\n:root { --title-size: 20px; }`; // happy-dom não resolve clamp(…cqi)
@@ -85,6 +86,6 @@ describe('título e primeira aba/bloco na mesma borda esquerda', () => {
 });
 
 it('botão "Novo template…": ícone + e texto NA MESMA linha (inline-flex), sem quebrar', () => {
-  const css = require('node:fs').readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.tpl-new \{ display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; \}/);
 });

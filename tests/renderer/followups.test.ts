@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const meetings = [{ dir: '/R/a', title: 'Kickoff Acme', startedAt: '2026-10-12T10:00:00-03:00', state: 'done' }];
@@ -175,14 +176,14 @@ it('Lembretes do macOS: "Enviar minhas" fica na barra de filtros, só com a inte
 
 it('ritmo da lista: linhas de 10px com separador sutil, hover na linha inteira, checkbox no centro da 1ª linha, meta a 4px, mais espaço antes do grupo', async () => {
   await open();
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
-  expect(css).toMatch(/\.fu-row \{[^}]*padding:10px var\(--space-2\)/);
+  const css = rendered('src/renderer/index.html');
+  expect(css).toMatch(/\.fu-row \{[^}]*padding:10px 8px/);
   expect(css).toMatch(/\.fu-row \+ \.fu-row::before \{[^}]*border-top:1px solid var\(--line\)/);
   expect(css).toMatch(/\.fu-row:hover[^{]*\{ background:var\(--hover\)/);
   expect(css).toMatch(/\.fu-text \{[^}]*line-height:20px/);
   expect(css).toMatch(/\.fu-box \{[^}]*margin-top:2px/);
-  expect(css).toMatch(/\.fu-main \{[^}]*max-width:68ch[^}]*gap:var\(--space-1\)/);
-  expect(css).toMatch(/\.fu-group-title \{[^}]*margin:var\(--space-5\) 0 var\(--space-1\)/);
+  expect(css).toMatch(/\.fu-main \{[^}]*max-width:68ch[^}]*gap:4px/);
+  expect(css).toMatch(/\.fu-group-title \{[^}]*margin:24px 0 4px/);
   expect(css).toMatch(/\.fu-due\.none \{ opacity:0; \}/);
 });
 
@@ -210,20 +211,20 @@ it('linha Feita: "concluída em <reunião> · Reabrir" fica na mesma linha de me
   const closed = sub.querySelector('.fu-closed') as any; // dentro da meta, junto da origem
   expect(closed.parentElement).toBe(sub);
   expect([...closed.children].map((c: any) => c.textContent)).toEqual(['concluída em Reunião de follow-up', '·', 'Reabrir']);
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.fu-reopen \{[^}]*font:inherit[^}]*color:inherit/); // mesmo tamanho e cor do texto ao lado
   expect(css).toMatch(/\.fu-closed \{[^}]*font-size:11px[^}]*color:var\(--muted\)/);
 });
 
 it('marcações monocromáticas: o checkbox marcado das pendências e das notas usa --ink, não o azul', async () => {
   await open();
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/input\.fu-box:checked, \.md li\.task input\[type=checkbox\]:checked \{ background:var\(--ink\); border-color:var\(--ink\); \}/);
 });
 
 it('formulário "Adicionar pendência": campo, seletor e botão com a mesma altura; em janela estreita empilham', async () => {
   await open();
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.fu-add > \* \{ height:36px; box-sizing:border-box; margin:0; \}/);
   expect(css).toMatch(/\.fu-add > \.fu-add-go \{ height:36px; min-height:36px;/); // o botão (.btn 32px) também fica com 36px
   expect(css).toMatch(/\.fu-add \.menu-select-btn \{ width:100%; height:36px;/);

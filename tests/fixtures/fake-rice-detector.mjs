@@ -9,9 +9,20 @@ setTimeout(() => {
 }, 1500);
 for (const { at, line } of JSON.parse(process.env.FAKE_DETECTOR_SCRIPT ?? '[]')) setTimeout(() => out(line), at);
 if (process.env.FAKE_DETECTOR_EXIT_AFTER_MS) setTimeout(() => process.exit(1), Number(process.env.FAKE_DETECTOR_EXIT_AFTER_MS));
+let coverTimer;
 createInterface({ input: process.stdin })
   .on('line', (l) => {
     const { cmd, from, to } = JSON.parse(l);
+    if (cmd === 'cover-watch') {
+      // FAKE_COVER=<fração>: responde window-cover a cada segundo enquanto a janela é vigiada (medições/testes sem o Swift)
+      clearInterval(coverTimer);
+      const window = JSON.parse(l).window;
+      if (window > 0 && process.env.FAKE_COVER) {
+        const tick = () => out({ event: 'window-cover', window, onScreen: process.env.FAKE_COVER !== 'offscreen', covered: process.env.FAKE_COVER === 'offscreen' ? 1 : Number(process.env.FAKE_COVER) });
+        tick();
+        coverTimer = setInterval(tick, 1000);
+      }
+    }
     if (cmd === 'list-events') out({ event: 'events-list', range: { from, to }, events: JSON.parse(process.env.FAKE_DETECTOR_LIST ?? '[]') });
     if (cmd === 'list-inputs' && process.env.FAKE_DETECTOR_INPUTS) out({ event: 'inputs', inputs: JSON.parse(process.env.FAKE_DETECTOR_INPUTS) });
     if (cmd === 'list-reminders') out({ event: 'reminders-list', reminders: JSON.parse(process.env.FAKE_DETECTOR_REMINDERS ?? '[]') });

@@ -57,7 +57,7 @@ export type ToolsRequest = {
 /** Imagem anexada (base64), só para as APIs que aceitam bloco de imagem; os CLIs a ignoram. */
 export type AiImage = { mime: string; data: string };
 /** De que reunião(ões) e para quê é a chamada: serve só para o recibo de privacidade (metadados, nunca conteúdo). */
-export type EgressKind = 'notes' | 'chat' | 'ideas' | 'warroom' | 'screenshot' | 'memory' | 'email-draft' | 'other';
+export type EgressKind = 'notes' | 'chat' | 'ideas' | 'warroom' | 'screenshot' | 'memory' | 'email-draft' | 'translate' | 'other';
 export type EgressContext = { kind: EgressKind; dir?: string; dirs?: readonly string[] };
 export type AiRunOptions = { system: string; prompt: string; signal?: AbortSignal; tools?: ToolsRequest; images?: AiImage[]; egress?: EgressContext };
 

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const meetings = [{ dir: '/R/a', title: 'Revisão Acme', startedAt: '2026-10-12T10:00:00-03:00', state: 'done', calendarEventId: 'ev1' }];
@@ -53,7 +54,7 @@ it('"O que lembrar": cartão discreto no topo da aba Notas, com tipo, prazo, lin
   expect(rows[2].classList.contains('done')).toBe(true);
   expect(rows[0].querySelector('.mem-kind').textContent).toBe('Promessa');
   expect(card().querySelectorAll('.mem-recent .mem-src')).toHaveLength(1); // a reunião atual não aparece nas recentes
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.mem-due\.late[^}]*color:var\(--warn\)/);
 });
 
@@ -303,7 +304,7 @@ it('Reuniões antigas: botão com o número e o aviso de IA, só roda depois da 
   expect(section.querySelector('.mem-now').textContent).toMatch(/^Agora: Reunião · \d{1,2} de out\.?$/);
   ([...section.querySelectorAll('.mem-backfill button')].find((b: any) => b.textContent === 'Cancelar') as any).click();
   expect(api.memoryBackfillCancel).toHaveBeenCalled();
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.mem-bar \{[^}]*height:3px[^}]*border-radius:999px[^}]*background:var\(--line\)/);
   expect(css).toMatch(/\.mem-bar > span \{[^}]*background:var\(--ink\)/);
   expect(css).toMatch(/\.mem-now \{[^}]*text-overflow:ellipsis/);
@@ -342,7 +343,7 @@ it('contadores no singular e no plural (pt e en): 1 empresa / 2 empresas, 1 reun
 
 it('Página Memória: abas e busca com a mesma altura (36px), sublinhado no fim da linha; busca desce em janela estreita; detalhe com "Esquecer" à direita', async () => {
   await openMemoryPage();
-  const css = (await import('node:fs')).readFileSync('src/renderer/index.html', 'utf8');
+  const css = rendered('src/renderer/index.html');
   expect(css).toMatch(/\.mp-tab \{[^}]*height:36px/);
   expect(css).toMatch(/\.mp-search \{[^}]*height:36px/);
   expect(css).toMatch(/\.mp-head \{[^}]*align-items:flex-end[^}]*border-bottom:1px solid var\(--line\)/);

@@ -3,14 +3,15 @@
 // e, onde o texto fica no mesmo lugar, o mesmo x/y (padding + margem + borda compensados).
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const doc = g.document;
 
-const css = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+const css = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
 const style = doc.createElement('style');
 // happy-dom não resolve clamp(…cqi): fixa o tamanho do título só para medir (no app o clamp vale como está)
-style.textContent = `${css}\n:root { --title-size: 20px; }`;
+style.textContent = css.replaceAll('clamp(22px, 5cqi, 30px)', '20px'); // happy-dom não calcula clamp(): o título fixa em 20px, igual nos dois modos
 doc.head.append(style);
 
 const cases = [

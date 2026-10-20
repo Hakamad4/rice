@@ -2,9 +2,10 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
-const css = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
+const css = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
 const now = new Date().toISOString();
 const MEETINGS = [{ dir: '/R/a', title: 'Kickoff', startedAt: now, state: 'done', notesStatus: 'done' }];
 const status = (over: Record<string, any> = {}) => ({ active: 'claude-sub', models: {}, providers: { 'claude-sub': { connected: false, hasKey: false, detail: 'x' }, 'opencode-sub': { connected: false, installed: true, detail: 'x' } }, ...over });
@@ -78,7 +79,7 @@ it('em inglês e com CSS discreto e responsivo', async () => {
   g.window.RiceI18n.setLanguage('en');
   await vi.waitFor(() => expect(g.document.querySelector('.ai-notice')).not.toBeNull());
   expect(css).toMatch(/\.ai-notice \{[^}]*border-radius:12px[^}]*background:var\(--hover\)/);
-  expect(css).toMatch(/@container detail \(max-width: 560px\) \{ \.ai-notice:not\(\.small\) \{ flex-direction:column; align-items:flex-start/);
+  expect(css).toMatch(/@container detail \(max-width: 520px\) \{ \.ai-notice:not\(\.small\) \{ flex-direction:column; align-items:flex-start/);
   expect(css).toMatch(/@container detail \(max-width: 420px\) \{\s*\.ai-head \{ display:grid/); // lista de IAs: nome em cima, estado embaixo
   g.window.RiceI18n.setLanguage('pt-BR');
 });

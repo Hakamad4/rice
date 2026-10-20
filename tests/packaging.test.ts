@@ -1,5 +1,7 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
@@ -39,6 +41,9 @@ describe('empacotamento (dmg/zip arm64)', () => {
     const ignore = readFileSync('.gitignore', 'utf8').split('\n');
     expect(ignore).toContain('dist/');
     expect(ignore).toContain('native-bin/');
+  });
+  test('o whisper-server do Windows (resources/win/, gerado pelo dist:win) fora do git', () => {
+    expect(readFileSync('.gitignore', 'utf8').split('\n')).toContain('resources/win/');
   });
 });
 
@@ -83,7 +88,7 @@ describe('empacotamento do Windows (nsis x64)', () => {
   test('o build:app não usa cp (não existe no cmd.exe); dist:win prepara helpers e whisper antes', () => {
     expect(pkg.scripts['build:app']).not.toMatch(/cp/);
     expect(readFileSync('scripts/copy-app-files.mjs', 'utf8')).toContain('icon.ico');
-    expect(pkg.scripts['dist:win']).toMatch(/stage-native-win\.ps1.*fetch-whisper-win\.ps1.*build:app.*electron-builder --win --x64/);
+    expect(pkg.scripts['dist:win']).toMatch(/stage-native-win\.ps1.*build-whisper-win\.ps1.*build:app.*electron-builder --win --x64/);
     expect(pkg.scripts.dist).toBe('scripts/build-native.sh && scripts/stage-native.sh && npm run build:app && electron-builder --mac --arm64'); // o do Mac não mudou
   });
   test('whisper-server: release oficial do ggml-org com SHA-256 fixado, conferido antes de extrair', () => {
@@ -93,9 +98,23 @@ describe('empacotamento do Windows (nsis x64)', () => {
     expect(ps.indexOf('SHA256]::Create')).toBeLessThan(ps.indexOf('ExtractToDirectory'));
     expect(ps).toContain('SHA-256 diferente');
   });
+  test('whisper-server com Vulkan: whisper.cpp no commit fixado, CPU oficial como reserva fora do CI', () => {
+    const ps = readFileSync('scripts/build-whisper-win.ps1', 'utf8');
+    expect(readFileSync('scripts/build-whisper-win.ps1').subarray(0, 3)).toEqual(Buffer.from([0xef, 0xbb, 0xbf])); // BOM: o PowerShell 5.1 lê sem BOM como ANSI
+    expect(ps).toMatch(/\$Commit = '[0-9a-f]{40}'/);
+    expect(ps).toContain('https://github.com/ggml-org/whisper.cpp.git');
+    expect(ps.indexOf('commit diferente')).toBeLessThan(ps.indexOf('cmake -S')); // confere o commit antes de compilar
+    for (const flag of ['-DGGML_BACKEND_DL=ON', '-DGGML_CPU_ALL_VARIANTS=ON', '-DGGML_NATIVE=OFF', '-DGGML_VULKAN=ON']) expect(ps, flag).toContain(flag);
+    expect(ps).toContain("'ggml-vulkan.dll'"); // o pacote sempre leva o backend Vulkan (Copy-Item falha se faltar)
+    expect(ps).toMatch(/if \(\$env:CI\) \{ throw/); // no CI não cai para a CPU em silêncio
+    expect(ps.indexOf("& (Join-Path $PSScriptRoot 'fetch-whisper-win.ps1')")).toBeGreaterThan(ps.indexOf('if (-not $env:VULKAN_SDK)'));
+    const fetch = readFileSync('scripts/fetch-whisper-win.ps1', 'utf8');
+    const version = (text: string) => text.match(/\$Version = '([^']+)'/)?.[1];
+    expect(version(ps)).toBe(version(fetch)); // GPU e reserva na mesma versão do whisper.cpp
+  });
   test('install.ps1: confere Windows x64 22H2, Node 22, CMake e C++; -Check não instala; erros em pt e en', () => {
     const ps = readFileSync('install.ps1', 'utf8');
-    for (const k of ['19045', 'PROCESSOR_ARCHITECTURE', 'nodeMajor -lt 22', 'cmake', 'vswhere', 'param([switch]$Check)', 'dist:win', 'ERRO:', 'ERROR:']) expect(ps, k).toContain(k);
+    for (const k of ['19045', 'PROCESSOR_ARCHITECTURE', 'nodeMajor -lt 22', 'cmake', 'vswhere', 'param([switch]$Check)', 'dist:win', 'ERRO:', 'ERROR:', 'VULKAN_SDK', 'KhronosGroup.VulkanSDK']) expect(ps, k).toContain(k);
     expect(ps).not.toMatch(/Start-Process[^\n]*RunAs/);
     expect(ps.indexOf('if ($Check)')).toBeLessThan(ps.indexOf('npm ci'));
     expect(ps, 'PS 5.1 tira as aspas duplas de dentro das simples').not.toMatch(/node(\.exe)? -[pe] '[^'\n]*"/);
@@ -115,5 +134,128 @@ describe('CI', () => {
     expect(ci).toContain('scripts/smoke.mjs --expect-platform win32');
     const smoke = readFileSync('scripts/smoke.mjs', 'utf8');
     for (const k of ['RICE_BENCH', '--user-data-dir', '--remote-debugging-port', '--use-mock-keychain', 'RICE_AUDIO_SIMULATE', 'RICE_DETECTOR_FAKE_MIC_STEPS']) expect(smoke, k).toContain(k);
+  });
+  test('instaladores do Windows: Vulkan SDK com versão e SHA-256 fixados, conferido antes de instalar, antes do dist:win', () => {
+    const action = readFileSync('.github/actions/vulkan-sdk/action.yml', 'utf8');
+    expect(action).toMatch(/VERSION: '\d+\.\d+\.\d+\.\d+'/);
+    expect(action).toMatch(/SHA256: '[0-9a-f]{64}'/);
+    expect(action.indexOf('Get-FileHash')).toBeLessThan(action.indexOf('Start-Process'));
+    for (const wf of [ci, readFileSync('.github/workflows/release-windows.yml', 'utf8')]) {
+      expect(wf.indexOf('uses: ./.github/actions/vulkan-sdk')).toBeGreaterThan(-1);
+      expect(wf.indexOf('uses: ./.github/actions/vulkan-sdk')).toBeLessThan(wf.indexOf('npm run dist:win'));
+    }
+  });
+  test('whisper-win: compila com Vulkan e transcreve sem GPU num job sem SDK', () => {
+    const wf = readFileSync('.github/workflows/whisper-win.yml', 'utf8');
+    expect(wf).toContain('scripts/build-whisper-win.ps1');
+    for (const k of ['MODEL_SHA256', 'WAV_SHA256']) expect(wf).toMatch(new RegExp(`${k}: [0-9a-f]{64}`));
+    const smoke = wf.slice(wf.indexOf('sem-gpu:'));
+    expect(smoke).not.toContain('vulkan-sdk'); // o teste sem GPU roda sem o SDK nem o MSVC, como num PC comum
+    expect(smoke).not.toContain('msvc-dev-cmd');
+    expect(smoke).toContain("-notmatch 'country'"); // a amostra jfk.wav precisa sair transcrita
+    expect(smoke).toContain("'no GPU found'"); // e na CPU
+  });
+});
+
+describe('tradução offline no empacotamento', () => {
+  const run = (env: Record<string, string>) => spawnSync('bash', ['scripts/build-translate.sh'], { env: { ...process.env, RICE_CMAKE: 'cmake-que-nao-existe', RICE_OFFLINE_TRANSLATION: '', RICE_RELEASE: '', ...env }, encoding: 'utf8' });
+  const flag = /^export const OFFLINE_TRANSLATION = (true|false);/m.exec(readFileSync('src/main/translate/flags.ts', 'utf8'))?.[1];
+
+  describe('chave DESABILITADA (release 0.6.9: só a tradução pela IA)', () => {
+    test('a constante OFFLINE_TRANSLATION está em false', () => {
+      expect(flag).toBe('false');
+    });
+    test('build de release não compila e NÃO exige cmake (RICE_RELEASE=1, sem cmake): sai 0', () => {
+      const envs: Record<string, string>[] = [{ RICE_RELEASE: '1' }, { RICE_RELEASE: '1', RICE_OFFLINE_TRANSLATION: '0' }];
+      for (const env of envs) {
+        const r = run(env);
+        expect(r.status).toBe(0);
+        expect(r.stdout).toMatch(/desabilitada/);
+        expect(r.stderr).not.toMatch(/ERRO/);
+      }
+    });
+    test('mesmo com RICE_OFFLINE_TRANSLATION=0 sobre uma constante true, nada é compilado', () => {
+      const r = run({ RICE_RELEASE: '1', RICE_OFFLINE_TRANSLATION: '0' });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toMatch(/não compilado/);
+    });
+    test('o stage (.sh e .ps1) só copia o binário com a chave habilitada, e o workflow de release pula a compilação', () => {
+      const sh = readFileSync('scripts/stage-native.sh', 'utf8');
+      expect(sh).toMatch(/if ! offline_translation_enabled; then[\s\S]*sem rice-translate[\s\S]*elif \[ -x native\/translate/);
+      const ps1 = readFileSync('scripts/stage-native-win.ps1', 'utf8');
+      expect(ps1).toMatch(/if \(-not \$offline\) \{[\s\S]*desabilitada[\s\S]*\} else \{[\s\S]*Copy-Item \$tr/);
+      expect(ps1).toContain('OFFLINE_TRANSLATION');
+      const wf = readFileSync('.github/workflows/release-windows.yml', 'utf8');
+      expect(wf).toMatch(/if: steps\.offline\.outputs\.enabled == '1'/);
+      expect(wf).toContain('OFFLINE_TRANSLATION = true');
+    });
+  });
+
+  describe('chave HABILITADA (RICE_OFFLINE_TRANSLATION=1)', () => {
+    test('RICE_RELEASE=1 sem cmake: o build FALHA (nunca segue em silêncio sem o motor)', () => {
+      const r = run({ RICE_OFFLINE_TRANSLATION: '1', RICE_RELEASE: '1' });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/ERRO: cmake não encontrado/);
+    });
+    test('fora do modo release só avisa e segue (RICE_RELEASE ausente, vazio ou 0)', () => {
+      const envs: Record<string, string>[] = [{ RICE_RELEASE: '' }, { RICE_RELEASE: '0' }];
+      for (const env of envs) {
+        const r = run({ RICE_OFFLINE_TRANSLATION: '1', ...env });
+        expect(r.status).toBe(0);
+        expect(r.stderr).toMatch(/aviso: cmake não encontrado/);
+      }
+    });
+    test('o stage exige o binário com RICE_RELEASE=1 e o workflow define RICE_RELEASE', () => {
+      expect(readFileSync('scripts/stage-native.sh', 'utf8')).toMatch(/RICE_RELEASE[\s\S]*exit 1/);
+      expect(readFileSync('scripts/stage-native-win.ps1', 'utf8')).toMatch(/RICE_RELEASE[^\n]*throw/);
+      expect(readFileSync('.github/workflows/release-windows.yml', 'utf8')).toMatch(/RICE_RELEASE: '1'/);
+    });
+  });
+
+  describe('stage-native.sh de verdade, numa cópia temporária do repositório', () => {
+    const stage = (env: Record<string, string>, withBinary: boolean) => {
+      const root = mkdtempSync(join(tmpdir(), 'rice-stage-'));
+      mkdirSync(join(root, 'scripts'));
+      mkdirSync(join(root, 'src/main/translate'), { recursive: true });
+      copyFileSync('scripts/stage-native.sh', join(root, 'scripts/stage-native.sh'));
+      copyFileSync('scripts/offline-translation.sh', join(root, 'scripts/offline-translation.sh'));
+      copyFileSync('src/main/translate/flags.ts', join(root, 'src/main/translate/flags.ts'));
+      const bins = ['rice-audio', 'rice-detector', ...(withBinary ? ['rice-translate'] : [])];
+      for (const b of bins) {
+        const dir = b === 'rice-translate' ? 'translate' : b;
+        mkdirSync(join(root, 'native', dir, '.build/release'), { recursive: true });
+        writeFileSync(join(root, 'native', dir, '.build/release', b), '#!/bin/sh\n', { mode: 0o755 });
+      }
+      const r = spawnSync('bash', ['scripts/stage-native.sh'], { cwd: root, env: { ...process.env, RICE_OFFLINE_TRANSLATION: '', RICE_RELEASE: '', ...env }, encoding: 'utf8' });
+      const staged = existsSync(join(root, 'native-bin')) ? readdirSync(join(root, 'native-bin')).sort() : [];
+      rmSync(root, { recursive: true, force: true });
+      return { status: r.status, stderr: r.stderr, staged };
+    };
+    test('desabilitada: o binário não entra no app, mesmo existindo e com RICE_RELEASE=1', () => {
+      const r = stage({ RICE_RELEASE: '1' }, true);
+      expect(r.status).toBe(0);
+      expect(r.staged).toEqual(['rice-audio', 'rice-detector']);
+    });
+    test('habilitada: o binário entra; sem ele, RICE_RELEASE=1 falha e sem RICE_RELEASE só avisa', () => {
+      expect(stage({ RICE_OFFLINE_TRANSLATION: '1', RICE_RELEASE: '1' }, true).staged).toEqual(['rice-audio', 'rice-detector', 'rice-translate']);
+      const sem = stage({ RICE_OFFLINE_TRANSLATION: '1', RICE_RELEASE: '1' }, false);
+      expect(sem.status).toBe(1);
+      expect(sem.stderr).toMatch(/ERRO: falta native\/translate/);
+      const aviso = stage({ RICE_OFFLINE_TRANSLATION: '1' }, false);
+      expect(aviso.status).toBe(0);
+      expect(aviso.stderr).toMatch(/aviso: sem rice-translate/);
+    });
+  });
+
+  test('build-native.sh chama o build do rice-translate (que decide pela chave)', () => {
+    expect(readFileSync('scripts/build-native.sh', 'utf8')).toContain('scripts/build-translate.sh');
+  });
+  test('o app leva native-bin/ (rice-translate no Mac; .exe em native-bin/win no Windows, sem o binário do Mac) e os avisos de terceiros', () => {
+    for (const files of [pkg.build.files, pkg.build.mac.files, pkg.build.win.files] as string[][]) {
+      expect(files).toContain('native-bin/**');
+      expect(files).toContain('THIRD-PARTY-NOTICES.md');
+    }
+    expect(pkg.build.win.files).toContain('!native-bin/rice-translate');
+    expect(pkg.build.mac.files).toContain('!native-bin/win/**');
   });
 });

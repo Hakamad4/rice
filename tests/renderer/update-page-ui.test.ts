@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
 
 const g = globalThis as any;
 const NOW = new Date(2026, 9, 15, 16, 0);
 const at = (d: number, h: number, m: number) => new Date(2026, 9, d, h, m).toISOString();
+// a tela escreve "hoje"/"ontem" pelo relógio de verdade: o Date fica parado em NOW (só o Date; os timers seguem reais para o waitFor)
+beforeEach(() => vi.useFakeTimers({ toFake: ['Date'], now: NOW }));
+afterEach(() => vi.useRealTimers());
 const NEW = { enabled: true, available: true, from: 'a1b2c3d', to: 'e4f5a6b', fromClone: true, dismissed: false };
 const NONE = { enabled: true, available: false, fromClone: true };
 const ABOUT = { version: '0.5.1', commit: 'abc1234', commitFull: 'abc1234def5678abc1234def5678abc1234def5', appPath: '/Applications/Rice.app' };

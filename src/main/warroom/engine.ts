@@ -19,8 +19,16 @@ export const SETTLE_MS = 3000;
 const RECENT_CHARS = 6000;
 
 export type ToolEntry = { at: string; server: string; tool: string; detail?: string };
+/** Etapa do ciclo em andamento: preparando (fala em fechamento, leitura), pensando (IA iniciada, sem resposta) e escrevendo (a resposta já está chegando). */
+export type Phase = 'preparing' | 'thinking' | 'writing';
 export type EngineState = {
   running: boolean;
+  /** Etapa real do ciclo; '' quando não há ciclo. */
+  phase: Phase | '';
+  /** Qual trilha tem o ciclo em andamento (um ciclo por vez em cada reunião); '' sem ciclo. */
+  track: Track | '';
+  /** Quando o ciclo atual começou (ms desde 1970); 0 sem ciclo. */
+  startedAt: number;
   error: string;
   tools: ToolEntry[];
   /** Quando o próximo ciclo automático começa (ms desde 1970); null se não há agendamento. */
@@ -182,10 +190,11 @@ export function unparsed(text: string): boolean {
   return body.length > 0 && !(body.indexOf('[') >= 0 && body.lastIndexOf(']') > body.indexOf('['));
 }
 
-async function collect(gen: AsyncGenerator<string, string, void>): Promise<string> {
+async function collect(gen: AsyncGenerator<string, string, void>, onChunk?: () => void): Promise<string> {
   for (;;) {
     const step = await gen.next();
     if (step.done) return step.value;
+    if (step.value) onChunk?.();
   }
 }
 
@@ -208,7 +217,7 @@ export class WarRoomEngine {
 
   state(dir: string): EngineState {
     let s = this.states.get(dir);
-    if (!s) this.states.set(dir, (s = { running: false, error: '', tools: [], nextAt: null, note: '', investigation: { nextAt: null, error: '', note: '' } }));
+    if (!s) this.states.set(dir, (s = { running: false, phase: '', track: '', startedAt: 0, error: '', tools: [], nextAt: null, note: '', investigation: { nextAt: null, error: '', note: '' } }));
     return s;
   }
 
@@ -283,9 +292,9 @@ export class WarRoomEngine {
   private active = (cfg: WarRoomConfig) => cfg.ideas.on || this.investigating(cfg);
 
   /** Espera (no máximo SETTLE_MS) a fala ativa virar segmento final; sem fala ativa, não espera nada. */
-  private async settle(dir: string): Promise<void> {
+  private async settle(dir: string, signal: AbortSignal): Promise<void> {
     const deadline = this.now() + SETTLE_MS;
-    while ((this.deps.partials?.(dir) ?? []).length > 0 && this.now() < deadline) await new Promise((r) => setTimeout(r, 250));
+    while ((this.deps.partials?.(dir) ?? []).length > 0 && this.now() < deadline && !signal.aborted) await new Promise((r) => setTimeout(r, 250));
   }
 
   /** "Parar": aborta o ciclo em andamento sem erro; o agendamento segue (ou fica parado se a trilha foi pausada). */
@@ -337,35 +346,56 @@ export class WarRoomEngine {
       const latest = await readConfig(dir);
       if (this.timers.has(dir)) mine.nextAt = this.now() + minutes(latest) * 60_000;
     };
-    if (options.manual) await this.settle(dir); // espera (até ~3 s) a fala em andamento fechar antes de ler
-    const full = await this.deps.transcript(dir);
-    const from = this.consumed.get(key) ?? 0;
-    const provisional = this.deps.partials?.(dir) ?? [];
-    const fresh = full.slice(from) + provisional.join('\n'); // o que ainda não foi finalizado conta como fala nova
-    if (fresh.trim().length < (this.deps.minNewChars ?? MIN_NEW_CHARS)) {
-      if (options.manual) mine.note = 'little-speech';
-      else if (!this.consumed.has(key)) mine.nextAt = this.now(); // nunca rodou: assim que houver fala suficiente, o primeiro ciclo sai (sem esperar o intervalo)
-      else if (mine.nextAt !== null && this.now() >= mine.nextAt) await schedule(); // sem fala nova: espera o próximo intervalo
-      this.deps.emit(dir);
-      return 'skipped';
-    }
-    const recent = full.slice(overlapStart(full, from)).slice(-RECENT_CHARS); // começa 60 s antes do ponto já lido
-    const language = await this.deps.language(dir);
-    const support = await this.deps.support();
-    state.running = true;
-    mine.error = '';
-    mine.note = '';
-    this.deps.emit(dir);
     const controller = new AbortController();
-    this.aborts.set(dir, controller);
-    this.runningTrack.set(dir, track);
-    const timeout = setTimeout(() => controller.abort('timeout'), this.deps.timeoutMs ?? CYCLE_TIMEOUT_MS);
+    let timeout: NodeJS.Timeout | undefined;
+    // "rodando" vale desde o clique (manual): o botão muda na hora, antes de esperar a fala fechar e de ler a transcrição
+    let began = false;
+    const begin = () => {
+      if (began) return;
+      began = true;
+      state.running = true;
+      state.phase = 'preparing';
+      state.track = track;
+      state.startedAt = this.now();
+      mine.error = '';
+      mine.note = '';
+      this.aborts.set(dir, controller);
+      this.runningTrack.set(dir, track);
+      timeout = setTimeout(() => controller.abort('timeout'), this.deps.timeoutMs ?? CYCLE_TIMEOUT_MS);
+      this.deps.emit(dir);
+    };
+    const phase = (p: Phase) => {
+      if (state.phase === p) return;
+      state.phase = p;
+      this.deps.emit(dir);
+    };
+    if (options.manual) begin();
     try {
+      if (options.manual) {
+        await this.settle(dir, controller.signal); // espera (até ~3 s) a fala em andamento fechar antes de ler
+        if (controller.signal.aborted) throw new Error('cancelled');
+      }
+      const full = await this.deps.transcript(dir);
+      const from = this.consumed.get(key) ?? 0;
+      const provisional = this.deps.partials?.(dir) ?? [];
+      const fresh = full.slice(from) + provisional.join('\n'); // o que ainda não foi finalizado conta como fala nova
+      if (fresh.trim().length < (this.deps.minNewChars ?? MIN_NEW_CHARS)) {
+        if (options.manual) mine.note = 'little-speech';
+        else if (!this.consumed.has(key)) mine.nextAt = this.now(); // nunca rodou: assim que houver fala suficiente, o primeiro ciclo sai (sem esperar o intervalo)
+        else if (mine.nextAt !== null && this.now() >= mine.nextAt) await schedule(); // sem fala nova: espera o próximo intervalo
+        return 'skipped';
+      }
+      const recent = full.slice(overlapStart(full, from)).slice(-RECENT_CHARS); // começa 60 s antes do ponto já lido
+      const language = await this.deps.language(dir);
+      const support = await this.deps.support();
+      if (controller.signal.aborted) throw new Error('cancelled');
+      begin();
       const now = (this.deps.now ?? (() => new Date()))().toISOString();
       if (track === 'ideas') {
         const previous = await readIdeas(dir);
         const template = this.deps.ideaTemplate ? await this.deps.ideaTemplate(cfg.ideas.templateId) : undefined;
-        const out = await collect((this.deps.lightRunner ?? this.deps.runner)().run({ system: ideasSystem(language, template), prompt: ideasPrompt(recent, previous, language, provisional), signal: controller.signal, egress: { kind: 'ideas', dir } }));
+        phase('thinking');
+        const out = await collect((this.deps.lightRunner ?? this.deps.runner)().run({ system: ideasSystem(language, template), prompt: ideasPrompt(recent, previous, language, provisional), signal: controller.signal, egress: { kind: 'ideas', dir } }), () => phase('writing'));
         if (controller.signal.aborted) throw new Error('cancelled');
         if (unparsed(out)) throw new Error(t('warroom.err.unparsed', { text: out.trim().slice(0, 120) }));
         const added = parseIdeas(out, template?.categories ?? []).map((i): Idea => ({ id: randomUUID().slice(0, 8), at: now, ...i, ...(template ? { templateId: template.id, templateTitle: template.title } : {}) }));
@@ -375,6 +405,7 @@ export class WarRoomEngine {
         const mcp = cfg.sources.mcp && support.mcp;
         const folder = cfg.sources.folder && support.folder ? cfg.sources.folder : undefined;
         const tools = web || mcp || Boolean(folder);
+        phase('thinking');
         const out = await collect(
           this.deps.runner().run({
             system: investigationSystem(language, tools),
@@ -395,6 +426,7 @@ export class WarRoomEngine {
                 }
               : {}),
           }),
+          () => phase('writing'),
         );
         if (controller.signal.aborted) throw new Error('cancelled');
         if (unparsed(out)) throw new Error(t('warroom.err.unparsed', { text: out.trim().slice(0, 120) }));
@@ -419,9 +451,14 @@ export class WarRoomEngine {
       return 'failed';
     } finally {
       clearTimeout(timeout);
-      this.aborts.delete(dir);
-      this.runningTrack.delete(dir);
-      state.running = false;
+      if (began) {
+        this.aborts.delete(dir);
+        this.runningTrack.delete(dir);
+        state.running = false;
+        state.phase = '';
+        state.track = '';
+        state.startedAt = 0;
+      }
       this.deps.emit(dir);
     }
   }

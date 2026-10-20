@@ -2,9 +2,10 @@
 import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered, tokenValue } from '../helpers/tokens';
 
 const g = globalThis as any;
-const html = readFileSync('src/renderer/index.html', 'utf8');
+const html = rendered('src/renderer/index.html');
 const css = [...html.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n').replace(/\/\*[\s\S]*?\*\//g, '');
 const now = new Date().toISOString();
 const MEETINGS = [{ dir: '/R/a', title: 'Kickoff', startedAt: now, state: 'done', notesStatus: 'done' }];
@@ -56,14 +57,14 @@ it('Gravar: rótulo longo ("Continuar gravação") e curto ("Gravar"); tooltip e
 });
 
 it('Início: título e margens fluidos, cartão do Google em coluna quando estreito, campo com 3 textos (exemplo, rótulo, curto) e ⌘J que some', async () => {
-  expect(css).toMatch(/--title-size:clamp\(22px, 5cqi, 30px\)/);
-  expect(css).toMatch(/\.page-title \{ font-size:var\(--title-size\)/);
-  expect(css).toMatch(/\.page \{[^}]*padding:var\(--space-5\) clamp\(40px, 6cqi, 64px\)/); // coluna central: mínimo de 40px, fluida; em container estreito (≤580px) cai para 24px
+  expect(tokenValue('--title-size')).toBe('clamp(22px, 5cqi, 30px)');
+  expect(css).toMatch(/\.page-title \{ font-size:clamp\(22px, 5cqi, 30px\)/);
+  expect(css).toMatch(/\.page \{[^}]*padding:24px clamp\(40px, 6cqi, 64px\)/); // coluna central: mínimo de 40px, fluida; em container estreito (≤520px) cai para 24px
   expect(css).toMatch(/#detail \{[^}]*container-type:inline-size; container-name:detail/);
   expect(css).toMatch(/@container detail \(max-width: 520px\) \{ \.connect-card \{ flex-direction:column; align-items:flex-start/);
   expect(css).toMatch(/@container detail \(max-width: 760px\) \{ \.ask-ph \.ph-long \{ display:none; \} \.ask-ph \.ph-mid \{ display:inline; \}/);
-  expect(css).toMatch(/@container detail \(max-width: 440px\) \{[^\n]*\.ph-short \{ display:inline; \}/);
-  expect(css).toMatch(/@container detail \(max-width: 380px\) \{ \.home-ask kbd \{ display:none; \} \}/);
+  expect(css).toMatch(/@container detail \(max-width: 420px\) \{[^\n]*\.ph-short \{ display:inline; \}/);
+  expect(css).toMatch(/@container detail \(max-width: 360px\) \{ \.home-ask kbd \{ display:none; \} \}/);
   bootRenderer({}, MEETINGS);
   await vi.waitFor(() => expect(g.document.querySelector('.home-ask')).not.toBeNull());
   expect([...g.document.querySelectorAll('.ask-ph span')].map((s: any) => s.className)).toEqual(['ph-long', 'ph-mid', 'ph-short']);
@@ -116,8 +117,8 @@ it('Gravar só com o ponto: o ponto é um círculo fixo (não achata) e o botão
 });
 
 it('chat por cima em janela estreita (≤760px): fundo escurecido que fecha ao clicar, botão de fechar no cabeçalho e Esc', async () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
-  expect(css).toMatch(/\.chat-scrim \{ display:none; position:fixed; inset:0; z-index:29; background:rgba\(0,0,0,\.5\);/);
+  const css = rendered('src/renderer/index.html');
+  expect(css).toMatch(/\.chat-scrim \{ display:none; position:fixed; inset:0; z-index:29; background:var\(--scrim\);/);
   expect(css).toMatch(/@media \(max-width: 760px\) \{[\s\S]*?body\.chat-open \.chat-scrim \{ display:block; \} body\.chat-open \.chat-close \{ display:inline-flex; \}/);
   expect(css).toMatch(/\.chat-close \{ display:none; flex:none; \}/); // só aparece no modo por cima
   expect(css).toContain('<div class="chat-scrim" id="chat-scrim"');

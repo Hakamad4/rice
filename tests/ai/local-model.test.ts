@@ -304,7 +304,9 @@ describe('contexto e orçamento', () => {
 });
 
 describe('provedor, status, modelo leve e testes', () => {
-  const deps = (f: FetchLike, local: RunnerDeps['local'] = () => ({})): RunnerDeps => ({ getSecret: async () => null, binaries: { claude: 'claude', codex: 'codex', opencode: 'opencode', agy: 'agy' }, workDir: '/tmp/x', fetch: f, local });
+  // nomes que não existem no PATH: o status não pode rodar `opencode auth list` & cia. da máquina de quem roda o teste (levava 2 s, até 15 s sob carga)
+  const NO_CLIS = { claude: 'rice-no-claude', codex: 'rice-no-codex', opencode: 'rice-no-opencode', agy: 'rice-no-agy' };
+  const deps = (f: FetchLike, local: RunnerDeps['local'] = () => ({})): RunnerDeps => ({ getSecret: async () => null, binaries: NO_CLIS, workDir: '/tmp/x', fetch: f, local });
 
   test('entra na lista de provedores, valida nomes de modelo do Ollama e não tem busca na web', () => {
     expect(AI_PROVIDERS.at(-1)).toBe('local-model');

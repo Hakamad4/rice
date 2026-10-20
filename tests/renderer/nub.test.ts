@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const loadNub = () => {
@@ -13,7 +14,7 @@ beforeEach(() => {
   handlers = {};
   nub = { uiLanguage: 'pt-BR', on: vi.fn((c: string, fn: any) => (handlers[c] = fn)), openMain: vi.fn(), stop: vi.fn(), dragEnd: vi.fn() };
   g.window.nub = nub;
-  g.document.documentElement.innerHTML = readFileSync('src/renderer/nub.html', 'utf8')
+  g.document.documentElement.innerHTML = rendered('src/renderer/nub.html')
     .replace(/<script[^>]*><\/script>/g, '')
     .replace(/^[\s\S]*?<html[^>]*>/, '');
   loadNub();
@@ -202,7 +203,7 @@ describe('hover do nub', () => {
 describe('idioma do nub', () => {
   it('abre no idioma do app (en) e troca na hora quando o main avisa', () => {
     nub.uiLanguage = 'en';
-    g.document.documentElement.innerHTML = readFileSync('src/renderer/nub.html', 'utf8')
+    g.document.documentElement.innerHTML = rendered('src/renderer/nub.html')
       .replace(/<script[^>]*><\/script>/g, '')
       .replace(/^[\s\S]*?<html[^>]*>/, '');
     for (const f of ['i18n', 'locales/pt-BR', 'locales/en', 'nub']) new Function(readFileSync(`src/renderer/${f}.js`, 'utf8'))();

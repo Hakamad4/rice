@@ -3,10 +3,11 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const doc = g.document;
-const css = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+const css = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
 const cs = (node: any) => g.getComputedStyle(node);
 const px = (v: string) => parseFloat(v) || 0;
 

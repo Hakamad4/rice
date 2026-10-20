@@ -1,0 +1,162 @@
+/*
+ * Rice — tokens de design. Importado por src/renderer/index.html, alert.html e nub.html.
+ * Gerado por design/build-tokens.mjs — não edite à mão. Mesmos valores de design/tokens.json.
+ * Nomes que o app já usa (src/renderer/index.html) foram mantidos; o resto é proposta (ver DESIGN.md e design/divergencias.md).
+ * Tema: o app segue o do sistema (prefers-color-scheme). [data-theme] existe aqui só para sites/documentos que queiram forçar um tema.
+ */
+:root {
+  --bg: #fcfcfb;
+  --sidebar: #f5f5f3;
+  --ink: #2a2a28;
+  --muted: #6b6b66;
+  --faint: #b9b9b4;
+  --hover: rgba(42,42,40,.055);
+  --active: rgba(42,42,40,.09);
+  --field-bg: rgba(42,42,40,.04);
+  --code: rgba(42,42,40,.06);
+  --line: rgba(42,42,40,.1);
+  --guide: rgba(42,42,40,.2);
+  --accent: #4a6fd6;
+  --translation: #2f56c0;
+  --ring: rgba(74,111,214,.28);
+  --ok: #2e9e5b;
+  --warn: #c98a1b;
+  --danger: #d6453f;
+  --rec: #e5484d;
+  --switch-on: #34C759;
+  --scrim-soft: rgba(0,0,0,.28);
+  --scrim: rgba(0,0,0,.5);
+  --scrim-strong: rgba(0,0,0,.72);
+  --on-accent: #ffffff;
+  --on-scrim: rgba(255,255,255,.88);
+  --mask-on: #000;
+  --nub-glass: rgba(28,28,28,.78);
+  --nub-glass-strong: rgba(28,28,28,.86);
+  --font-sans: -apple-system, "SF Pro Text", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 14px;
+  --fs-base: 15px;
+  --fs-xl: 16px;
+  --fs-2xl: 20px;
+  --title-size: clamp(22px, 5cqi, 30px);
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --lh-tight: 1.3;
+  --lh-snug: 1.4;
+  --lh-normal: 1.5;
+  --lh-loose: 1.6;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-05: 2px;
+  --space-15: 6px;
+  --space-25: 10px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+  --radius-2xl: 14px;
+  --radius-pill: 999px;
+  --shadow-hairline: inset 0 0 0 1px var(--line);
+  --shadow-focus: 0 0 0 3px var(--ring);
+  --shadow-focus-sm: 0 0 0 2px var(--ring);
+  --shadow-raise: 0 1px 2px rgba(0,0,0,.2);
+  --shadow-pop: 0 8px 28px rgba(0,0,0,.18);
+  --shadow-dialog: 0 12px 40px rgba(0,0,0,.25);
+  --shadow-drawer: -12px 0 32px rgba(0,0,0,.35);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 300ms;
+  --ease: ease;
+  --ease-out: ease-out;
+  --ease-loop: ease-in-out;
+  --z-raised: 5;
+  --z-chrome: 20;
+  --z-handle: 25;
+  --z-scrim: 29;
+  --z-drawer: 30;
+  --z-popover: 40;
+  --z-modal: 50;
+  --z-top: 60;
+  --h-sm: 24px;
+  --h-md: 28px;
+  --h-lg: 32px;
+  --h-xl: 36px;
+  --icon-xs: 10px;
+  --icon-sm: 12px;
+  --icon-md: 14px;
+  --icon-lg: 16px;
+  --icon-xl: 20px;
+  --icon-2xl: 28px;
+  --icon-stroke: 1.5;
+  --side-w: 232px;
+  --chat-w: 320px;
+  --titlebar: 48px;
+  --traffic: 92px;
+  --dialog-w: min(520px, 90vw);
+  --op-xs: .45;
+  --op-sm: .6;
+  --op-md: .85;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #191919;
+    --sidebar: #1e1e1e;
+    --ink: rgba(255,255,255,.88);
+    --muted: rgba(255,255,255,.5);
+    --faint: rgba(255,255,255,.25);
+    --hover: rgba(255,255,255,.05);
+    --active: rgba(255,255,255,.09);
+    --field-bg: rgba(255,255,255,.06);
+    --code: rgba(255,255,255,.07);
+    --line: rgba(255,255,255,.1);
+    --guide: rgba(255,255,255,.2);
+    --accent: #86a0f0;
+    --translation: #8fb0ff;
+    --ring: rgba(134,160,240,.32);
+    --ok: #4cc38a;
+    --warn: #e0a93b;
+    --danger: #ff7a73;
+    --rec: #ff6369;
+    --switch-on: #30D158;
+    --shadow-pop: 0 0 0 1px var(--line), 0 8px 28px rgba(0,0,0,.28);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #191919;
+  --sidebar: #1e1e1e;
+  --ink: rgba(255,255,255,.88);
+  --muted: rgba(255,255,255,.5);
+  --faint: rgba(255,255,255,.25);
+  --hover: rgba(255,255,255,.05);
+  --active: rgba(255,255,255,.09);
+  --field-bg: rgba(255,255,255,.06);
+  --code: rgba(255,255,255,.07);
+  --line: rgba(255,255,255,.1);
+  --guide: rgba(255,255,255,.2);
+  --accent: #86a0f0;
+  --translation: #8fb0ff;
+  --ring: rgba(134,160,240,.32);
+  --ok: #4cc38a;
+  --warn: #e0a93b;
+  --danger: #ff7a73;
+  --rec: #ff6369;
+  --switch-on: #30D158;
+  --shadow-pop: 0 0 0 1px var(--line), 0 8px 28px rgba(0,0,0,.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur-base: 0ms; --dur-slow: 0ms; }
+}

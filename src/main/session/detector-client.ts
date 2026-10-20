@@ -35,6 +35,8 @@ export class DetectorClient extends EventEmitter {
   private readonly releaseTimers = new Map<string, NodeJS.Timeout>();
   private readonly announced = new Set<string>();
   private input: InputDeviceInfo | null = null;
+  /** Número CGWindow que o rice-detector vigia (0 = nenhum); reenviado se o detector reiniciar. */
+  private coverWindow = 0;
   private pending: ((e: CalendarEvent | null) => void) | null = null;
   private inflight: Promise<CalendarEvent | null> | null = null;
   private restartTimer: NodeJS.Timeout | null = null;
@@ -75,6 +77,7 @@ export class DetectorClient extends EventEmitter {
       }
       this.handle(line);
     });
+    if (this.coverWindow > 0) child.stdin.write(`${JSON.stringify({ cmd: 'cover-watch', window: this.coverWindow })}\n`);
     this.stableTimer = setTimeout(() => {
       this.attempt = 0;
     }, STABLE_AFTER_MS);
@@ -172,6 +175,12 @@ export class DetectorClient extends EventEmitter {
         // Opcional (só o detector do Mac): o nome do microfone em uso. Nulos = sem entrada.
         this.input = typeof line.id === 'string' && typeof line.name === 'string' ? { id: line.id, name: line.name } : null;
         this.emit('default-input', this.input);
+        break;
+      }
+      case 'window-cover': {
+        // só Mac: fração da janela vigiada coberta por outras (1 Hz enquanto `watchCover(n>0)`)
+        if (line.window !== this.coverWindow || typeof line.covered !== 'number') break;
+        this.emit('window-cover', { onScreen: line.onScreen !== false, covered: line.covered });
         break;
       }
       case 'calendar-changed':
@@ -294,6 +303,12 @@ export class DetectorClient extends EventEmitter {
   /** Pede ao detector (Mac) para repetir o `default-input`. */
   requestCurrentInput(): void {
     this.child?.stdin.write('{"cmd":"current-input"}\n');
+  }
+
+  /** Mac: pede ao detector a cobertura da janela `window` (número CGWindow) a 1 Hz; 0 para. Sem detector, nada acontece. */
+  watchCover(window: number): void {
+    this.coverWindow = window > 0 ? Math.floor(window) : 0;
+    this.child?.stdin.write(`${JSON.stringify({ cmd: 'cover-watch', window: this.coverWindow })}\n`);
   }
 
   requestCalendarAccess(): void {

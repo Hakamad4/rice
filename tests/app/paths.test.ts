@@ -21,6 +21,8 @@ test('binários nativos: o build release no repositório; sem ele, o native-bin 
   expect(nativeBinary('rice-audio', () => true, root)).toBe('/repo/native/rice-audio/.build/release/rice-audio');
   expect(nativeBinary('rice-detector', () => true, root)).toBe('/repo/native/rice-detector/.build/release/rice-detector');
   expect(nativeBinary('rice-audio', () => false, root)).toBe('/repo/native-bin/rice-audio');
+  expect(nativeBinary('rice-translate', () => true, root)).toBe('/repo/native/translate/.build/release/rice-translate'); // pasta native/translate
+  expect(nativeBinary('rice-translate', () => false, root)).toBe('/repo/native-bin/rice-translate');
 });
 
 test('variáveis de ambiente sobrescrevem', () => {

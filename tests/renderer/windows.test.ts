@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
+import { rendered } from '../helpers/tokens';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { bootRenderer } from '../helpers/boot-renderer';
 
 const g = globalThis as any;
-const read = (f: string) => readFileSync(`src/renderer/${f}`, 'utf8');
+const read = (f: string) => (f.endsWith('.html') ? rendered(`src/renderer/${f}`) : readFileSync(`src/renderer/${f}`, 'utf8'));
 const load = (files: string[]) => {
   for (const f of files) new Function(read(`${f}.js`))();
 };

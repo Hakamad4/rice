@@ -19,6 +19,8 @@ jobs:
   installer:
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      RICE_RELEASE: '1'  # com a tradução offline habilitada (flags.ts), faltar o rice-translate.exe = erro; desabilitada, o binário nem entra
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,6 +37,22 @@ jobs:
         run: |
           cmake -S native/win -B build/win -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build/win
+      # Só com a tradução offline habilitada (OFFLINE_TRANSLATION em src/main/translate/flags.ts): desabilitada, o instalador sai sem o
+      # rice-translate.exe e o passo é pulado (o stage-native-win.ps1 lê a mesma chave).
+      - name: Tradução offline habilitada?
+        id: offline
+        shell: bash
+        run: |
+          if grep -Eq '^export const OFFLINE_TRANSLATION = true;' src/main/translate/flags.ts; then echo "enabled=1" >> "$GITHUB_OUTPUT"; else echo "enabled=0" >> "$GITHUB_OUTPUT"; fi
+      - name: Sidecar da tradução offline (CTranslate2)
+        if: steps.offline.outputs.enabled == '1'
+        run: |
+          cmake -S native/translate -B native/translate/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build native/translate/build --target rice-translate
+      # o dist:win compila o whisper-server com Vulkan (scripts/build-whisper-win.ps1); no CI, sem o SDK ele falha em vez de sair só CPU.
+      # O if mantém o workflow_dispatch funcionando com tags anteriores a esse script (que ainda baixam o whisper-server só CPU).
+      - uses: ./.github/actions/vulkan-sdk
+        if: hashFiles('scripts/build-whisper-win.ps1') != ''
       - name: Instalador NSIS (sem assinatura); o electron-builder gera também o latest.yml e o .blockmap
         run: npm run dist:win
       - name: Conferir que os três arquivos existem

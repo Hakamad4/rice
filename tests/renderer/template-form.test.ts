@@ -2,10 +2,11 @@
 // Editor de template (notas e ideias): rótulo acima de cada campo, nota antes do primeiro campo e rodapé com hairline.
 import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { rendered } from '../helpers/tokens';
 
 const g = globalThis as any;
 const doc = g.document;
-const css = [...readFileSync('src/renderer/index.html', 'utf8').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
+const css = [...rendered('src/renderer/index.html').matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
 const cs = (node: any) => g.getComputedStyle(node);
 const px = (v: string) => parseFloat(v) || 0;
 const flush = () => new Promise((r) => setTimeout(r, 0));

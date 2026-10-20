@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs';
 import { beforeEach, expect, it } from 'vitest';
+import { rendered, tokenValue } from '../helpers/tokens';
 
 const g = globalThis as any;
 const load = () => new Function(readFileSync('src/renderer/resize.js', 'utf8'))();
@@ -102,8 +103,8 @@ it('valor salvo fora dos limites é corrigido; localStorage bloqueado não quebr
 });
 
 it('CSS: variáveis de largura, alça de 6px sem arrasto da janela, --tools-left acompanha a sidebar, some quando recolhida', () => {
-  const css = readFileSync('src/renderer/index.html', 'utf8');
-  expect(css).toMatch(/:root \{ --side-w:232px; --chat-w:320px; \}/);
+  const css = rendered('src/renderer/index.html');
+  expect([tokenValue('--side-w'), tokenValue('--chat-w')]).toEqual(['232px', '320px']);
   expect(css).toMatch(/grid-template-columns:var\(--side-w\) minmax\(0,1fr\) 0;/);
   expect(css).toMatch(/--tools-left:calc\(var\(--side-w\) - 36px\)/);
   expect(css).toMatch(/\.rz-handle \{[^}]*width:6px[^}]*cursor:col-resize[^}]*-webkit-app-region:no-drag/);

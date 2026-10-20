@@ -176,3 +176,31 @@ test('listInputs repetido (com e sem resposta) não deixa ouvintes pendurados', 
   for (let i = 0; i < 5; i++) expect(await silent.listInputs(50)).toBeNull();
   expect(silent.listenerCount('inputs')).toBe(0);
 });
+
+test('watchCover: manda cover-watch, repassa window-cover e reenvia o pedido quando o detector reinicia', async () => {
+  process.env.FAKE_COVER = '0.97';
+  try {
+    const { c } = client([], undefined, 300, [30]);
+    const got: Array<{ onScreen: boolean; covered: number }> = [];
+    c.on('window-cover', (p) => got.push(p));
+    c.watchCover(1234);
+    await vi.waitFor(() => expect(got.length).toBeGreaterThanOrEqual(2), { timeout: 5000 });
+    expect(got[0]).toEqual({ onScreen: true, covered: 0.97 });
+    c.watchCover(0); // para: nenhuma amostra nova
+    await sleep(200);
+    const n = got.length;
+    await sleep(1300);
+    expect(got.length).toBe(n);
+  } finally {
+    delete process.env.FAKE_COVER;
+  }
+});
+
+test('window-cover de outra janela (pedido antigo) é ignorado', async () => {
+  const { c, seen } = client([{ at: 50, line: { event: 'window-cover', window: 999, onScreen: true, covered: 1 } }, sentinel(120)]);
+  const got: unknown[] = [];
+  c.on('window-cover', (p) => got.push(p));
+  c.watchCover(1234);
+  await waitSentinel(seen);
+  expect(got).toEqual([]);
+});

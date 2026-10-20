@@ -54,6 +54,7 @@ window.rice.on('screenshots:changed', (p) => {
   shotsChip.changed(p);
 });
 const liveScroll = window.RiceLiveScroll.create({ detail: $('detail'), button: $('live-jump') });
+const translate = window.RiceTranslate.init({ rice: window.rice, follow: (fn) => liveScroll.follow(fn), isRecording: (d) => recState === 'recording' && recDir === d, redraw: () => redrawMeeting && redrawMeeting(true), openSettings: (id) => showSettings(id) });
 let opening = false;
 let queuedSegments = [];
 let renderedLines = new Set();
@@ -669,7 +670,9 @@ function addTranscriptLines(text) {
     const line = raw.trim();
     if (!line || line.startsWith('# ')) continue;
     renderedLines.add(line);
-    transcriptNode.append(transcriptRow(line));
+    const row = transcriptRow(line);
+    transcriptNode.append(row);
+    window.RiceTranslate.attach(line, row);
   }
 }
 
@@ -946,7 +949,8 @@ function meetingTabs(dir, { notes, transcript, recording, hasNotes, metaNode, in
       badge.onclick = () => warRoom.setKind('meeting');
       metaNode.append(badge);
     }
-    bar.replaceChildren(tabsNode);
+    tabsNode.append(translate.node); // o botão da tradução ao vivo fica no fim da mesma linha das abas
+    bar.replaceChildren(tabsNode, translate.note);
     const selected = tabsNode.querySelector('[aria-selected="true"]');
     if (selected && selected.scrollIntoView) selected.scrollIntoView({ block: 'nearest', inline: 'nearest' }); // em coluna estreita a aba escolhida nunca fica escondida
     // atualização vinda do War room (ciclo, ferramenta usada…) com Notas/Transcrição na tela: só a barra de abas muda; recolocar a transcrição inteira refaria o layout dela à toa
@@ -1012,6 +1016,7 @@ async function openMeeting(dir, opts = {}) {
   transcriptNode = build('div', { className: 'transcript' }, []);
   renderedLines = new Set();
   partialRows = new Map();
+  window.RiceTranslate.setDir(dir); // antes das linhas: elas se registram para receber a tradução
   addTranscriptLines(data.transcript);
   await screens.setDir(dir, transcriptNode); // miniaturas no ponto do tempo; as notas só citam capturas desta lista
   if (current !== dir) return;
@@ -1097,6 +1102,7 @@ function goHome() {
   current = null;
   if (webSearch) webSearch.paint();
   warRoom.setDir(null);
+  window.RiceTranslate.setDir(null);
   attachments.setDir(null);
   openIsDraft = false;
   openIsRecorded = false;
@@ -1279,6 +1285,7 @@ function showFollowups() {
   current = null;
   if (webSearch) webSearch.paint();
   warRoom.setDir(null);
+  window.RiceTranslate.setDir(null);
   attachments.setDir(null);
   view = 'followups';
   openIsDraft = false;
@@ -1302,6 +1309,7 @@ function showMemory(target) {
   current = null;
   if (webSearch) webSearch.paint();
   warRoom.setDir(null);
+  window.RiceTranslate.setDir(null);
   attachments.setDir(null);
   view = 'memory';
   openIsDraft = false;
@@ -1345,6 +1353,7 @@ function showGuide(focus) {
   current = null;
   if (webSearch) webSearch.paint();
   warRoom.setDir(null);
+  window.RiceTranslate.setDir(null);
   attachments.setDir(null);
   view = 'guide';
   openIsDraft = false;
@@ -1396,6 +1405,7 @@ function showTemplates(tab) {
   current = null;
   if (webSearch) webSearch.paint();
   warRoom.setDir(null);
+  window.RiceTranslate.setDir(null);
   attachments.setDir(null);
   view = 'templates';
   openIsDraft = false;
@@ -1969,10 +1979,11 @@ function liveCard() {
 }
 $('live-item').onclick = () => recDir && openMeeting(recDir);
 function syncLiveTimer() {
-  if (recState === 'recording' && !liveTimer) liveTimer = setInterval(() => (renderLive(), renderRecLabel(), recPaused && renderPause()), 1000);
+  if (recState === 'recording' && !liveTimer) liveTimer = setInterval(() => (document.body.classList.toggle('beat-off'), renderLive(), renderRecLabel(), recPaused && renderPause()), 1000);
   if (recState !== 'recording' && liveTimer) {
     clearInterval(liveTimer);
     liveTimer = null;
+    document.body.classList.remove('beat-off');
   }
   renderLive();
 }
@@ -2110,6 +2121,7 @@ window.rice.on('session:state', async (state) => {
     pausedTotal = 0;
   }
   renderRecButton();
+  window.RiceTranslate.paint();
   if (typeof renderUpdateBanner === 'function') renderUpdateBanner();
   if (state === 'idle') {
     recDir = null;
@@ -2481,6 +2493,7 @@ function showSettings(focus) {
   current = null;
   if (webSearch) webSearch.paint();
   warRoom.setDir(null);
+  window.RiceTranslate.setDir(null);
   attachments.setDir(null);
   view = 'settings';
   openIsDraft = false;
@@ -2498,6 +2511,11 @@ function showSettings(focus) {
   refreshList();
   return rendered;
 }
+
+// Janela minimizada/oculta: o main pausa os parciais do whisper (só quem vê a tela precisa deles). Finais e gravação não mudam.
+const reportVisibility = () => window.rice.setUiVisibility?.(document.visibilityState);
+document.addEventListener('visibilitychange', reportVisibility);
+reportVisibility();
 
 $('settings-link').onclick = () => showSettings();
 window.rice.on('app:open-settings', () => showSettings());
