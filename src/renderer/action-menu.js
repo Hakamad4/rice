@@ -9,6 +9,22 @@
     return node;
   }
 
+  /** Botão discreto à direita da linha (ícone de linha e/ou texto muted pequeno): roda a própria ação sem escolher o item. */
+  function trailButton(trail) {
+    const b = el('button', { type: 'button', className: 'action-trail', disabled: Boolean(trail.disabled) }, [...(trail.icon ? [window.RiceIcons.icon(trail.icon)] : []), ...(trail.text ? [el('span', { textContent: trail.text }, [])] : [])]);
+    if (trail.title) {
+      b.title = trail.title;
+      b.setAttribute('aria-label', trail.title);
+    }
+    b.onclick = (e) => {
+      e.stopPropagation();
+      if (trail.disabled) return;
+      close(true);
+      trail.onSelect();
+    };
+    return b;
+  }
+
   function close(refocus) {
     if (!openMenu) return;
     const { panels, off, anchor } = openMenu;
@@ -31,7 +47,7 @@
 
   /**
    * Abre o menu perto de `anchor` (botão) ou de `at` ({x, y}, clique direito). Só um menu aberto por vez.
-   * `items`: { label, sub?, icon?, onSelect(), danger?, disabled?, checked?, title?, submenu?: items } ou { separator: true }.
+   * `items`: { label, sub?, trail?: { icon?, text?, title, onSelect, disabled? } (botão discreto à direita da linha), hint? (texto muted à direita), icon?, onSelect(), danger?, disabled?, checked?, title?, submenu?: items } ou { separator: true }.
    * Posição `fixed`: não é cortado pela barra lateral. Submenu: clique, passar o mouse ou → abrem; ← e Esc voltam.
    */
   function open({ anchor, at, items, placement }) {
@@ -63,7 +79,7 @@
           ...(item.sub
             ? [el('span', { className: 'action-text' }, [el('span', { className: 'action-label', textContent: item.label }, []), el('span', { className: 'action-sub', textContent: item.sub }, [])])]
             : [el('span', { className: 'action-label', textContent: item.label }, [])]),
-          ...(item.hint ? [el('span', { className: 'action-hint', textContent: item.hint }, [])] : []),
+          ...(item.trail ? [trailButton(item.trail)] : item.hint ? [el('span', { className: 'action-hint', textContent: item.hint }, [])] : []),
           el('span', { className: 'check' }, trailing),
         ]);
         node.setAttribute('role', 'menuitem');

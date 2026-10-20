@@ -14,13 +14,16 @@ describe('OfflineTranslator (stub)', () => {
     expect(isTranslateLang('pt')).toBe(true);
     expect(isTranslateLang('xx')).toBe(false);
   });
-  it('pacotes: pronto só com origem, destino e o inglês (pivô) instalados', () => {
+  it('pacotes: pronto só com origem e destino instalados; o inglês é pivô sem pacote', () => {
     const packs = (installed: string[]): OfflineStatus['packs'] => (['pt', 'en', 'es', 'fr', 'de', 'it'] as const).map((lang) => ({ lang, downloadBytes: 100, diskBytes: 150, installed: installed.includes(lang) }));
-    expect(offlineReady({ packs: packs(['pt', 'en']) }, 'pt', 'en')).toBe(true);
-    expect(offlineReady({ packs: packs(['pt', 'es']) }, 'pt', 'es')).toBe(false); // falta o en
-    expect(missingPacks({ packs: packs(['pt', 'es']) }, 'pt', 'es')).toEqual(['en']);
-    expect(offlineReady({ packs: packs(['pt', 'es', 'en']) }, 'pt', 'es')).toBe(true);
-    expect(offlineReady({ packs: packs(['pt', 'en']) }, 'pt', 'pt')).toBe(false);
-    expect(downloadSize({ packs: packs(['en']) }, ['en', 'es', 'fr'])).toBe(200); // o instalado não conta
+    expect(offlineReady({ packs: packs(['pt']) }, 'pt', 'en')).toBe(true); // de/para o inglês: só o outro idioma
+    expect(offlineReady({ packs: packs(['fr']) }, 'en', 'fr')).toBe(true);
+    expect(missingPacks({ packs: packs([]) }, 'pt', 'en')).toEqual(['pt']);
+    expect(offlineReady({ packs: packs(['pt']) }, 'pt', 'es')).toBe(false); // falta o es
+    expect(missingPacks({ packs: packs(['pt']) }, 'pt', 'es')).toEqual(['es']);
+    expect(missingPacks({ packs: packs([]) }, 'pt', 'fr')).toEqual(['pt', 'fr']);
+    expect(offlineReady({ packs: packs(['pt', 'es']) }, 'pt', 'es')).toBe(true);
+    expect(offlineReady({ packs: packs(['pt', 'es']) }, 'pt', 'pt')).toBe(false);
+    expect(downloadSize({ packs: packs(['es']) }, ['pt', 'es', 'fr'])).toBe(200); // o instalado não conta
   });
 });

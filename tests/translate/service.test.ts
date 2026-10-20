@@ -159,16 +159,39 @@ describe('TranslateService', () => {
     expect(results.length).toBeLessThan(MAX_QUEUE + 10);
   });
 
-  it('IA falhou: cai para o offline instalado e entra em quarentena', async () => {
-    let t = 0;
-    const f = fakeRunner(() => new AiError('network', 'sem rede'));
+  it('idioma baixado: traduz offline e nem chama a IA', async () => {
+    const f = fakeRunner(() => 'IA');
     const { o } = offlineWith('installed');
-    const { svc, results, notices } = make({ ai: { runner: f.runner, provider: 'claude-api', local: false }, offline: o, now: () => t });
-    svc.start(dir, 'en');
+    const { svc, results } = make({ ai: { runner: f.runner, provider: 'claude-api', local: false }, offline: o });
+    svc.start(dir, 'en', 'pt');
     await svc.onSegment(dir, seg(1));
     await settle();
     expect(results[0]).toMatchObject({ text: 'OFF:fala 1', via: 'offline' });
-    expect(notices).toEqual([]);
+    expect(f.prompts).toHaveLength(0);
+  });
+
+  it('motor offline falhou: a IA assume', async () => {
+    const f = fakeRunner(() => 'IA');
+    const { o } = offlineWith('installed', async () => {
+      throw new Error('sidecar');
+    });
+    const { svc, results } = make({ ai: { runner: f.runner, provider: 'claude-api', local: false }, offline: o });
+    svc.start(dir, 'en', 'pt');
+    await svc.onSegment(dir, seg(1));
+    await settle();
+    expect(results[0]).toMatchObject({ text: 'IA', via: 'ai' });
+  });
+
+  it('par sem pacote: a IA falhou, avisa uma vez e a quarentena da IA continua', async () => {
+    let t = 0;
+    const f = fakeRunner(() => new AiError('network', 'sem rede'));
+    const { o } = offlineWith('installed', undefined, ['pt', 'en']);
+    const { svc, results, notices } = make({ ai: { runner: f.runner, provider: 'claude-api', local: false }, offline: o, now: () => t });
+    svc.start(dir, 'es', 'pt'); // falta o pacote es
+    await svc.onSegment(dir, seg(1));
+    await settle();
+    expect(results).toHaveLength(0);
+    expect(notices).toEqual(['ai-failed']);
     await svc.onSegment(dir, seg(2));
     await settle();
     expect(f.prompts).toHaveLength(1); // quarentena: não chamou a IA de novo
@@ -197,8 +220,8 @@ describe('TranslateService', () => {
     expect(notices).toEqual(['offline-needed']);
   });
 
-  it('offline sem o pacote do inglês (pivô) ou do idioma: não traduz e avisa', async () => {
-    const { o } = offlineWith('installed', undefined, ['pt', 'es']); // falta o en
+  it('offline sem o pacote do idioma de destino: não traduz e avisa', async () => {
+    const { o } = offlineWith('installed', undefined, ['pt', 'en']); // falta o es
     const { svc, results, notices } = make({ offline: o });
     svc.start(dir, 'es', 'pt');
     await svc.onSegment(dir, seg(1));

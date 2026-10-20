@@ -35,11 +35,16 @@
   const installedLangs = () => packs().filter((p) => p.installed).map((p) => p.lang);
   const sumBytes = (langs) => packs().filter((p) => langs.includes(p.lang) && !p.installed).reduce((n, p) => n + p.downloadBytes, 0);
   const diskBytes = () => packs().filter((p) => p.installed).reduce((n, p) => n + p.diskBytes, 0);
-  /** Pacotes que faltam para traduzir da língua da reunião para a escolhida offline (o inglês é o pivô e sempre entra). */
-  const missing = () => {
+  /** Pacotes que faltam para traduzir de `from` para `to` offline: os dois idiomas, menos o inglês (pivô sem pacote próprio). */
+  const missingFor = (from, to) => {
     const have = installedLangs();
-    return [...new Set([state ? state.from : 'pt', state ? state.lang : 'en', 'en'])].filter((l) => !have.includes(l));
+    return [...new Set([from, to])].filter((l) => l !== 'en' && !have.includes(l));
   };
+  const missing = () => (state ? missingFor(state.from, state.lang) : []);
+  const packLabel = (langs) => langs.join(' + ');
+  let lastVia = null; // motor da última tradução recebida nesta reunião: 'ai' | 'offline'
+  /** Motor que está traduzindo agora (ou que traduziria): o idioma baixado usa o offline; senão a IA configurada. */
+  const engine = () => lastVia || (state && offlineOn() && !stub() && missing().length === 0 && state.lang !== state.from ? 'offline' : 'ai');
   const langName = (l) => t(`translate.lang.${l}`);
   const active = () => Boolean(state && (state.on || translations.size > 0));
   const percent = () => (offline.progress && offline.progress.totalBytes > 0 ? Math.min(100, Math.floor((offline.progress.receivedBytes / offline.progress.totalBytes) * 100)) : 0);
@@ -61,9 +66,12 @@
     for (const [line, row] of rows) paintRow(line, row);
   }
 
+  let pending = []; // idiomas do download em andamento iniciado por aqui
   async function download(langs) {
+    pending = langs;
     notice = notice && notice.kind === 'download-failed' ? null : notice;
     const result = await rice.translateOfflineDownload(langs);
+    pending = [];
     if (!result.ok && !result.cancelled && result.message) notice = { kind: 'download-failed', message: result.message };
     paint();
   }
@@ -80,31 +88,32 @@
     redraw();
   }
 
-  /** Itens do menu da tradução: idioma de destino e os pacotes offline (tamanho de cada um; baixar, cancelar, apagar). */
+  /** Itens do menu da tradução: uma linha por idioma; à direita, baixar para usar offline (ícone + tamanho), "Offline" ou o progresso. */
   function menuItems() {
-    const items = [{ heading: t('translate.menu.to') }];
-    for (const l of state ? state.langs.filter((x) => x !== state.from) : []) items.push({ label: langName(l), checked: state.lang === l, onSelect: () => set({ lang: l, on: true }) });
-    if (offlineOn()) items.push({ separator: true }, { heading: t('translate.offline.title') }, ...offlineItems(), { separator: true }, { label: t('translate.credits.title'), icon: 'info', onSelect: () => openSettings('translate') });
-    return items;
-  }
-
-  function offlineItems() {
-    if (stub()) return [{ note: t('translate.offline.unavailable') }];
-    if (offline.state === 'downloading') return [{ note: t('translate.offline.downloading', { pct: percent() }) }, { label: t('translate.offline.cancel'), icon: 'x', onSelect: cancel }];
-    const blocked = offline.localMode ? { disabled: true, title: t('local.mode.blocked-feature', { feature: t('translate.offline.title') }) } : {};
-    const items = [{ note: t('translate.offline.pivot') }];
-    const need = missing();
-    if (need.length > 0 && state) items.push({ label: t('translate.offline.download-needed', { from: langName(state.from), to: langName(state.lang), size: size(sumBytes(need)) }), icon: 'download', ...blocked, onSelect: () => download(need) });
-    for (const p of packs()) {
-      items.push({
-        label: langName(p.lang),
-        hint: p.installed ? t('translate.offline.pack-installed') : size(p.downloadBytes),
-        checked: p.installed,
-        submenu: p.installed
-          ? [{ label: t('translate.offline.delete-pack', { lang: langName(p.lang), size: size(p.diskBytes) }), icon: 'trash', danger: true, onSelect: () => remove([p.lang]) }]
-          : [{ label: t('translate.offline.download-pack', { lang: langName(p.lang), size: size(p.downloadBytes) }), icon: 'download', ...blocked, onSelect: () => download([p.lang]) }],
-      });
+    const items = [];
+    const from = state ? state.from : 'pt';
+    const canOffline = offlineOn() && !stub();
+    const busy = offline.state === 'downloading';
+    if (offlineOn()) items.push({ note: t(`translate.engine.${engine()}`) });
+    items.push({ heading: t('translate.menu.to') });
+    for (const l of state ? state.langs.filter((x) => x !== from) : []) {
+      const item = { label: langName(l), checked: state.lang === l, onSelect: () => set({ lang: l, on: true }) };
+      if (canOffline) {
+        const need = missingFor(from, l);
+        const tip = t('translate.offline.row-tip', { packs: packLabel(need), size: size(sumBytes(need)) });
+        if (need.length === 0) item.hint = t('translate.offline.row-ready');
+        else if (busy) {
+          if (pending.length === 0 || need.some((x) => pending.includes(x))) item.trail = { icon: 'x', text: `${percent()}%`, title: t('translate.offline.cancel'), onSelect: cancel };
+        } else if (offline.localMode) item.trail = { icon: 'download', text: size(sumBytes(need)), title: t('local.mode.blocked-feature', { feature: t('translate.offline.title') }), disabled: true, onSelect: () => {} };
+        else item.trail = { icon: 'download', text: size(sumBytes(need)), title: tip, onSelect: () => download(need) };
+      }
+      items.push(item);
     }
+    if (!offlineOn()) return items;
+    items.push({ separator: true });
+    const installed = canOffline ? packs().filter((p) => p.installed && p.lang !== 'en') : [];
+    if (installed.length > 0) items.push({ icon: 'trash', label: t('translate.offline.delete-menu'), disabled: busy, submenu: installed.map((p) => ({ label: langName(p.lang), hint: size(p.diskBytes), onSelect: () => remove([p.lang]) })) });
+    items.push({ label: t('translate.credits.title'), icon: 'info', onSelect: () => openSettings('translate') });
     return items;
   }
 
@@ -173,7 +182,7 @@
   // ---- Configurações: pacotes de idioma do modelo offline e créditos -----------------------------------------------------
   /** Controle da linha "Modelo offline" das Configurações: um pacote por idioma (tamanho de cada um), escolha de quais baixar, soma, progresso, cancelar e apagar. */
   function offlineControl() {
-    const selected = new Set(['en']);
+    const selected = new Set();
     const status = el('div', { className: 'tr-off-status', role: 'status' }, []);
     const list = el('div', { className: 'tr-packs', role: 'group' }, []);
     list.setAttribute('aria-label', t('translate.offline.title'));
@@ -188,7 +197,7 @@
       }
       const busy = offline.state === 'downloading';
       status.textContent = busy ? t('translate.offline.downloading', { pct: percent() }) : offline.state === 'error' ? offline.error || t('translate.offline.failed') : t('translate.offline.cost', { disk: size(diskBytes()), ram: size(offline.ramBytes) });
-      for (const p of packs()) {
+      for (const p of packs().filter((x) => x.lang !== 'en')) {
         const id = `tr-pack-${p.lang}`;
         const input = el('input', { type: 'checkbox', id, checked: p.installed || selected.has(p.lang), disabled: busy || offline.localMode }, []);
         input.onchange = () => {
@@ -244,6 +253,7 @@
     rice.on('translate:result', (r) => {
       if (r.dir !== dir || !state || r.lang !== state.lang) return;
       translations.set(r.key, r.text);
+      if (r.via === 'ai' || r.via === 'offline') lastVia = r.via;
       const row = rows.get(r.key);
       if (row) follow(() => paintRow(r.key, row));
     });
@@ -266,6 +276,7 @@
     dir = next;
     state = null;
     notice = null;
+    lastVia = null;
     translations = new Map();
     rows.clear();
     paint();

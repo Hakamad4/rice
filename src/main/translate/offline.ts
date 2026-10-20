@@ -65,17 +65,20 @@ export interface OfflineTranslator {
   delete(langs: readonly TranslateLang[]): Promise<void>;
 }
 
-/** A tradução de `from` para `to` pode rodar offline? Os dois pacotes e o inglês (pivô) precisam estar instalados. */
+/** Pacotes que a tradução de `from` para `to` exige: os dois idiomas, menos o inglês (pivô sem pacote próprio, já vem com qualquer idioma). */
+export const requiredPacks = (from: TranslateLang, to: TranslateLang): TranslateLang[] => [...new Set<TranslateLang>([from, to])].filter((l) => l !== 'en');
+
+/** A tradução de `from` para `to` pode rodar offline? Os pacotes dos dois idiomas (exceto o inglês) precisam estar instalados. */
 export function offlineReady(status: Pick<OfflineStatus, 'packs'>, from: TranslateLang, to: TranslateLang): boolean {
   if (from === to) return false;
   const installed = new Set(status.packs.filter((p) => p.installed).map((p) => p.lang));
-  return installed.has(from) && installed.has(to) && installed.has('en');
+  return requiredPacks(from, to).every((l) => installed.has(l));
 }
 
-/** Pacotes que faltam para traduzir de `from` para `to` offline (sempre inclui o inglês). */
+/** Pacotes que faltam para traduzir de `from` para `to` offline (ex.: pt para fr: pt + fr; de/para o inglês, só o outro idioma). */
 export function missingPacks(status: Pick<OfflineStatus, 'packs'>, from: TranslateLang, to: TranslateLang): TranslateLang[] {
   const installed = new Set(status.packs.filter((p) => p.installed).map((p) => p.lang));
-  return [...new Set<TranslateLang>([from, to, 'en'])].filter((l) => !installed.has(l));
+  return requiredPacks(from, to).filter((l) => !installed.has(l));
 }
 
 /** Soma dos tamanhos de download dos pacotes (os já instalados não contam). */

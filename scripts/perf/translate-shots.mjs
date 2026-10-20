@@ -52,7 +52,7 @@ try {
   await app.sleep(1500);
   await app.eval(`document.querySelectorAll('.mt-tab')[1].click(); 0`);
   await app.eval(`document.querySelector('.tr-btn').click(); 0`);
-  await app.sleep(40000);
+  await app.sleep(Number(process.env.SHOT_WAIT || 40000));
   const stats = await app.eval(`JSON.stringify({ rows: document.querySelectorAll('.t-row.has-tr').length, orig: document.querySelectorAll('.t-row.tr-orig').length, btn: document.querySelector('.tr-btn')?.textContent })`);
   console.log('estado da tela:', stats);
   const sizes = { normal: [1180, 760], small: [420, 760], zoom144: [820, 528] }; // zoom 1,44 numa janela de ~1180 px = ~820 px CSS
@@ -67,10 +67,28 @@ try {
       await app.shot(join(out, `traducao-${theme}-${name}.png`));
     }
   }
-  await app.setSize(1180, 760);
-  await app.eval(`document.querySelector('.tr-menu-btn').click(); 0`);
-  await app.sleep(600);
-  await app.shot(join(out, 'traducao-menu.png'));
+  // menu da tradução (com a chave OFFLINE_TRANSLATION ligada no build de teste: botão "Baixar para usar offline" em cada idioma)
+  const openMenu = `[...document.querySelectorAll('.tr-menu-btn')].find((b) => b.offsetParent)?.click(); 0`;
+  for (const theme of ['light', 'dark']) {
+    await app.theme(theme);
+    for (const [name, [w, h]] of Object.entries(sizes).filter(([n]) => n !== 'zoom144')) {
+      await app.setSize(w, h);
+      await app.eval(`window.RiceActionMenu.close(); document.body.classList.contains('chat-open') && document.getElementById('chat-close').click(); 0`);
+      await app.sleep(700);
+      await app.eval(openMenu);
+      await app.sleep(500);
+      await app.shot(join(out, `traducao-menu-${theme}-${name}.png`));
+      // comparação: o menu de idioma do app e a 1ª versão do menu da tradução (só os idiomas)
+      await app.eval(`window.RiceActionMenu.close(); document.getElementById('lang-chip').click(); 0`);
+      await app.sleep(400);
+      await app.eval(`document.querySelector('.action-menu .action-item')?.dispatchEvent(new MouseEvent('mouseenter')); 0`);
+      await app.sleep(300);
+      await app.shot(join(out, `ref-idioma-${theme}-${name}.png`));
+      await app.eval(`window.RiceActionMenu.close(); window.RiceActionMenu.open({ anchor: [...document.querySelectorAll('.tr-menu-btn')].find((b) => b.offsetParent), items: [{ heading: 'Traduzir para' }, ...['English', 'Español', 'Français', 'Deutsch', 'Italiano'].map((label, i) => ({ label, checked: i === 0, onSelect() {} }))] }); 0`);
+      await app.sleep(400);
+      await app.shot(join(out, `ref-v1-${theme}-${name}.png`));
+    }
+  }
 } finally {
   await app.close();
   ai.close();

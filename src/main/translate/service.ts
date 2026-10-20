@@ -170,6 +170,14 @@ export class TranslateService {
   /** null = não foi possível traduzir (aviso já emitido). */
   private async translate(dir: string, batch: Item[], context: readonly string[], lang: TranslateLang, from: TranslateLang): Promise<Array<{ text: string; via: TranslateVia }> | null> {
     const localMode = (this.deps.localMode ?? isLocalMode)();
+    const offlineOn = this.deps.offlineEnabled !== false;
+    const off = this.deps.offline.status();
+    const offlineUsable = offlineOn && (off.state === 'installed' || off.state === 'ready' || off.state === 'loading') && offlineReady(off, from, lang);
+    // idioma baixado: traduz offline (sem gastar a IA e sem rede); se o motor falhar, a IA assume
+    if (offlineUsable) {
+      const viaOffline = await this.viaOffline(batch, context, lang, from);
+      if (viaOffline) return viaOffline;
+    }
     let aiFailed = false;
     if (this.now() >= this.aiDownUntil) {
       const ai = await this.deps.ai().catch(() => null);
@@ -184,24 +192,24 @@ export class TranslateService {
         }
       }
     } else aiFailed = true;
-    const offlineOn = this.deps.offlineEnabled !== false;
     if (!offlineOn) {
       // só a IA configurada traduz: no Modo 100% local isso quer dizer IA local
       this.notice(dir, localMode && !aiFailed ? 'local-mode-ai-only' : 'ai-unavailable');
       return null;
     }
-    const off = this.deps.offline.status();
-    if ((off.state === 'installed' || off.state === 'ready' || off.state === 'loading') && offlineReady(off, from, lang)) {
-      try {
-        const texts: string[] = [];
-        for (const it of batch) texts.push(clean(await this.deps.offline.translate(it.text, { from, to: lang, context })));
-        return texts.map((text) => ({ text, via: 'offline' as const }));
-      } catch (err) {
-        this.deps.onError?.(err);
-      }
-    }
     this.notice(dir, localMode && !aiFailed ? 'local-mode-no-engine' : aiFailed ? 'ai-failed' : 'offline-needed');
     return null;
+  }
+
+  private async viaOffline(batch: Item[], context: readonly string[], lang: TranslateLang, from: TranslateLang): Promise<Array<{ text: string; via: TranslateVia }> | null> {
+    try {
+      const texts: string[] = [];
+      for (const it of batch) texts.push(clean(await this.deps.offline.translate(it.text, { from, to: lang, context })));
+      return texts.map((text) => ({ text, via: 'offline' as const }));
+    } catch (err) {
+      this.deps.onError?.(err);
+      return null;
+    }
   }
 
   private async viaAi(runner: AiRunner, dir: string, batch: Item[], context: readonly string[], lang: TranslateLang): Promise<string[]> {
